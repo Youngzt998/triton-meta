@@ -191,6 +191,41 @@ tests after any perf- or codegen-affecting change. This matters especially for A
 assisted work, where an agent optimizing for speed may silently undo an ordering
 constraint and "succeed" while breaking correctness.
 
+### 2.8 Design choice: strict-equivalence pruning vs sanitizer
+
+Deciding "are these two configs bitwise-equivalent?" from static IR is a fork with two
+ends. They differ in *which way they are conservative*.
+
+**Choice 1 — strict equivalence pruning ("sound" checker).** Declare two kernels
+equivalent only when the analysis can *positively confirm* their computation has the same
+shape; treat anything it cannot confirm as not-equivalent.
+
+- *Pros:* the kept set is high-confidence equivalent — it does not merge two configs unless
+  their reconstructed computation matches, so it is unlikely to keep a config whose bits
+  differ.
+- *Cons:* it **over-prunes** — configs that are actually equivalent, but whose IR differs in
+  a way the analysis cannot prove bit-irrelevant, are dropped, costing tuning freedom.
+
+**Choice 2 — sanitizer ("complete" checker).** Scan for *known* sources of inequivalence
+(data-layout change, FMA fusion, … and more added over time); if none is detected, treat the
+configs as equivalent.
+
+- *Pros:* fewer false alarms — it separates configs only for a reason it understands, so it
+  keeps more actually-equivalent configs.
+- *Cons:* it can **miss** inequivalence from a source nobody modeled yet — two configs that
+  truly differ via an unknown mechanism are declared equivalent and are *not* pruned.
+
+**We picked Choice 1** for the equivalence-pruning path. This is a choice for *this* goal,
+**not** a claim that Choice 1 is universally better: the project's purpose is to *certify*
+that the kept configs reproduce the reference's bits (so a customer can skip the GPU ladder),
+so the failure mode we most want to avoid is a *missed* inequivalence (Choice 2's con). We
+pay for that with the over-pruning above, which we claw back over time by adding *provably
+bit-preserving* normalizations (commutative reordering, affine address equivalence) rather
+than by relaxing toward Choice 2. Choice 2 remains a reasonable fit for a *different* goal —
+e.g. a developer-facing lint that flags likely-bad configs — and the two can coexist. What
+"confirm the same shape" does and does not guarantee is spelled out in §2.7 and §4.6: it is
+relative to the reconstructed computation at the checked IR level, not an absolute proof.
+
 ---
 
 ## 3. Major sources of kernel inequivalence (in scope)
@@ -417,10 +452,17 @@ partition the configs identically; on a `tl.sum(x*y)` dot reduction PTX splits t
 fp-fusion pair TTGIR merges. Pair them with `reduction_equivalence_prune("both")`
 (kept iff equal at both levels). `bitequiv/ptx_reduction.py`.
 
-**Soundness contract (the guarantee, and its price).** Equal signature ⇒ identical
-tree ⇒ identical bits at that IR level. The relation **never wrongly merges** two
-configs whose bits differ — the kept set is always a *safe subset*. The reverse does
-not hold: the check is **conservatively incomplete** — it may *over-split* genuinely-
+**Soundness contract (relative, with its price).** Within the reconstructed computation
+at that IR level, equal signature ⇒ identical tree ⇒ identical bits: the relation does not
+wrongly merge two configs for any difference it *can see*, so the kept set is a *safe
+subset* — but **only under the analysis's assumptions** (the backward reconstruction
+reaches every result-affecting op; opaque fallbacks for un-modeled ops do not collide;
+canonicalizations are bit-preserving) and **modulo the below-IR residual** (e.g.
+PTX→SASS, where `ptxas` can still reorder/contract). It is a conservative *pre-filter*,
+not an absolute proof — the runtime bit-comparison (§5.4) is the ground truth, and the
+empirical "no wrong-merge" result is evidence over the tested space, not a proof. The
+reverse does not hold either: the check is **conservatively incomplete** — it may
+*over-split* genuinely-
 equivalent configs (e.g. masked-zero `+0.0` padding that changes the axis extent;
 `inner_tree` configs whose layouts differ). These misses cost tuning freedom, never
 correctness, and are **measured, not assumed** (§5). A **soundness guard** prevents an
