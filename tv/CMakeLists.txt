@@ -82,4 +82,10 @@ endif()
 
 mlir_check_all_link_libraries(triton-tv)
 
-add_subdirectory(test/validator)
+# Validator unit tests use the header-only harness in
+# tv/test/validator/SimpleTest.h (no GoogleTest, no network). Allow turning
+# them off to build just the triton-tv binary.
+option(TRITON_TV_BUILD_TESTS "Build tv validator unit tests" ON)
+if(TRITON_TV_BUILD_TESTS)
+  add_subdirectory(test/validator)
+endif()

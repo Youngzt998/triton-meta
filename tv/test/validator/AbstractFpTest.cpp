@@ -3,7 +3,7 @@
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/MLIRContext.h"
 
-#include <gtest/gtest.h>
+#include "SimpleTest.h"
 #include <z3++.h>
 
 using namespace Semantics;
@@ -256,7 +256,4 @@ TEST(AbstractFp, RegistryDistinguishesF16AndBF16) {
   EXPECT_EQ(eb16.bitwidth(), 16u);
 }
 
-int main(int argc, char **argv) {
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}
+int main() { return simpletest::runAll(); }

@@ -1,8 +1,50 @@
-include(AddTritonUnitTest)
+# Plain C++ unit tests for the tv translation validator.
+#
+# These use the tiny header-only harness in SimpleTest.h instead of GoogleTest,
+# so they build with only the C++ standard library (no FetchContent, no
+# network). Each test is a standalone executable; running it runs all of its
+# TEST() cases and returns non-zero if any check fails. Tests are registered
+# with CTest and grouped under the `tv-validator-tests` build target. When the
+# Triton unit-test target exists, they are attached to it too.
+
+enable_testing()
 
 get_property(triton_libs GLOBAL PROPERTY TRITON_LIBS)
 
-add_triton_ut(
+if(NOT TARGET tv-validator-tests)
+  add_custom_target(tv-validator-tests)
+endif()
+
+# add_tv_test(NAME <name> SRCS <sources...> LIBS <libs...>)
+function(add_tv_test)
+  cmake_parse_arguments(ARG "" "NAME" "SRCS;LIBS" ${ARGN})
+
+  add_executable(${ARG_NAME} ${ARG_SRCS})
+
+  # current dir -> "SimpleTest.h"; tv/ root -> "semantics/Memory.h" etc.
+  target_include_directories(${ARG_NAME} PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/../..
+  )
+
+  target_link_libraries(${ARG_NAME} PRIVATE ${ARG_LIBS})
+
+  # Z3 linking mirrors tv/CMakeLists.txt.
+  if(TARGET z3::libz3)
+    target_link_libraries(${ARG_NAME} PRIVATE z3::libz3)
+  else()
+    target_include_directories(${ARG_NAME} PRIVATE ${Z3_INCLUDE_DIRS})
+    target_link_libraries(${ARG_NAME} PRIVATE ${Z3_LIBRARIES})
+  endif()
+
+  add_test(NAME ${ARG_NAME} COMMAND ${ARG_NAME})
+  add_dependencies(tv-validator-tests ${ARG_NAME})
+  if(TARGET TritonUnitTests)
+    add_dependencies(TritonUnitTests ${ARG_NAME})
+  endif()
+endfunction()
+
+add_tv_test(
   NAME TestTritonTVMemory
   SRCS MemoryModelTest.cpp
        ${CMAKE_CURRENT_SOURCE_DIR}/../../semantics/Memory.cpp
@@ -11,27 +53,7 @@ add_triton_ut(
     MLIRSupport
 )
 
-# Z3 linking mirrors tv/CMakeLists.txt
-if(TARGET z3::libz3)
-  target_link_libraries(TestTritonTVMemory PRIVATE z3::libz3)
-else()
-  target_include_directories(TestTritonTVMemory PRIVATE ${Z3_INCLUDE_DIRS})
-  target_link_libraries(TestTritonTVMemory PRIVATE ${Z3_LIBRARIES})
-endif()
-
-# tv/ root is the include base (so #include "semantics/Memory.h" resolves)
-target_include_directories(TestTritonTVMemory PRIVATE
-  ${CMAKE_CURRENT_SOURCE_DIR}/../..
-)
-
-# ---------------------------------------------------------------------------
-# Env (program state) tests — requires full Triton dialect stack for
-# mlir::triton::PointerType and mlir::triton::FuncOp.
-# Uses ${triton_libs} (same strategy as the triton-tv executable) to resolve
-# the deep transitive link dependencies across all Triton dialects.
-# ---------------------------------------------------------------------------
-
-add_triton_ut(
+add_tv_test(
   NAME TestTritonTVEnv
   SRCS EnvTest.cpp
        ${CMAKE_CURRENT_SOURCE_DIR}/../../semantics/Memory.cpp
@@ -42,22 +64,7 @@ add_triton_ut(
     MLIRSupport
 )
 
-if(TARGET z3::libz3)
-  target_link_libraries(TestTritonTVEnv PRIVATE z3::libz3)
-else()
-  target_include_directories(TestTritonTVEnv PRIVATE ${Z3_INCLUDE_DIRS})
-  target_link_libraries(TestTritonTVEnv PRIVATE ${Z3_LIBRARIES})
-endif()
-
-target_include_directories(TestTritonTVEnv PRIVATE
-  ${CMAKE_CURRENT_SOURCE_DIR}/../..
-)
-
-# ---------------------------------------------------------------------------
-# State (program state) tests — only needs MLIRIR (no Triton ops in tests).
-# ---------------------------------------------------------------------------
-
-add_triton_ut(
+add_tv_test(
   NAME TestTritonTVState
   SRCS StateTest.cpp
        ${CMAKE_CURRENT_SOURCE_DIR}/../../semantics/AbstractFp.cpp
@@ -72,37 +79,11 @@ add_triton_ut(
     MLIRSupport
 )
 
-if(TARGET z3::libz3)
-  target_link_libraries(TestTritonTVState PRIVATE z3::libz3)
-else()
-  target_include_directories(TestTritonTVState PRIVATE ${Z3_INCLUDE_DIRS})
-  target_link_libraries(TestTritonTVState PRIVATE ${Z3_LIBRARIES})
-endif()
-
-target_include_directories(TestTritonTVState PRIVATE
-  ${CMAKE_CURRENT_SOURCE_DIR}/../..
-)
-
-# ---------------------------------------------------------------------------
-# AbstractFp tests — pure semantics module, only depends on MLIR builtin types.
-# ---------------------------------------------------------------------------
-
-add_triton_ut(
+add_tv_test(
   NAME TestTritonTVAbstractFp
   SRCS AbstractFpTest.cpp
        ${CMAKE_CURRENT_SOURCE_DIR}/../../semantics/AbstractFp.cpp
   LIBS
     MLIRIR
     MLIRSupport
-)
-
-if(TARGET z3::libz3)
-  target_link_libraries(TestTritonTVAbstractFp PRIVATE z3::libz3)
-else()
-  target_include_directories(TestTritonTVAbstractFp PRIVATE ${Z3_INCLUDE_DIRS})
-  target_link_libraries(TestTritonTVAbstractFp PRIVATE ${Z3_LIBRARIES})
-endif()
-
-target_include_directories(TestTritonTVAbstractFp PRIVATE
-  ${CMAKE_CURRENT_SOURCE_DIR}/../..
 )

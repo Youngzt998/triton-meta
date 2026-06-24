@@ -3,7 +3,7 @@
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/MLIRContext.h"
 
-#include <gtest/gtest.h>
+#include "SimpleTest.h"
 #include <z3++.h>
 
 using namespace Semantics;
@@ -330,7 +330,4 @@ TEST(MemoryModel, AbstractFpStoreLoadRoundtrip) {
   EXPECT_EQ(solver.check(), z3::unsat);
 }
 
-int main(int argc, char **argv) {
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}
+int main() { return simpletest::runAll(); }

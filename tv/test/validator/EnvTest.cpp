@@ -5,7 +5,7 @@
 #include "triton/Dialect/Triton/IR/Dialect.h"
 #include "triton/Dialect/Triton/IR/Types.h"
 
-#include <gtest/gtest.h>
+#include "SimpleTest.h"
 #include <stdexcept>
 #include <z3++.h>
 
@@ -251,7 +251,4 @@ TEST(Env, InitFuncArgs) {
   EXPECT_TRUE(s.expr.to_string().find("src_arg0") != std::string::npos);
 }
 
-int main(int argc, char **argv) {
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}
+int main() { return simpletest::runAll(); }

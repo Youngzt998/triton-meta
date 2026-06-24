@@ -7,7 +7,7 @@
 #include "triton/Dialect/Triton/IR/Dialect.h"
 #include "triton/Dialect/Triton/IR/Types.h"
 
-#include <gtest/gtest.h>
+#include "SimpleTest.h"
 #include <z3++.h>
 
 using namespace Semantics;
@@ -263,7 +263,4 @@ TEST(State, TwoOutputArgsCheckedTogether) {
       << "difference in argB must be detected";
 }
 
-int main(int argc, char **argv) {
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}
+int main() { return simpletest::runAll(); }
