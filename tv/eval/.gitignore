@@ -1,0 +1,6 @@
+# Timing report — regenerated on every solver-cost run (numbers change each run).
+solver-cost/results.csv
+
+# Python caches.
+__pycache__/
+*.pyc

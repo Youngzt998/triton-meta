@@ -1,0 +1,17 @@
+# Curated validation pairs for triton-tv.
+#
+# One case per line, tab-separated:
+#     <src.ttir>    <tgt.ttir>    <EQUIV|NEQ>    optional note
+#
+# Paths are relative to this folder (tv/eval/pairs/).
+# Expected verdict:
+#     EQUIV  - the two programs must be proven equivalent (binary exit 0)
+#     NEQ    - the two programs must be proven NOT equivalent (binary exit 1)
+# Lines starting with '#' and blank lines are ignored.
+#
+# To add a case: drop the two .ttir files here and add a line below.
+
+add_kernel_tiny.ttir	add_kernel_tiny_unoptimized.ttir	EQUIV	redundant arithmetic an optimizer may remove
+add_kernel_tiny.ttir	add_kernel_tiny_unoptimized_bad.ttir	NEQ	block_start computed as pid*5 not pid*4
+add_kernel_tiny.ttir	add_kernel_tiny_unoptimized_subf.ttir	NEQ	subf instead of addf on the data path
+add_kernel.ttir	add_kernel_unoptimized.ttir	EQUIV	full add kernel, unoptimized vs optimized
