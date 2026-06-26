@@ -157,18 +157,28 @@ Memory &Memory::store(const Z3Tile &ptrTile,
   for (int64_t dim : valTile.shape)
     n *= static_cast<unsigned>(dim);
 
-  // Apply each masked write via Z3's built-in array store (z3::store), which
-  // stays in the quantifier-free theory of arrays (QF_AX). Using z3::lambda
-  // here would introduce quantifiers and make the solver return `unknown` when
-  // asked to prove two stores are unequal (array extensionality over lambdas
-  // is undecidable for the default DPLL(T) solver).
+  // Represent the whole masked tile store as ONE lambda update of the heap,
+  // instead of an n×byteWidth chain of z3::store nodes. The old chain made the
+  // formula explode (1024 elems × 4 bytes = 4096 store nodes per program) and
+  // forced checkEquivalence into array extensionality. The new heap is a single
+  // function of the byte address:
   //
-  // When mask[i] is false we write back the current byte (a no-op), so the
-  // conditional reduces to: store(arr, addr, ite(mask, new_byte, arr[addr])).
+  //   array' = λ addr. (the matching byte if some masked lane covers addr,
+  //                     else the old byte at addr)
   //
-  // NOTE: for large tiles (e.g. 1024 elements × 4 bytes = 4096 store nodes)
-  // this creates a large Z3 expression. A quantifier-based encoding should be
-  // used once tile sizes become a bottleneck.
+  // Tile shapes are compile-time constants in TTIR, so we statically unfold the
+  // disjunction over lane index i and byte offset j. Lanes are applied in
+  // ascending order, so the highest lane is the outermost ite — last-writer-wins
+  // on aliasing, matching the previous store-chain order.
+  //
+  // This MUST be paired with the pointwise witness-address comparison in
+  // checkEquivalence: select(array', witness) β-reduces to a quantifier-free
+  // byte formula, so the solver never has to decide array extensionality over
+  // two lambdas (which returns `unknown`).
+  z3::expr oldArray = array;
+  z3::expr addr     = ctx.bv_const("__st_addr", 64);
+  z3::expr body     = z3::select(oldArray, addr); // default: keep old byte
+
   for (unsigned idx = 0; idx < n; idx++) {
     z3::expr idxExpr = ctx.bv_val(idx, 32);
     z3::expr ptr_i   = z3::select(ptrTile.expr,  idxExpr);
@@ -179,10 +189,10 @@ Memory &Memory::store(const Z3Tile &ptrTile,
     for (unsigned j = 0; j < byteWidth; j++) {
       z3::expr byteAddr = ptr_i + ctx.bv_val(j, 64);
       z3::expr byte_j   = bv_i.extract(j * 8 + 7, j * 8);
-      array = z3::store(array, byteAddr,
-                        z3::ite(mask_i, byte_j, z3::select(array, byteAddr)));
+      body = z3::ite(mask_i && (addr == byteAddr), byte_j, body);
     }
   }
 
+  array = z3::lambda(addr, body);
   return *this;
 }

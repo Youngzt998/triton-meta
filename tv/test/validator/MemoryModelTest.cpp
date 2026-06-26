@@ -330,4 +330,43 @@ TEST(MemoryModel, AbstractFpStoreLoadRoundtrip) {
   EXPECT_EQ(solver.check(), z3::unsat);
 }
 
+//===----------------------------------------------------------------------===//
+// Large-tile equivalence via the lambda store + pointwise witness comparison.
+// Scaled stand-in for the 1024-element add_kernel that previously blew up:
+// identical big stores must agree at a SYMBOLIC witness address (UNSAT),
+// differing big stores must be detected (SAT). Exercises the lambda-based
+// store at a non-trivial tile size without array extensionality.
+//===----------------------------------------------------------------------===//
+
+TEST(MemoryModel, LargeTileWitnessEquivalence) {
+  z3::context ctx;
+  mlir::MLIRContext mlirCtx;
+  auto i32Ty = mlir::IntegerType::get(&mlirCtx, 32);
+  auto i1Ty  = mlir::IntegerType::get(&mlirCtx, 1);
+
+  const int N = 256;
+  Memory init(ctx, FPMode::IntegerRange, "mem_big");
+
+  auto ptrTile  = makePtrTile(ctx, i32Ty, 0x10000, 4, {N});
+  auto trueMask = makeMaskTile(ctx, i1Ty, true, {N});
+
+  // Two memories given the SAME store must agree everywhere.
+  Memory m1 = init;
+  Memory m2 = init;
+  m1.store(ptrTile, makeConstTile(ctx, i32Ty, 7, {N}), trueMask);
+  m2.store(ptrTile, makeConstTile(ctx, i32Ty, 7, {N}), trueMask);
+
+  z3::expr w = ctx.bv_const("__w", 64);
+  z3::solver solver(ctx);
+  solver.add(z3::select(m1.array, w) != z3::select(m2.array, w));
+  EXPECT_EQ(solver.check(), z3::unsat) << "identical big stores must agree";
+
+  // A memory storing a different value must be detected.
+  Memory m3 = init;
+  m3.store(ptrTile, makeConstTile(ctx, i32Ty, 8, {N}), trueMask);
+  solver.reset();
+  solver.add(z3::select(m1.array, w) != z3::select(m3.array, w));
+  EXPECT_EQ(solver.check(), z3::sat) << "differing big stores must be detected";
+}
+
 int main() { return simpletest::runAll(); }

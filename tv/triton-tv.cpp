@@ -262,14 +262,22 @@ int main(int argc, char **argv) {
   s1f.fpReg->addAxioms(solver);
   s2f.fpReg->addAxioms(solver);
 
-  // Assert that at least one output memory differs between the two programs.
+  // Assert that at least one output memory differs between the two programs,
+  // compared POINTWISE at a single fresh symbolic witness address. store() now
+  // builds each heap as a z3::lambda, so we must NOT use `array != array`
+  // (array extensionality over lambdas returns `unknown`); select(lambda,
+  // witness) β-reduces to a quantifier-free byte formula. (src and tgt come
+  // from different functions, so we keep the explicit srcArgs↔tgtArgs pairing
+  // rather than calling Semantics::checkEquivalence, which assumes shared args.)
+  z3::expr witness = ctx.bv_const("__witness_addr", 64);
   z3::expr anyDiffers = ctx.bool_val(false);
   for (unsigned i = 0; i < srcArgs.size(); ++i) {
     mlir::Value sa = srcArgs[i];
     mlir::Value ta = tgtArgs[i];
     if (s1f.ptrMems.count(sa) && s2f.ptrMems.count(ta)) {
       anyDiffers = anyDiffers ||
-                   (s1f.ptrMems.at(sa).array != s2f.ptrMems.at(ta).array);
+                   (z3::select(s1f.ptrMems.at(sa).array, witness) !=
+                    z3::select(s2f.ptrMems.at(ta).array, witness));
     }
   }
   solver.add(anyDiffers);

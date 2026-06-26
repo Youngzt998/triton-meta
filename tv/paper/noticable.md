@@ -119,4 +119,37 @@ solver only needs to find one witness address where the byte differs.
   comparison). Cross-check their implementation before committing to this
   design.
 
+### Resolution (2026-06-25) — FIXED
+
+Both coupled changes are implemented:
+
+- `Memory::store` now builds **one `z3::lambda(addr, body)`** per store instead
+  of the per-byte `z3::store` chain (`tv/semantics/Memory.cpp`). The `∃i,j` is
+  **statically unfolded** into a nested `ite` over the known lane/byte indices
+  (tile shapes are compile-time constants) — open question #2 resolved in favour
+  of unfolding, so there is no real quantifier and no instantiation cost. Lanes
+  are applied ascending, so the highest lane is the outermost `ite`
+  (last-writer-wins on aliasing, matching the old chain).
+- Comparison switched to the **pointwise witness address**: `checkEquivalence`
+  (`tv/semantics/State.cpp`) and the inlined check in `tv/triton-tv.cpp` now use
+  `select(m1.array, witness) != select(m2.array, witness)` instead of
+  `array != array`. No manual `simplify()` was needed (open question #1: Z3
+  β-reduces `select(lambda, …)` fine).
+
+**Measured (1024-element f32 `add_kernel`, same machine):**
+
+|                          | Before                          | After                              |
+|--------------------------|---------------------------------|------------------------------------|
+| self-equivalence         | timeout >150 s, 16.7 GB, killed | EQUIVALENT, 0.30 s solver, 153 MB  |
+| unoptimized vs optimized | never completed                 | EQUIVALENT, 0.31 s solver, 156 MB  |
+| tiny pid×5 (address bug) | timeout >60 s                   | NOT EQUIVALENT, <1 s               |
+
+≈300× faster, ≈100× less memory. The address-divergence timeout (separate from
+the size blowup) also disappeared. All 43 unit tests pass (added
+`MemoryModel.LargeTileWitnessEquivalence`).
+
+Open question #3 (lambda layering for many sequential stores, e.g. flash
+attention's accumulator) is still untested — revisit when scan/accumulator
+kernels land.
+
 ---

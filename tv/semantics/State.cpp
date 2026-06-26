@@ -153,14 +153,24 @@ State State::interpretWhile(mlir::Operation *op) const {
 z3::check_result Semantics::checkEquivalence(const State &s1, const State &s2,
                                              z3::solver &solver) {
   // Assert that at least one per-argument memory differs between the two
-  // programs. UNSAT means all output memories are equal → equivalent.
+  // programs, checked POINTWISE at a single fresh symbolic witness address.
+  // UNSAT means the heaps agree at every address → equivalent.
+  //
+  // We deliberately avoid `mem1.array != mem2.array` (array extensionality):
+  // store() builds each heap as a z3::lambda, and extensionality between two
+  // lambda arrays is undecidable for the default DPLL(T) solver (returns
+  // `unknown`). select(lambda, witness) instead β-reduces to a quantifier-free
+  // byte formula. This is equivalent in meaning — m1 = m2 ⇔ ∀a. m1[a] = m2[a],
+  // and the fresh witness `a` quantifies the disagreement existentially.
   z3::context &ctx = solver.ctx();
+  z3::expr witness = ctx.bv_const("__witness_addr", 64);
   z3::expr anyDiffers = ctx.bool_val(false);
   for (auto &[arg, mem1] : s1.ptrMems) {
     auto it = s2.ptrMems.find(arg);
     assert(it != s2.ptrMems.end() &&
            "s2 is missing a ptrMems entry present in s1");
-    anyDiffers = anyDiffers || (mem1.array != it->second.array);
+    anyDiffers = anyDiffers || (z3::select(mem1.array, witness) !=
+                                z3::select(it->second.array, witness));
   }
   solver.add(anyDiffers);
   return solver.check();
