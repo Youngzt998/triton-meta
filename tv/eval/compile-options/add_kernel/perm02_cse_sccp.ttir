@@ -1,0 +1,41 @@
+// add_kernel TTIR — optimizations turned ON over the unoptimized standard:
+//   triton-opt standard.ttir --cse --sccp
+// Expected vs standard.ttir: EQUIVALENT (each pass must preserve semantics).
+module {
+  tt.func public @add_kernel(%arg0: !tt.ptr<f32>, %arg1: !tt.ptr<f32>, %arg2: !tt.ptr<f32>, %arg3: i32) attributes {noinline = false} {
+    %cst = arith.constant dense<-2147483648> : tensor<1024xi64>
+    %cst_0 = arith.constant dense<2147483647> : tensor<1024xi64>
+    %c-2147483648_i64 = arith.constant -2147483648 : i64
+    %c2147483647_i64 = arith.constant 2147483647 : i64
+    %c1024_i64 = arith.constant 1024 : i64
+    %c1024_i32 = arith.constant 1024 : i32
+    %0 = tt.get_program_id x : i32
+    %1 = arith.extsi %0 : i32 to i64
+    %2 = arith.muli %1, %c1024_i64 : i64
+    %3 = arith.cmpi sle, %2, %c2147483647_i64 : i64
+    %4 = arith.cmpi sge, %2, %c-2147483648_i64 : i64
+    %5 = arith.muli %0, %c1024_i32 : i32
+    %6 = tt.make_range {end = 1024 : i32, start = 0 : i32} : tensor<1024xi32>
+    %7 = tt.splat %5 : i32 -> tensor<1024xi32>
+    %8 = arith.extsi %7 : tensor<1024xi32> to tensor<1024xi64>
+    %9 = arith.extsi %6 : tensor<1024xi32> to tensor<1024xi64>
+    %10 = arith.addi %8, %9 : tensor<1024xi64>
+    %11 = arith.cmpi sle, %10, %cst_0 : tensor<1024xi64>
+    %12 = arith.cmpi sge, %10, %cst : tensor<1024xi64>
+    %13 = arith.addi %7, %6 : tensor<1024xi32>
+    %14 = tt.splat %arg3 : i32 -> tensor<1024xi32>
+    %15 = arith.cmpi slt, %13, %14 : tensor<1024xi32>
+    %16 = tt.splat %arg0 : !tt.ptr<f32> -> tensor<1024x!tt.ptr<f32>>
+    %17 = tt.addptr %16, %13 : tensor<1024x!tt.ptr<f32>>, tensor<1024xi32>
+    %18 = tt.load %17, %15 : tensor<1024x!tt.ptr<f32>>
+    %19 = tt.splat %arg1 : !tt.ptr<f32> -> tensor<1024x!tt.ptr<f32>>
+    %20 = tt.addptr %19, %13 : tensor<1024x!tt.ptr<f32>>, tensor<1024xi32>
+    %21 = tt.load %20, %15 : tensor<1024x!tt.ptr<f32>>
+    %22 = arith.addf %18, %21 : tensor<1024xf32>
+    %23 = tt.splat %arg2 : !tt.ptr<f32> -> tensor<1024x!tt.ptr<f32>>
+    %24 = tt.addptr %23, %13 : tensor<1024x!tt.ptr<f32>>, tensor<1024xi32>
+    tt.store %24, %22, %15 : tensor<1024x!tt.ptr<f32>>
+    tt.return
+  }
+}
+

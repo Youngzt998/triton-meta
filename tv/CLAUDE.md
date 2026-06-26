@@ -44,6 +44,45 @@ python -m pytest python/test/unit/path/to/test_file.py -s -x
 TRITON_INTERPRET=1 python -m pytest python/test/unit/...
 ```
 
+## Routine testing — validator gates + optimization-permutation campaign
+
+This is our standing way to (1) check the validator keeps working and (2) hunt
+for real Triton miscompiles. All of it drives the built `triton-tv` binary; the
+SMT solver is the verifier, so an `EQUIVALENT`/`NOT EQUIVALENT` verdict is the
+result.
+
+```bash
+# Validator gates (must pass): curated equivalent/non-equivalent pairs, and
+# compiler-pass variants that must stay equivalent to their unoptimized standard.
+python tv/eval/run_eval.py all          # pairs + compile-options gates, then timing
+
+# Optimization-permutation campaign (the bug hunt):
+python tv/eval/permute_passes.py        # add_kernel by default
+```
+
+`permute_passes.py` takes an **unoptimized kernel TTIR at a realistic block size**
+(e.g. `tensor<1024xf32>`, as real GPU code uses) and applies **every ordered
+permutation of 1, 2, and 3 TTIR optimization passes** from a curated, real
+TTIR-pipeline set (`canonicalize`, `cse`, `triton-combine`,
+`triton-reorder-broadcast`, `sccp`, `symbol-dce`, `loop-invariant-code-motion`).
+Each pass is semantics-preserving by contract, so **every optimized result must
+validate `EQUIVALENT` against the unoptimized reference**:
+
+- `EQUIVALENT` for all permutations → validator healthy, no miscompile found.
+- any `NOT EQUIVALENT` → the campaign stops, saves `BUG_neq.ttir` with a comment
+  header naming the exact pass order, and exits non-zero. **A NEQ is a potential
+  Triton compiler bug — first re-check the validator is sound before filing.**
+
+It keeps ~10 *distinct* optimized variants in `tv/eval/compile-options/<kernel>/`,
+each with a comment header listing which passes were turned on, so the
+`compile-options` gate re-validates them on every run. (A trivial kernel like
+add_kernel only has a handful of distinct optimized forms, so fewer than 10 are
+kept; richer kernels yield more.)
+
+**Last add_kernel run:** 259 permutations, all `EQUIVALENT` (~0.3 s each at 1024
+elements), no miscompile found. To hunt harder, point the campaign at a richer
+kernel (reductions, broadcasts, masks) or widen the pass set.
+
 ## Debugging / IR inspection
 
 ```bash
