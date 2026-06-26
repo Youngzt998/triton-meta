@@ -3,9 +3,14 @@
 #include "semantics/Memory.h"
 
 #include "triton/Dialect/Triton/IR/Dialect.h"
+#include "mlir/IR/Block.h"
 #include "mlir/IR/BuiltinTypes.h"
+#include "mlir/IR/Region.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/ErrorHandling.h"
+
+#include <cassert>
+#include <optional>
 
 using namespace Semantics;
 
@@ -89,8 +94,25 @@ State Semantics::handleTtSplat(const State &s, mlir::Operation *op) {
 
 State Semantics::handleTtAddPtr(const State &s, mlir::Operation *op) {
   auto addptrOp = llvm::cast<mlir::triton::AddPtrOp>(op);
-  auto &ptrTile = std::get<Z3Tile>(s.env.lookup(addptrOp.getPtr()));
-  auto &offTile = std::get<Z3Tile>(s.env.lookup(addptrOp.getOffset()));
+  Z3Value ptrV = s.env.lookup(addptrOp.getPtr());
+  Z3Value offV = s.env.lookup(addptrOp.getOffset());
+
+  // Scalar pointer + scalar offset:  newPtr = ptr + sizeof(pointee) * offset.
+  // (Softmax computes a per-row base pointer this way before splatting it.)
+  if (auto *ptr = std::get_if<Z3Ptr>(&ptrV)) {
+    unsigned pteSize = getByteWidth(ptr->pointeeType);
+    z3::expr off = std::get<Z3Scalar>(offV).expr;
+    unsigned offBw = off.get_sort().bv_size();
+    z3::expr off64 = (offBw == 64) ? off : z3::sext(off, 64 - offBw);
+    z3::expr addr = ptr->expr + s.ctx.bv_val((uint64_t)pteSize, 64) * off64;
+    State next = s;
+    next.env.bind(addptrOp.getResult(),
+                  Z3Ptr{addr, ptr->pointeeType, ptr->baseArg});
+    return next;
+  }
+
+  auto &ptrTile = std::get<Z3Tile>(ptrV);
+  auto &offTile = std::get<Z3Tile>(offV);
 
   // Determine pointee byte size from the ptr tile element type.
   auto ptrTy       = llvm::cast<mlir::triton::PointerType>(ptrTile.elemType);
@@ -178,5 +200,66 @@ State Semantics::handleTtStore(const State &s, mlir::Operation *op) {
   // Copy state and mutate the target Memory in the copy.
   State next = s;
   next.ptrMems.at(base).store(ptrTile, valTile, maskTile);
+  return next;
+}
+
+//===----------------------------------------------------------------------===//
+// tt.reduce
+//
+// Single-operand reduction of a 1-D tile to a scalar (the softmax case: max
+// over a row, sum over a row). The combine region — e.g.
+//   ^bb0(%a, %b): %r = arith.maxnumf %a, %b; tt.reduce.return %r
+// — is interpreted generically by folding it over the tile's elements in index
+// order. Tile size is a compile-time constant, so the fold is statically
+// unrolled into a nested combine application (under Abstract FP, the combine is
+// an uninterpreted function, so this is exact and order-faithful).
+//===----------------------------------------------------------------------===//
+
+State Semantics::handleTtReduce(const State &s, mlir::Operation *op) {
+  assert(op->getNumOperands() == 1 &&
+         "tt.reduce: only single-operand reductions are supported");
+  auto &inTile = std::get<Z3Tile>(s.env.lookup(op->getOperand(0)));
+
+  unsigned n = 1;
+  for (int64_t d : inTile.shape)
+    n *= static_cast<unsigned>(d);
+  assert(n >= 1 && "tt.reduce: empty tile");
+
+  mlir::Type elemTy = inTile.elemType;
+  z3::context &ctx = s.ctx;
+
+  mlir::Block &combine = op->getRegion(0).front();
+  mlir::Value argA = combine.getArgument(0);
+  mlir::Value argB = combine.getArgument(1);
+
+  auto elemAt = [&](unsigned i) -> Z3Value {
+    return Z3Scalar{z3::select(inTile.expr, ctx.bv_val(i, 32)), elemTy,
+                    inTile.fpMode};
+  };
+
+  // Interpret the combine region with its two block args bound to (a, b) and
+  // return the value yielded by tt.reduce.return.
+  auto applyCombine = [&](const Z3Value &a, const Z3Value &b) -> Z3Value {
+    State seed = s; // shares ctx + fpReg; env additionally binds the two args
+    seed.env.bind(argA, a);
+    seed.env.bind(argB, b);
+    const State *cur = &seed;
+    std::optional<State> buf;
+    for (mlir::Operation &cop : combine) {
+      if (cop.getName().getStringRef() == "tt.reduce.return")
+        return cur->env.lookup(cop.getOperand(0));
+      buf.emplace(cur->interpretOp(&cop));
+      cur = &*buf;
+    }
+    llvm_unreachable("tt.reduce: combine region has no tt.reduce.return");
+  };
+
+  Z3Value acc = elemAt(0);
+  for (unsigned i = 1; i < n; i++)
+    acc = applyCombine(acc, elemAt(i));
+
+  // 1-D reduction → scalar result.
+  State next = s;
+  next.env.bind(op->getResult(0), acc);
   return next;
 }

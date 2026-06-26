@@ -4,6 +4,7 @@
 #include "semantics/Memory.h"
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/ErrorHandling.h"
@@ -114,6 +115,31 @@ State Semantics::handleArithConstant(const State &s, mlir::Operation *op) {
         ++idx;
       }
       return Z3Tile{arr, shape, elemTy, s.fpMode, {}};
+    }
+    // --- dense float tensor ---
+    if (auto denseFP = llvm::dyn_cast<mlir::DenseFPElementsAttr>(value)) {
+      auto tensorTy = llvm::cast<mlir::RankedTensorType>(resType);
+      auto floatTy  = llvm::cast<mlir::FloatType>(tensorTy.getElementType());
+      unsigned bw   = floatTy.getWidth();
+      llvm::SmallVector<int64_t> shape(tensorTy.getShape().begin(),
+                                       tensorTy.getShape().end());
+      // Abstract/IntegerRange carry FP as BitVec(width); use the IEEE bit
+      // pattern as the opaque id (same convention as the scalar float case).
+      if (denseFP.isSplat()) {
+        uint64_t bits =
+            denseFP.getSplatValue<llvm::APFloat>().bitcastToAPInt().getZExtValue();
+        return splatConstTile(ctx, ctx.bv_val(bits, bw), floatTy, s.fpMode, shape);
+      }
+      z3::sort elemSort = getElemSort(ctx, floatTy, s.fpMode);
+      z3::expr arr = ctx.constant("__dense_fp_base",
+                                  ctx.array_sort(ctx.bv_sort(32), elemSort));
+      unsigned idx = 0;
+      for (const llvm::APFloat &apf : denseFP.getValues<llvm::APFloat>()) {
+        uint64_t bits = apf.bitcastToAPInt().getZExtValue();
+        arr = z3::store(arr, ctx.bv_val(idx, 32), ctx.bv_val(bits, bw));
+        ++idx;
+      }
+      return Z3Tile{arr, shape, floatTy, s.fpMode, {}};
     }
     // --- scalar float ---
     if (auto floatAttr = llvm::dyn_cast<mlir::FloatAttr>(value)) {
@@ -301,4 +327,41 @@ State Semantics::handleArithSubf(const State &s, mlir::Operation *op) {
 State Semantics::handleArithMulf(const State &s, mlir::Operation *op) {
   return handleFpBinaryOp(s, op,
     [](AbstractFp &afp, z3::expr a, z3::expr b) { return afp.mul(a, b); });
+}
+
+State Semantics::handleArithDivf(const State &s, mlir::Operation *op) {
+  return handleFpBinaryOp(s, op,
+    [](AbstractFp &afp, z3::expr a, z3::expr b) { return afp.div(a, b); });
+}
+
+State Semantics::handleArithMaxnumf(const State &s, mlir::Operation *op) {
+  return handleFpBinaryOp(s, op,
+    [](AbstractFp &afp, z3::expr a, z3::expr b) { return afp.max(a, b); });
+}
+
+//===----------------------------------------------------------------------===//
+// math.exp — element-wise FP unary (uninterpreted in Abstract mode)
+//===----------------------------------------------------------------------===//
+
+State Semantics::handleMathExp(const State &s, mlir::Operation *op) {
+  Z3Value in = s.env.lookup(op->getOperand(0));
+  mlir::Type resType = op->getResult(0).getType();
+  mlir::Type elemTy  = llvm::isa<mlir::RankedTensorType>(resType)
+                           ? llvm::cast<mlir::RankedTensorType>(resType).getElementType()
+                           : resType;
+  AbstractFp &afp = s.fpReg->get(llvm::cast<mlir::FloatType>(elemTy));
+  z3::context &ctx = s.ctx;
+
+  State next = s;
+  if (auto *sc = std::get_if<Z3Scalar>(&in)) {
+    next.env.bind(op->getResult(0),
+                  Z3Scalar{afp.exp(sc->expr), elemTy, s.fpMode});
+  } else {
+    auto &t = std::get<Z3Tile>(in);
+    z3::expr i = ctx.bv_const("__ue", 32);
+    z3::expr e = afp.exp(z3::select(t.expr, i));
+    next.env.bind(op->getResult(0),
+                  Z3Tile{z3::lambda(i, e), t.shape, elemTy, s.fpMode, {}});
+  }
+  return next;
 }

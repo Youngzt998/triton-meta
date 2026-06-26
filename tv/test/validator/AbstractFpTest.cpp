@@ -256,4 +256,59 @@ TEST(AbstractFp, RegistryDistinguishesF16AndBF16) {
   EXPECT_EQ(eb16.bitwidth(), 16u);
 }
 
+//===----------------------------------------------------------------------===//
+// max / exp (added for softmax: arith.maxnumf, math.exp)
+//===----------------------------------------------------------------------===//
+
+TEST(AbstractFp, MaxAndExpAreFunctional) {
+  // Same inputs ⇒ same outputs (uninterpreted-function semantics).
+  z3::context ctx;
+  mlir::MLIRContext mlirCtx;
+  auto f32 = mlir::Float32Type::get(&mlirCtx);
+  AbstractFp e(ctx, f32);
+
+  z3::expr a = ctx.bv_const("a", 32);
+  z3::expr b = ctx.bv_const("b", 32);
+
+  z3::solver solver(ctx);
+  solver.add((e.max(a, b) != e.max(a, b)) || (e.exp(a) != e.exp(a)));
+  EXPECT_EQ(solver.check(), z3::unsat);
+}
+
+TEST(AbstractFp, MaxCommutativityAxiom) {
+  // maxnumf is commutative; the axiom must make max(a,b) == max(b,a).
+  z3::context ctx;
+  mlir::MLIRContext mlirCtx;
+  auto f32 = mlir::Float32Type::get(&mlirCtx);
+  AbstractFp e(ctx, f32);
+
+  z3::expr a = ctx.bv_const("a", 32);
+  z3::expr b = ctx.bv_const("b", 32);
+
+  z3::solver solver(ctx);
+  (void)e.max(a, b);   // touch max so the axiom is emitted
+  e.addAxioms(solver);
+
+  solver.add(e.max(a, b) != e.max(b, a));
+  EXPECT_EQ(solver.check(), z3::unsat);
+}
+
+TEST(AbstractFp, ExpIsNotTriviallyConstant) {
+  // exp is uninterpreted: distinct inputs may map to distinct outputs (the
+  // solver is free to pick such a model — exp is not forced to be constant).
+  z3::context ctx;
+  mlir::MLIRContext mlirCtx;
+  auto f32 = mlir::Float32Type::get(&mlirCtx);
+  AbstractFp e(ctx, f32);
+
+  z3::expr a = ctx.bv_const("a", 32);
+  z3::expr b = ctx.bv_const("b", 32);
+
+  z3::solver solver(ctx);
+  e.addAxioms(solver);
+  solver.add(a != b);
+  solver.add(e.exp(a) != e.exp(b));
+  EXPECT_EQ(solver.check(), z3::sat);
+}
+
 int main() { return simpletest::runAll(); }

@@ -63,8 +63,10 @@ public:
   z3::expr sub(const z3::expr &a, const z3::expr &b);
   z3::expr mul(const z3::expr &a, const z3::expr &b);
   z3::expr div(const z3::expr &a, const z3::expr &b);
+  z3::expr max(const z3::expr &a, const z3::expr &b);  // arith.maxnumf
   z3::expr neg(const z3::expr &x);
   z3::expr abs(const z3::expr &x);
+  z3::expr exp(const z3::expr &x);                     // math.exp
 
   // Comparison predicates (Bool-typed results).
   // TODO: encode IEEE semantics for comparisons involving NaN (always false
@@ -89,8 +91,10 @@ private:
   z3::func_decl getSubFn();
   z3::func_decl getMulFn();
   z3::func_decl getDivFn();
+  z3::func_decl getMaxFn();
   z3::func_decl getNegFn();
   z3::func_decl getAbsFn();
+  z3::func_decl getExpFn();
   z3::func_decl getSumFn();
   z3::func_decl getDotFn();
 
@@ -106,8 +110,8 @@ private:
   std::optional<z3::expr> posZeroE, negZeroE, posInfE, negInfE, nanE;
 
   // Uninterpreted function decls (lazy).
-  std::optional<z3::func_decl> addFn, subFn, mulFn, divFn;
-  std::optional<z3::func_decl> negFn, absFn;
+  std::optional<z3::func_decl> addFn, subFn, mulFn, divFn, maxFn;
+  std::optional<z3::func_decl> negFn, absFn, expFn;
   std::optional<z3::func_decl> sumFn, dotFn;
 
   // Axiom-emission bookkeeping. Each flag flips to true the first time the
@@ -115,6 +119,7 @@ private:
   bool axiomsConstsDistinctEmitted = false;
   bool axiomsAddCommutativeEmitted = false;
   bool axiomsMulCommutativeEmitted = false;
+  bool axiomsMaxCommutativeEmitted = false;
   bool axiomsNegInvolutiveEmitted  = false;
 };
 

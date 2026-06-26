@@ -12,6 +12,7 @@ State handleTtSplat       (const State &s, mlir::Operation *op);
 State handleTtAddPtr      (const State &s, mlir::Operation *op);
 State handleTtLoad        (const State &s, mlir::Operation *op);
 State handleTtStore       (const State &s, mlir::Operation *op);
+State handleTtReduce      (const State &s, mlir::Operation *op);
 
 } // namespace Semantics
 

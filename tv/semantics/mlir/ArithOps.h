@@ -16,6 +16,11 @@ State handleArithCmpi    (const State &s, mlir::Operation *op);
 State handleArithAddf    (const State &s, mlir::Operation *op);
 State handleArithSubf    (const State &s, mlir::Operation *op);
 State handleArithMulf    (const State &s, mlir::Operation *op);
+State handleArithDivf    (const State &s, mlir::Operation *op);
+State handleArithMaxnumf (const State &s, mlir::Operation *op);
+
+// math dialect (FP elementwise, modeled via AbstractFp uninterpreted fns).
+State handleMathExp      (const State &s, mlir::Operation *op);
 
 } // namespace Semantics
 

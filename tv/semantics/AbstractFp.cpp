@@ -96,6 +96,15 @@ z3::func_decl AbstractFp::getDivFn() {
   return *divFn;
 }
 
+z3::func_decl AbstractFp::getMaxFn() {
+  if (!maxFn) {
+    z3::sort s = sort();
+    z3::sort doms[2] = {s, s};
+    maxFn.emplace(ctx.function(("fp_max_" + suffix).c_str(), 2, doms, s));
+  }
+  return *maxFn;
+}
+
 z3::func_decl AbstractFp::getNegFn() {
   if (!negFn) {
     z3::sort s = sort();
@@ -110,6 +119,14 @@ z3::func_decl AbstractFp::getAbsFn() {
     absFn.emplace(ctx.function(("fp_abs_" + suffix).c_str(), 1, &s, s));
   }
   return *absFn;
+}
+
+z3::func_decl AbstractFp::getExpFn() {
+  if (!expFn) {
+    z3::sort s = sort();
+    expFn.emplace(ctx.function(("fp_exp_" + suffix).c_str(), 1, &s, s));
+  }
+  return *expFn;
 }
 
 z3::func_decl AbstractFp::getSumFn() {
@@ -147,8 +164,12 @@ z3::expr AbstractFp::mul(const z3::expr &a, const z3::expr &b) {
 z3::expr AbstractFp::div(const z3::expr &a, const z3::expr &b) {
   return getDivFn()(a, b);
 }
+z3::expr AbstractFp::max(const z3::expr &a, const z3::expr &b) {
+  return getMaxFn()(a, b);
+}
 z3::expr AbstractFp::neg(const z3::expr &x) { return getNegFn()(x); }
 z3::expr AbstractFp::abs(const z3::expr &x) { return getAbsFn()(x); }
+z3::expr AbstractFp::exp(const z3::expr &x) { return getExpFn()(x); }
 
 z3::expr AbstractFp::eq(const z3::expr &a, const z3::expr &b) { return a == b; }
 z3::expr AbstractFp::ne(const z3::expr &a, const z3::expr &b) { return a != b; }
@@ -205,6 +226,14 @@ void AbstractFp::addAxioms(z3::solver &solver) {
     z3::expr y = ctx.bv_const(("__ax_y_" + suffix).c_str(), bw);
     solver.add(z3::forall(x, y, (*mulFn)(x, y) == (*mulFn)(y, x)));
     axiomsMulCommutativeEmitted = true;
+  }
+
+  // 3b. max (arith.maxnumf) is commutative.
+  if (maxFn && !axiomsMaxCommutativeEmitted) {
+    z3::expr x = ctx.bv_const(("__ax_x_" + suffix).c_str(), bw);
+    z3::expr y = ctx.bv_const(("__ax_y_" + suffix).c_str(), bw);
+    solver.add(z3::forall(x, y, (*maxFn)(x, y) == (*maxFn)(y, x)));
+    axiomsMaxCommutativeEmitted = true;
   }
 
   // 4. neg is involutive: ∀x. neg(neg(x)) = x.

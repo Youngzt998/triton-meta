@@ -91,6 +91,7 @@ State State::interpretOp(mlir::Operation *op) const {
   if (opName == "tt.addptr")         return handleTtAddPtr(*this, op);
   if (opName == "tt.load")           return handleTtLoad(*this, op);
   if (opName == "tt.store")          return handleTtStore(*this, op);
+  if (opName == "tt.reduce")         return handleTtReduce(*this, op);
 
   // --- Arithmetic ops ---
   if (opName == "arith.constant") return handleArithConstant(*this, op);
@@ -103,6 +104,11 @@ State State::interpretOp(mlir::Operation *op) const {
   if (opName == "arith.addf")     return handleArithAddf(*this, op);
   if (opName == "arith.subf")     return handleArithSubf(*this, op);
   if (opName == "arith.mulf")     return handleArithMulf(*this, op);
+  if (opName == "arith.divf")     return handleArithDivf(*this, op);
+  if (opName == "arith.maxnumf")  return handleArithMaxnumf(*this, op);
+
+  // --- math dialect ---
+  if (opName == "math.exp")       return handleMathExp(*this, op);
 
   // --- Function terminators — no effect on state ---
   if (opName == "tt.return" || opName == "func.return")
