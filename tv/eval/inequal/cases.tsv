@@ -10,3 +10,10 @@
 add/reference.ttir	add/sub.ttir	NEQ	x - y instead of x + y
 add/reference.ttir	add/mul.ttir	NEQ	x * y instead of x + y
 add/reference.ttir	add/offset5.ttir	NEQ	block_start = pid*5 not pid*4 (wrong addresses)
+
+# softmax mutations (small 8-col tiles: proving NON-equivalence is a SAT search,
+# which is far cheaper at small sizes — equivalence/perf is exercised at realistic
+# size by the compile-options + permutation campaign instead).
+softmax/reference.ttir	softmax/mul_not_div.ttir	NEQ	y = num*denom instead of num/denom
+softmax/reference.ttir	softmax/add_not_sub.ttir	NEQ	x + max instead of x - max
+softmax/reference.ttir	softmax/sum_not_max.ttir	NEQ	max-reduce replaced by sum-reduce

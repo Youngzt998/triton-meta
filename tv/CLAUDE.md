@@ -61,6 +61,9 @@ python tv/eval/run_eval.py all          # all gates, then timing report
 
 # Optimization-permutation campaign (the bug hunt):
 python tv/eval/permute_passes.py        # add_kernel by default
+python tv/eval/permute_passes.py \
+  --baseline tv/eval/compile-options/softmax_kernel/standard.ttir \
+  --out tv/eval/compile-options/softmax_kernel    # softmax
 ```
 
 `permute_passes.py` takes an **unoptimized kernel TTIR at a realistic block size**
@@ -82,9 +85,16 @@ each with a comment header listing which passes were turned on, so the
 add_kernel only has a handful of distinct optimized forms, so fewer than 10 are
 kept; richer kernels yield more.)
 
-**Last add_kernel run:** 259 permutations, all `EQUIVALENT` (~0.3 s each at 1024
-elements), no miscompile found. To hunt harder, point the campaign at a richer
-kernel (reductions, broadcasts, masks) or widen the pass set.
+**Last runs:** add_kernel — 259 permutations, all `EQUIVALENT` (~0.3 s each at
+1024 elements). softmax — 259 permutations, all `EQUIVALENT` (~0.5 s each at 1024
+cols; exercises `tt.reduce`, `math.exp`, `divf`, `maxnumf`). No miscompile found
+in either. To hunt harder, widen the pass set or add kernels.
+
+Note on sizes: the EQUIV gates and the campaign run at realistic block sizes —
+proving equivalence is UNSAT and stays fast even at 1024. The `inequal` gate
+(proving NON-equivalence, a SAT search) is much cheaper at small sizes, so the
+softmax inequal references use 8-col tiles. When adding a NEQ case, prefer a
+small tile.
 
 ## Debugging / IR inspection
 

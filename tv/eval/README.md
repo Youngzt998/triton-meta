@@ -38,11 +38,17 @@ not equivalent. Any mismatch is a FAIL and the runner exits non-zero.
 
 ## `inequal/` — inequality detection (soundness)
 
-Pairs that are **genuinely not equivalent** (a kernel vs a mutated version: `x-y`
-or `x*y` instead of `x+y`, a wrong `pid*5` offset, …). The validator must report
-`NEQ` for every one — this checks it actually *catches* real differences, the
-opposite worry from the EQUIV gates. An `EQUIV`/`UNKNOWN` here is a FAIL. Manifest
-is `inequal/cases.tsv` (same TSV format; all rows tagged `NEQ`).
+Pairs that are **genuinely not equivalent** (a kernel vs a mutated version:
+`x-y`/`x*y` instead of `x+y` and a wrong `pid*5` offset for add; `num*denom`
+instead of `num/denom`, `x+max` instead of `x-max`, and a sum-reduce where a
+max-reduce belongs for softmax). The validator must report `NEQ` for every one —
+this checks it actually *catches* real differences, the opposite worry from the
+EQUIV gates. An `EQUIV`/`UNKNOWN` here is a FAIL. Manifest is
+`inequal/cases.tsv` (same TSV format; all rows tagged `NEQ`).
+
+Note the softmax inequal references use a **small tile (8 cols)**: proving
+NON-equivalence is a SAT search that is far cheaper at small sizes, while
+realistic-size behavior is exercised by the EQUIV gates / permutation campaign.
 
 **Add a case:** drop a reference and a mutated `.ttir` under `inequal/<kernel>/`
 and add one `NEQ` manifest line.

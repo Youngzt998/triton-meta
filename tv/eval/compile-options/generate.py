@@ -125,6 +125,24 @@ def _capture_standard(script_path):
     return made
 
 
+def _inline_standard(kernel_dir):
+    """Inline the dumped standard so it is a single call-free function.
+
+    Triton's own TTIR pipeline inlines first, and the validator models one
+    function (no tt.call), so the reference standard we validate against is the
+    inlined unoptimized TTIR. For a call-free kernel (e.g. add) this is a no-op.
+    """
+    triton_opt = common.find_triton_opt()
+    standard = kernel_dir / "standard.ttir"
+    proc = subprocess.run([str(triton_opt), str(standard), "-inline"],
+                          capture_output=True, text=True)
+    if proc.returncode == 0 and proc.stdout.strip():
+        standard.write_text(proc.stdout)
+        print(f"  inlined standard -> {standard}")
+    else:
+        print(f"  [warn] inline failed for {standard}: {proc.stderr.strip()[:200]}")
+
+
 def _make_variants(kernel_dir):
     """Run triton-opt pipelines on standard.ttir, writing one file each."""
     triton_opt = common.find_triton_opt()
@@ -168,6 +186,7 @@ def main():
 
     for name, kernel_dir in made.items():
         print(f"Building variants for {name}")
+        _inline_standard(kernel_dir)
         _make_variants(kernel_dir)
 
 
