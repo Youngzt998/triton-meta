@@ -5,6 +5,7 @@ runner drives the built binary over three kinds of evaluation, one per folder.
 
 ```bash
 python tv/eval/run_eval.py pairs            # curated pairs gate
+python tv/eval/run_eval.py inequal          # inequality-detection gate
 python tv/eval/run_eval.py compile-options  # unopt-vs-variant gate
 python tv/eval/run_eval.py solver-cost      # timing report
 python tv/eval/run_eval.py all              # gates, then the report
@@ -34,6 +35,17 @@ validator must produce. The manifest is `pairs/cases.tsv`, tab-separated:
 not equivalent. Any mismatch is a FAIL and the runner exits non-zero.
 
 **Add a case:** drop the two `.ttir` files in `pairs/` and add one manifest line.
+
+## `inequal/` — inequality detection (soundness)
+
+Pairs that are **genuinely not equivalent** (a kernel vs a mutated version: `x-y`
+or `x*y` instead of `x+y`, a wrong `pid*5` offset, …). The validator must report
+`NEQ` for every one — this checks it actually *catches* real differences, the
+opposite worry from the EQUIV gates. An `EQUIV`/`UNKNOWN` here is a FAIL. Manifest
+is `inequal/cases.tsv` (same TSV format; all rows tagged `NEQ`).
+
+**Add a case:** drop a reference and a mutated `.ttir` under `inequal/<kernel>/`
+and add one `NEQ` manifest line.
 
 ## `compile-options/` — unoptimized standard vs variants
 

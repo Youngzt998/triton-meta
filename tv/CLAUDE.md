@@ -52,9 +52,12 @@ SMT solver is the verifier, so an `EQUIVALENT`/`NOT EQUIVALENT` verdict is the
 result.
 
 ```bash
-# Validator gates (must pass): curated equivalent/non-equivalent pairs, and
-# compiler-pass variants that must stay equivalent to their unoptimized standard.
-python tv/eval/run_eval.py all          # pairs + compile-options gates, then timing
+# Validator gates (must pass):
+#   pairs           curated equivalent/non-equivalent pairs (verdict must match tag)
+#   inequal         genuinely non-equivalent pairs — must ALL be caught as NEQ
+#                   (soundness: the validator must catch real differences)
+#   compile-options compiler-pass variants that must stay EQUIV to their standard
+python tv/eval/run_eval.py all          # all gates, then timing report
 
 # Optimization-permutation campaign (the bug hunt):
 python tv/eval/permute_passes.py        # add_kernel by default

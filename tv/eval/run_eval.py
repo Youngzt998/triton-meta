@@ -7,6 +7,10 @@ Three kinds of evaluation, one per folder:
   pairs/            curated before/after pairs, each tagged EQUIV or NEQ.
                     The validator's verdict must match the tag.   (gate)
 
+  inequal/          pairs that are genuinely NOT equivalent. The validator must
+                    report NEQ for all — a soundness check that it catches real
+                    differences.                                  (gate)
+
   compile-options/  kernels compiled under different options. The unoptimized
                     'standard.ttir' is the correct reference; every other
                     variant in the folder must validate EQUIV against it. (gate)
@@ -16,9 +20,10 @@ Three kinds of evaluation, one per folder:
 
 Subcommands:
     pairs            run the curated pairs gate
+    inequal          run the inequality-detection gate
     compile-options  run the unopt-vs-variant gate
     solver-cost      time the queries, write results.csv
-    all              pairs + compile-options (gates), then solver-cost
+    all              pairs + inequal + compile-options (gates), then solver-cost
 
 Exit code is non-zero if any gating case fails.
 """
@@ -33,13 +38,17 @@ sys.path.insert(0, str(HERE))
 import common  # noqa: E402
 
 PAIRS_DIR = HERE / "pairs"
+INEQUAL_DIR = HERE / "inequal"
 COMPILE_DIR = HERE / "compile-options"
 SOLVER_DIR = HERE / "solver-cost"
 
 
-def _read_manifest():
-    """Yield (src_path, tgt_path, expected, note) from pairs/cases.tsv."""
-    manifest = PAIRS_DIR / "cases.tsv"
+def _read_manifest(manifest_dir=PAIRS_DIR):
+    """Yield (src_path, tgt_path, expected, note) from <manifest_dir>/cases.tsv.
+
+    Paths in the manifest are relative to manifest_dir.
+    """
+    manifest = manifest_dir / "cases.tsv"
     for line in manifest.read_text().splitlines():
         line = line.strip()
         if not line or line.startswith("#"):
@@ -51,7 +60,7 @@ def _read_manifest():
             continue
         src, tgt, expected = cols[0], cols[1], cols[2].upper()
         note = cols[3] if len(cols) > 3 else ""
-        yield PAIRS_DIR / src, PAIRS_DIR / tgt, expected, note
+        yield manifest_dir / src, manifest_dir / tgt, expected, note
 
 
 def _collect_compile_queries():
@@ -75,10 +84,10 @@ def _collect_compile_queries():
 # Gates
 # ---------------------------------------------------------------------------
 
-def run_pairs(binary, timeout):
-    print("== pairs ==")
+def run_pairs(binary, timeout, manifest_dir=PAIRS_DIR, label="pairs"):
+    print(f"== {label} ==")
     passed = failed = 0
-    for src, tgt, expected, note in _read_manifest():
+    for src, tgt, expected, note in _read_manifest(manifest_dir):
         if not src.is_file() or not tgt.is_file():
             print(f"[FAIL] {src.name} vs {tgt.name}: missing file")
             failed += 1
@@ -90,7 +99,7 @@ def run_pairs(binary, timeout):
         extra = f" ({note})" if note else ""
         print(f"[{tag}] {src.name} vs {tgt.name}: "
               f"expected {expected}, got {res.verdict}{extra}")
-    print(f"-- pairs: {passed} passed, {failed} failed --\n")
+    print(f"-- {label}: {passed} passed, {failed} failed --\n")
     return failed == 0
 
 
@@ -160,7 +169,7 @@ def run_solver_cost(binary, timeout):
 
 def main():
     ap = argparse.ArgumentParser(description="tv evaluation suite driver")
-    ap.add_argument("mode", choices=["pairs", "compile-options",
+    ap.add_argument("mode", choices=["pairs", "inequal", "compile-options",
                                      "solver-cost", "all"])
     ap.add_argument("--timeout", type=int, default=120,
                     help="per-validation timeout in seconds (default 120)")
@@ -172,6 +181,8 @@ def main():
     ok = True
     if args.mode in ("pairs", "all"):
         ok &= run_pairs(binary, args.timeout)
+    if args.mode in ("inequal", "all"):
+        ok &= run_pairs(binary, args.timeout, INEQUAL_DIR, "inequal")
     if args.mode in ("compile-options", "all"):
         ok &= run_compile_options(binary, args.timeout)
     if args.mode in ("solver-cost", "all"):

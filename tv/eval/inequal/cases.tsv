@@ -1,0 +1,12 @@
+# Inequality-detection cases for triton-tv.
+#
+# Every pair here is GENUINELY NOT equivalent. The validator must report NEQ for
+# all of them — a soundness check that it actually catches real differences
+# (the opposite worry from the EQUIV gates). An EQUIV or UNKNOWN here is a FAIL.
+#
+# Tab-separated:  <src.ttir>  <tgt.ttir>  NEQ  optional note
+# Paths are relative to this folder (tv/eval/inequal/).
+
+add/reference.ttir	add/sub.ttir	NEQ	x - y instead of x + y
+add/reference.ttir	add/mul.ttir	NEQ	x * y instead of x + y
+add/reference.ttir	add/offset5.ttir	NEQ	block_start = pid*5 not pid*4 (wrong addresses)
