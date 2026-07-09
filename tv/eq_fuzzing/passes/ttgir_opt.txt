@@ -1,0 +1,7 @@
+# TTGIR optimizations to test against the unoptimized, straight-lowered root.
+# One triton-opt flag per line. '#' comments and blank lines are ignored.
+# These passes are expected to be numerics-preserving (a good EQUAL sanity run).
+--tritongpu-coalesce
+--tritongpu-remove-layout-conversions
+--tritongpu-optimize-thread-locality
+--tritongpu-reduce-data-duplication

@@ -1,0 +1,7 @@
+# TTIR-level optimizations to test.
+# --convert-triton-to-tritongpu is appended automatically at the end if you do
+# not list it, so the passes below run at the TTIR level (before conversion).
+--triton-combine
+--triton-reorder-broadcast
+--canonicalize
+--cse

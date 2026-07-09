@@ -1,0 +1,6 @@
+# Candidate pipeline that turns dot into a tensor-core matmul. On matmul this is
+# EXPECTED to differ bitwise from the straight-lowered fp32 FMA reference (tf32
+# / reassociation). Use it to confirm the fuzzer detects a real difference.
+--tritongpu-coalesce
+--tritongpu-accelerate-matmul
+--tritongpu-remove-layout-conversions

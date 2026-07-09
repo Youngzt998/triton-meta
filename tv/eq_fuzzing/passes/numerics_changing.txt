@@ -1,0 +1,9 @@
+# Group A: passes that change FP results BY DESIGN (a bitwise diff is EXPECTED).
+# See pass_classification.md. Use these to confirm the fuzzer detects real diffs.
+# (accelerate-matmul needs a coalesced layout first; F32DotTC only applies to
+#  fp32 dots. Comment/uncomment to isolate one effect.)
+--tritongpu-coalesce
+--tritongpu-accelerate-matmul
+# --tritongpu-F32DotTC
+# --tritongpu-optimize-thread-locality
+# --triton-combine     # ttir-level: fuses dot+add and sum(x*y)->dot

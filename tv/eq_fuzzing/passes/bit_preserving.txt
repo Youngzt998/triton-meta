@@ -1,0 +1,10 @@
+# Group B: passes that SHOULD preserve exact bits (a diff = likely a bug).
+# See pass_classification.md. NOTE: on kernels with tt.reduce / tt.dot, the
+# layout passes below can still reorder the reduction/dot -> inspect before
+# calling a diff a bug. On pointwise kernels a diff here is a real bug candidate.
+--tritongpu-coalesce
+--tritongpu-remove-layout-conversions
+--tritongpu-reduce-data-duplication
+--tritongpu-optimize-dot-operands
+--tritongpu-prefetch
+--tritongpu-reorder-instructions

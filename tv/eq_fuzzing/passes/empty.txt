@@ -1,0 +1,1 @@
+# empty pipeline: candidate == reference, must be EQUAL
