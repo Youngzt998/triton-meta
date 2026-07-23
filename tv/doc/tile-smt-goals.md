@@ -42,7 +42,20 @@ and "found & reproduced a real miscompile" is the bar for the first deliverable.
 - **tile-smt** (core): the model + builder + equivalence. Hardware-neutral.
 - **tile-gpu-smt**: GPU/SIMT extensions (layouts/`convert_layout`, shared memory,
   warp/lane, async TMA/mbarrier, warp specialization).
-- **tile-accel-smt** (future): non-GPU hardware (TPU/Mosaic, Trainium/NKI).
+- **tile-accel-smt** (future): non-GPU "systolic + scratchpad + DMA" hardware.
+  **One such layer covers both TPU (Pallas/Mosaic) and Trainium (NKI)** — same
+  execution class: they reuse `tile-smt` for the tensor math and share this layer
+  for on-chip tiers + DMA + systolic staging. Per-hardware details (VMEM/SBUF
+  naming, `pmax`, PSUM-fp32, layouts) are absorbed as parameters / uninterpreted
+  attributes the equivalence check ignores → **one parameterized layer, not two
+  libs**. Caveats: (1) still **one adapter per frontend** (NKI from its closed
+  Python API; Pallas-TPU from the open Mosaic MLIR dialect); (2) "one is enough"
+  holds while correctness = global-memory equality (verifying scratchpad
+  intermediate state or cross-hardware numerics would surface differences —
+  numerics belong to the FP-mode question). **Design implication:** the
+  `tile-smt` memory/access interface must leave hooks for **multiple tiers
+  (global/on-chip) + region access + DMA-style copy** now (even though M1 only
+  implements global + linear-pointer), or this layer gets blocked later.
 - **adapters** (one per language, living in that language's own tree): Triton
   adapter first; others later. An adapter is thin: IR walk → builder calls.
 
@@ -53,7 +66,9 @@ and "found & reproduced a real miscompile" is the bar for the first deliverable.
   (iota/splat/broadcast/reshape), `program_id`.
 - memory: abstract address space + masked windowed load/store (default = linear
   byte-heap + pointer), functional `z3::lambda` update.
-- FP semantics: Abstract now; Real/IntegerRange/FPA later — all language-neutral.
+- FP semantics: a **pluggable encoding mode** (design doc §"FP encoding modes");
+  language- and hardware-neutral. Modes (a) Abstract, (b) Real, (c) FPA, and
+  (d) int-approx/interval later. **First focus: a/b/c.**
 - equivalence: witness-address check over output memories → equivalent /
   not-equivalent (+counterexample) / unknown.
 - control-flow merge helpers (if→ite, for→unroll); the adapter supplies bodies.

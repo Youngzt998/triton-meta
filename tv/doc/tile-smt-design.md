@@ -102,9 +102,37 @@ Access interface is abstract enough that a future memref/affine-window backend c
 replace the pointer arithmetic without touching op semantics. `store` keeps the
 current single-`z3::lambda` update; equivalence keeps the symbolic-witness check.
 
-## AbstractFp (core)
-Moves as-is into `tile-smt`, with `mlir::FloatType` replaced by `DType`.
-Uninterpreted per-op functions + axioms; FP semantics are hardware-neutral.
+## FP encoding modes (pluggable; core)
+FP is a **pluggable encoding strategy** chosen per modeling run; the SAME builder
+op (e.g. `ctx.add` on floats) dispatches to the current mode, so **op semantics
+change with the mode**. This is today's `AbstractFp` + `FPMode`, generalized and
+moved into `tile-smt` (the pre-migration design still holds). Hardware-neutral —
+cross-hardware numeric differences only appear under FPA.
+
+- **(a) Abstract (uninterpreted id)** — *default, implemented.* each FP value is
+  an opaque `BitVec(width)` id; each op is an uninterpreted Z3 function
+  (`fp_add_<ty>`…) with only the axioms we need (commutativity, neg-involution,
+  distinct reserved consts). No numeric meaning → best for structural
+  equivalence (reassoc off).
+- **(b) Real** — each FP value is a Z3 `Real`; basic ops (+,−,×,÷) map to exact
+  real arithmetic (ignores rounding). Good for algebraic/reassociation proofs.
+- **(c) FPA (SMT floating point)** — Z3's IEEE-754 theory (`fpa_sort`) with an
+  explicit rounding mode; fully precise (NaN/inf/subnormal/±0/rounding) but slow
+  (bit-blasted). Ground truth to check the other modes' soundness.
+- **(d) Int approx / interval** — *(later)* FP as an integer significand, or an
+  integer **interval to bound error** ("equivalent up to ε"). No-precision-loss
+  or bounded-error regime.
+
+**First focus: a, b, c** (d after).
+
+Caveat — transcendental functions (`exp`, `log`, …) have no closed form in Z3
+Real or FPA, so **even in modes b/c they stay uninterpreted functions** (with
+optional axioms, e.g. monotonicity); only basic arithmetic (+,−,×,÷; plus
+sqrt/fma in FPA) uses the mode's exact encoding.
+
+Interface: a `FpModel` strategy (today's `AbstractFp` = mode a); `Context` holds
+the chosen `FpModel` and routes float ops through it. Adapters don't care which
+mode — they just call `ctx.add/mul/exp/...`.
 
 ## Control-flow merge (core; when scf.* lands)
 The generic parts of `scf.if`/`scf.for` are hardware-neutral and belong in core:

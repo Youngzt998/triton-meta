@@ -26,8 +26,10 @@ softmax) at realistic sizes.
   (`tv/semantics/Memory.{h,cpp}`, `tv/semantics/State.cpp`)
 - **FP = Abstract mode only**: each FP value is an opaque `BitVec` id; ops are
   uninterpreted Z3 functions + minimal axioms (add/mul/max commutativity,
-  neg-involution, distinct reserved consts). Real/IntegerRange/FPA are enum
-  stubs. (`tv/semantics/AbstractFp.{h,cpp}`)
+  neg-involution, distinct reserved consts). FP encoding is designed as a
+  **pluggable mode** — (a) Abstract [only one implemented], (b) Real, (c) FPA,
+  (d) int-approx/interval later; first focus a/b/c (see
+  `tv/doc/tile-smt-design.md` §"FP encoding modes"). (`tv/semantics/AbstractFp.{h,cpp}`)
 - **Engine = `State`** (`env` + per-arg `ptrMems`), pure
   `interpretOp`/`interpretBlock` walking a `tt.func`. Ops modeled: `arith`/`math`
   elementwise (incl. `divf`/`maxnumf`/`math.exp`), `tt.make_range`/`splat`/
