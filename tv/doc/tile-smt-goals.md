@@ -17,6 +17,12 @@ A language models its semantics by writing a thin **adapter** that walks its own
 IR and calls the tile-smt builder. tile-smt encodes that into Z3 and answers
 semantic questions — primarily **equivalence** (translation validation).
 
+**Near-term north star (first deliverable).** First ship a *complete*
+implementation on **Triton** and use the tool to **find and reproduce a real
+Triton compilation bug**. Design for extension from day one — no Triton-only
+assumptions baked into the core — but the first end-to-end language is Triton,
+and "found & reproduced a real miscompile" is the bar for the first deliverable.
+
 ## 2. Non-negotiables — what "MLIR-independent" means concretely
 
 1. tile-smt source includes **no MLIR / Triton / TVM headers** — only Z3 + the
@@ -75,6 +81,13 @@ semantic questions — primarily **equivalence** (translation validation).
   framework independence.
 - **M4:** cross-language equivalence; **tile-accel-smt** (TPU/Trainium); more FP
   modes.
+
+**Long-term:** split tile-smt into its **own repository** (developed under the
+Triton repo for now).
+
+**On fuzzing:** the fuzzer (today `permute_passes.py`; future kernel/pass
+generators) is a **dev-aid experimental tool, Triton-only for now** — it helps us
+exercise the validator and hunt Triton bugs; it is not a separate product.
 
 ## 7. Success criteria (checkable)
 

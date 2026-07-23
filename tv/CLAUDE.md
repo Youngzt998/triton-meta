@@ -47,6 +47,11 @@ Today `tv/semantics/` is coupled to Triton. The goal is to factor the SMT
 modeling into a **pure, MLIR-independent SMT semantic model** that builds with
 **only Z3** (no MLIR/Triton/TVM headers), driven by any language through a
 builder API. Full goals + success criteria: `tv/doc/tile-smt-goals.md`.
+
+**Near-term north star:** first ship a complete impl on **Triton** and use it to
+**find & reproduce a real Triton compilation bug**; design for extension, but
+Triton is the first language.
+
 The libraries and Triton-as-client:
 - **`tile-smt`** — hardware-neutral core: logical tensor values; `map` /
   `reduce(axis)` / `contract(K)`; **affine windowed access + optional predicate**;
