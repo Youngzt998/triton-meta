@@ -44,7 +44,10 @@ softmax) at realistic sizes.
 ## 2. Macro goal — decouple tensor semantics (the direction we're moving to)
 
 Today `tv/semantics/` is coupled to Triton. The goal is to factor the SMT
-modeling into **reusable, IR-agnostic** libraries and make Triton a *client*:
+modeling into a **pure, MLIR-independent SMT semantic model** that builds with
+**only Z3** (no MLIR/Triton/TVM headers), driven by any language through a
+builder API. Full goals + success criteria: `tv/doc/tile-smt-goals.md`.
+The libraries and Triton-as-client:
 - **`tile-smt`** — hardware-neutral core: logical tensor values; `map` /
   `reduce(axis)` / `contract(K)`; **affine windowed access + optional predicate**;
   memory as an address space; correctness = final-memory equality. **No
