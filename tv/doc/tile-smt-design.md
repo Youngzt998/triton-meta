@@ -1,4 +1,4 @@
-# tensor-smt — design draft
+# tile-smt — design draft
 
 Draft for decoupling the SMT tensor semantics out of Triton into a reusable,
 IR-agnostic library. Context/goal: `tv/CLAUDE.md` §2 and
@@ -6,8 +6,8 @@ IR-agnostic library. Context/goal: `tv/CLAUDE.md` §2 and
 
 ## Locked decisions (2026-07-23)
 1. **Builder API** (not a neutral IR). Each language ships an *adapter* that
-   walks its own IR and calls `tensor_smt::Context` builder methods; the library
-   builds Z3 directly. No intermediate tensor-smt IR data structure.
+   walks its own IR and calls `tile_smt::Context` builder methods; the library
+   builds Z3 directly. No intermediate tile-smt IR data structure.
 2. **Incremental access model.** The core exposes an abstract *masked windowed
    access* interface whose default implementation is the current **linear
    byte-heap + pointer** model (Triton uses it directly). Designed so the access
@@ -29,13 +29,13 @@ IR-agnostic library. Context/goal: `tv/CLAUDE.md` §2 and
 ## Library boundary
 | Layer | Contents |
 |---|---|
-| **`tensor-smt`** (hw-neutral core) | value model (`Scalar`/`Tensor`/`Ptr`), own `DType`+`Shape`, `AbstractFp` (+future Real/FPA), elementwise arith/math, structural ops (iota/splat/broadcast/reshape/expand_dims), reduce/scan (combine), dot/contract, `program_id`, abstract memory + masked windowed load/store (default = linear byte-heap+pointer), `checkEquivalence` (witness), control-flow state merge (if→ite, for→unroll) |
-| **`tensor-gpu-smt`** (GPU layer; mostly future) | layouts / `convert_layout`, shared memory, warp/lane, async (TMA/mbarrier), warp specialization |
+| **`tile-smt`** (hw-neutral core) | value model (`Scalar`/`Tensor`/`Ptr`), own `DType`+`Shape`, `AbstractFp` (+future Real/FPA), elementwise arith/math, structural ops (iota/splat/broadcast/reshape/expand_dims), reduce/scan (combine), dot/contract, `program_id`, abstract memory + masked windowed load/store (default = linear byte-heap+pointer), `checkEquivalence` (witness), control-flow state merge (if→ite, for→unroll) |
+| **`tile-gpu-smt`** (GPU layer; mostly future) | layouts / `convert_layout`, shared memory, warp/lane, async (TMA/mbarrier), warp specialization |
 | **triton adapter** (`tv/`, imports both) | walk `tt.func`; `Env` (`mlir::Value`→`Value`); `mlir::Value`→`MemId` map; per-op: read operands/attrs → call builder → bind result |
 
 ## Type & value model (no MLIR types)
 ```cpp
-namespace tensor_smt {
+namespace tile_smt {
 enum class DType { I1, I8, I16, I32, I64, F16, BF16, F32, F64, Ptr };
 
 // Opaque handle for "which memory/address space" a pointer belongs to.
@@ -103,7 +103,7 @@ replace the pointer arithmetic without touching op semantics. `store` keeps the
 current single-`z3::lambda` update; equivalence keeps the symbolic-witness check.
 
 ## AbstractFp (core)
-Moves as-is into `tensor-smt`, with `mlir::FloatType` replaced by `DType`.
+Moves as-is into `tile-smt`, with `mlir::FloatType` replaced by `DType`.
 Uninterpreted per-op functions + axioms; FP semantics are hardware-neutral.
 
 ## Control-flow merge (core; when scf.* lands)
@@ -122,7 +122,7 @@ The adapter supplies the bodies (by walking regions); the core supplies the merg
 - `State` becomes an adapter driver holding `Env` + `MemState` + a `Context&`.
 
 ## Migration steps (each keeps eval + unit tests green)
-1. Create `tv/tensor-smt/` (namespace `tensor_smt`) + `DType`. Move `AbstractFp`
+1. Create `tv/tile-smt/` (namespace `tile_smt`) + `DType`. Move `AbstractFp`
    in, swap `mlir::FloatType`→`DType`. Add a tiny adapter shim so existing code
    compiles.
 2. Move `Memory` + value wrappers into the lib; `mlir::Type`→`DType`; introduce
@@ -130,13 +130,13 @@ The adapter supplies the bodies (by walking regions); the core supplies the merg
 3. Extract elementwise/structural/reduce/dot semantics from `semantics/mlir/*`
    into `Context`; handlers become thin adapters (read operands → call builder).
 4. `Env`/walking stay in adapter; `State` holds `Context`+`MemState`.
-5. Stand up `tv/tensor-gpu-smt/` skeleton (near-empty today).
+5. Stand up `tv/tile-gpu-smt/` skeleton (near-empty today).
 
 ## Deferred / open
 - Long-term: make the access interface pluggable (memref/affine window) so
-  TPU/Mosaic and Trainium/NKI can reuse `tensor-smt` (survey §"Answer").
-- `tensor-gpu-smt` real contents arrive with TTGIR support (layouts, shared mem,
+  TPU/Mosaic and Trainium/NKI can reuse `tile-smt` (survey §"Answer").
+- `tile-gpu-smt` real contents arrive with TTGIR support (layouts, shared mem,
   warp, async, warp-spec).
 - Real/IntegerRange/FPA FP modes.
 - Exact `Combine`/`dot` dim representation; multi-dim reduce.
-- Directory names `tensor-smt` / `tensor-gpu-smt` are provisional.
+- Directory names `tile-smt` / `tile-gpu-smt` are provisional.

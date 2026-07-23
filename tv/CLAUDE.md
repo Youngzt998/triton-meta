@@ -45,14 +45,14 @@ softmax) at realistic sizes.
 
 Today `tv/semantics/` is coupled to Triton. The goal is to factor the SMT
 modeling into **reusable, IR-agnostic** libraries and make Triton a *client*:
-- **`tensor-smt`** — hardware-neutral core: logical tensor values; `map` /
+- **`tile-smt`** — hardware-neutral core: logical tensor values; `map` /
   `reduce(axis)` / `contract(K)`; **affine windowed access + optional predicate**;
   memory as an address space; correctness = final-memory equality. **No
   pointers/warps/layouts baked in.**
-- **`tensor-gpu-smt`** — GPU/SIMT layer: pointer+mask lowering, register layouts
+- **`tile-gpu-smt`** — GPU/SIMT layer: pointer+mask lowering, register layouts
   / `convert_layout`, shared memory, warp/lane, async (TMA/mbarrier), warp
   specialization.
-- **(future) `tensor-accel-smt`** — non-GPU hardware (TPU/Mosaic, Trainium/NKI):
+- **(future) `tile-accel-smt`** — non-GPU hardware (TPU/Mosaic, Trainium/NKI):
   DMA+semaphores, scratchpad placement, systolic staging.
 
 A thin per-language **adapter** walks that language's IR and calls the lib's
@@ -62,7 +62,7 @@ Pallas/Mosaic, IREE Linalg, Hidet, Helion, NKI) is in
 `tv/doc/tensor-languages-survey.md`.
 
 **Status:** survey done; **interface draft written** —
-`tv/doc/tensor-smt-design.md`. Locked decisions: **Builder API** (adapter calls
+`tv/doc/tile-smt-design.md`. Locked decisions: **Builder API** (adapter calls
 the lib; no neutral IR); **incremental access model** (core keeps the linear
 byte-heap + pointer `Memory`, abstract enough to later swap for memref/TPU);
 **`program_id` lives in the core**; core holds no `mlir::Value` — pointer
@@ -137,6 +137,6 @@ found.
 - No control flow (`scf.if/for/while`), no `tt.call` (rely on `-inline`), no
   `tt.dot`, no multi-dim reduce; only Abstract FP mode.
 - Non-equivalence (SAT) is slow at large sizes.
-- The `tensor-smt` / `tensor-gpu-smt` refactor is **not started** — design
+- The `tile-smt` / `tile-gpu-smt` refactor is **not started** — design
   discussion pending. Keep new modeling code factorable along the generic-vs-GPU
   line so the split stays cheap.

@@ -1,10 +1,10 @@
-# Tensor languages — IR/compiler survey (for the tensor-smt refactor)
+# Tensor languages — IR/compiler survey (for the tile-smt refactor)
 
 **Purpose.** We want to decouple the SMT tensor semantics from Triton into
-reusable `tensor-smt` / `tensor-gpu-smt` libraries (see the refactor goal). This
+reusable `tile-smt` / `tile-gpu-smt` libraries (see the refactor goal). This
 survey compares how tile/tensor kernel languages structure their IR, to decide
 *where the library boundary sits* — which semantics are "tensor-generic"
-(→ `tensor-smt`), "GPU/SIMT-specific" (→ `tensor-gpu-smt`), or hardware-specific
+(→ `tile-smt`), "GPU/SIMT-specific" (→ `tile-gpu-smt`), or hardware-specific
 (TPU/Trainium — future).
 
 > **Provenance.** Surveyed on 2026-07-23 by reading the **actual cloned source**
@@ -36,13 +36,13 @@ survey compares how tile/tensor kernel languages structure their IR, to decide
 
 | Language | Access / memory model | Exec model class | Adds vs Triton | Lacks / differs vs Triton | Split fit |
 |---|---|---|---|---|---|
-| **Triton** | pointer tiles `!tt.ptr` + per-element **mask** | SIMT-tile (warp/lane) | — | — | TTIR≈`tensor-smt`, TTGIR≈`tensor-gpu-smt` |
+| **Triton** | pointer tiles `!tt.ptr` + per-element **mask** | SIMT-tile (warp/lane) | — | — | TTIR≈`tile-smt`, TTGIR≈`tile-gpu-smt` |
 | **TileLang** | `Buffer`+`BufferRegion` (+ `Range`); scopes via string (`shared.dyn`,`local.fragment`) | imperative buffer + explicit loop nest | explicit loops, scopes, TMA/wgmma/mbarrier/cluster in one IR; `Fragment` layouts | **no pointers, no data-mask** (mask→loop predicate); no make_range/splat/broadcast ops; reduce is dim-enum not combine-region; single-level IR | generic: buffer+range+reduce+gemm; gpu: scopes/fragments/mbarrier/TMA |
 | **Pallas-Triton** | `Ref`+`BlockSpec index_map`; `pl.load/store`(mask optional) → pointer+mask | SIMT-tile GPU | `BlockSpec` windowing frontend | (frontend only; IR = Triton) | **≈ free (= Triton)** |
 | **Pallas-Mosaic (TPU)** | **memref** + affine index; `sublane_mask`; **DMA + semaphores** | **systolic MXU + VMEM/DMA** | DMA/semaphore async, tiled sublane×lane layouts, `tpu.matmul` FIFO staging, multi-core | **no pointers, no per-element mask, no warp/lane, no convert_layout** | generic: elementwise/reduce/`dot`(=dot_general)/blocked-access; **hw-specific: DMA/sem/VMEM/PSUM/layout** |
 | **Hidet** | `TensorType`/`PointerType`+layout; scopes Global/Shared/Register; scalar `TensorElement`+`IfStmt` | imperative loop + intrinsics | declarative task/compute level above body; graph IR | no data-mask op (predication manual); GPU = Python-emitted intrinsics not typed ops | generic: compute/reduce lambdas map to core; gpu: cuda intrinsics/scopes/cute |
 | **Helion** | `hl.tile`/`hl.load/store/dot/reduce` → generated `tl.*`+mask | SIMT-tile GPU (via Triton) | auto masking/indexing/autotune at language level | none underneath (IR = Triton) | **≈ free (= Triton)** for its Triton backend |
-| **IREE / Linalg** | `tensor`(value)/`memref`(+memory-space)/`vector`; `vector.transfer_read/write`+i1 mask+padding; `linalg.generic`(indexing_maps+iterator_types+body) | affine iteration (neutral) | language-neutral op algebra (best reference) | not a kernel DSL; no pointers/program_id/GPU layouts | **the neutral-core reference for `tensor-smt`** |
+| **IREE / Linalg** | `tensor`(value)/`memref`(+memory-space)/`vector`; `vector.transfer_read/write`+i1 mask+padding; `linalg.generic`(indexing_maps+iterator_types+body) | affine iteration (neutral) | language-neutral op algebra (best reference) | not a kernel DSL; no pointers/program_id/GPU layouts | **the neutral-core reference for `tile-smt`** |
 | **Mojo / MAX** | CuTe `LayoutTensor`(+address_space,masked); explicit SIMT `thread/warp/cluster` | explicit SIMT + CuTe layout | layout algebra + full language at user level | **no open low-level IR** to validate against | reference only (compiler closed) |
 | **cuTile** ⚠️ | ⚠️ | ⚠️ (tile, Triton-like) | ⚠️ | ⚠️ | ⚠️ verify |
 
@@ -92,7 +92,7 @@ survey compares how tile/tensor kernel languages structure their IR, to decide
 
 1. **MLIR is common but not universal.** MLIR: Triton, Pallas(Mosaic TPU+GPU),
    IREE, Mojo. Not MLIR: TileLang (TVM `tirx`), Hidet (own Python IR). → the
-   `tensor-smt` interface must be **IR-agnostic** (our own neutral value/op
+   `tile-smt` interface must be **IR-agnostic** (our own neutral value/op
    model), not tied to `mlir::Operation`. Each language ships a thin *adapter*
    that walks its IR and calls our builder API (Goal 2, first for Triton).
 
@@ -128,9 +128,9 @@ survey compares how tile/tensor kernel languages structure their IR, to decide
 
 ---
 
-## Answer — can ONE `tensor-smt` cover both TPU/systolic IR and GPU IR?
+## Answer — can ONE `tile-smt` cover both TPU/systolic IR and GPU IR?
 
-**Yes, if `tensor-smt` is kept hardware-neutral.** The evidence is strong: on
+**Yes, if `tile-smt` is kept hardware-neutral.** The evidence is strong: on
 both TPU (Mosaic) and Trainium (NKI) the *tensor math* is identical to GPU —
 elementwise maps, axis reductions, matmul as a K-contraction, blocked access to a
 logical tensor, and the correctness spec is the same (the values written back to
@@ -138,7 +138,7 @@ logical tensor, and the correctness spec is the same (the values written back to
 Triton on GPU and to the `tpu` dialect on TPU from one frontend.
 
 What breaks a naive design is baking **GPU-only assumptions** into the core.
-To fit TPU/systolic too, `tensor-smt` MUST NOT hardcode:
+To fit TPU/systolic too, `tile-smt` MUST NOT hardcode:
 - a **flat linear-address pointer + arbitrary per-element mask** as the load/store
   primitive (TPU/Trainium have no pointers; masking is sublane/affine-coordinate
   granular);
@@ -155,12 +155,12 @@ and layout/placement/engine choices become **uninterpreted attributes the
 equivalence check ignores**. Correctness is pinned to global-memory equality.
 
 Practical shape → a **three-tier** design (do the first two now for Triton):
-- **`tensor-smt`** (hardware-neutral): logical tensor values, `map`/`reduce`/
+- **`tile-smt`** (hardware-neutral): logical tensor values, `map`/`reduce`/
   `contract`, affine windowed access + predicate, memory as an address space,
   final-memory equivalence. No pointers/warps/layouts baked in.
-- **`tensor-gpu-smt`** (GPU/SIMT): pointer+mask lowering, register layouts /
+- **`tile-gpu-smt`** (GPU/SIMT): pointer+mask lowering, register layouts /
   `convert_layout`, shared memory, warp/lane, async (TMA/mbarrier), warp-spec.
-- **(future) `tensor-accel-smt`** (per non-GPU hardware): TPU/Mosaic & Trainium/
+- **(future) `tile-accel-smt`** (per non-GPU hardware): TPU/Mosaic & Trainium/
   NKI DMA+semaphores, scratchpad placement (VMEM/SBUF/PSUM), systolic MXU
   staging, partition-dim layout.
 
