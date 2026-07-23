@@ -61,9 +61,13 @@ TTGIR ≈ GPU** split is the intended library cut; cross-language evidence (Tile
 Pallas/Mosaic, IREE Linalg, Hidet, Helion, NKI) is in
 `tv/doc/tensor-languages-survey.md`.
 
-**Status:** survey done; **interface draft NOT written yet** (we'll discuss it
-before coding — this file will be updated then). Until then, `tv/semantics/`
-stays the Triton-coupled implementation.
+**Status:** survey done; **interface draft written** —
+`tv/doc/tensor-smt-design.md`. Locked decisions: **Builder API** (adapter calls
+the lib; no neutral IR); **incremental access model** (core keeps the linear
+byte-heap + pointer `Memory`, abstract enough to later swap for memref/TPU);
+**`program_id` lives in the core**; core holds no `mlir::Value` — pointer
+provenance is an opaque `MemId` the adapter maps. Implementation NOT started;
+`tv/semantics/` stays the current Triton-coupled impl until migration Step 1.
 
 ## 3. Development rules
 
