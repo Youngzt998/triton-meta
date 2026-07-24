@@ -104,6 +104,20 @@ Triton repo for now).
 generators) is a **dev-aid experimental tool, Triton-only for now** — it helps us
 exercise the validator and hunt Triton bugs; it is not a separate product.
 
+**Long-term (awareness) — whole-kernel-launch semantics & functional
+correctness.** Current modeling is a **single program instance** (one grid
+instance / its shared memory); `program_id` is a free symbolic variable ("for
+all program ids"), but we do NOT yet model how the whole **grid** of instances
+composes into the overall output. Long-term we want to model **kernel-launch
+semantics** (the aggregate behavior of the entire launch), and ultimately to
+check a launch against a **computational spec** — does the GEMM kernel actually
+compute GEMM, does flash attention actually compute FA (kernel-**vs-spec**, not
+just kernel-vs-kernel). **Not a near-term goal** — just stay aware so we don't
+design anything that blocks it. (Encouraging: today's choices — `program_id` as a
+free dimension + correctness pinned on global memory — already leave room to
+later quantify/compose over all program ids and to compare a launch to a
+reference spec.)
+
 ## 7. Success criteria (checkable)
 
 - tile-smt has **zero MLIR includes/symbols** and links only Z3.

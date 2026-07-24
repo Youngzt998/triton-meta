@@ -150,3 +150,7 @@ found.
 - The `tile-smt` / `tile-gpu-smt` refactor is **not started** — design
   discussion pending. Keep new modeling code factorable along the generic-vs-GPU
   line so the split stays cheap.
+- (Long-term awareness) modeling is **single program-instance** today;
+  whole-**kernel-launch** semantics + functional correctness (kernel-vs-spec:
+  does GEMM really compute GEMM, FA really FA) is a long-term goal, not
+  near-term. Don't design anything that blocks it.
