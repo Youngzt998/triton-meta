@@ -153,4 +153,6 @@ found.
 - (Long-term awareness) modeling is **single program-instance** today;
   whole-**kernel-launch** semantics + functional correctness (kernel-vs-spec:
   does GEMM really compute GEMM, FA really FA) is a long-term goal, not
-  near-term. Don't design anything that blocks it.
+  near-term. Don't design anything that blocks it. (Equivalence assumes
+  **race-free**; may tie in the Triton Sanitizer project for cross-instance
+  data-race detection — ⚠️ unverified.)

@@ -118,6 +118,13 @@ free dimension + correctness pinned on global memory — already leave room to
 later quantify/compose over all program ids and to compare a launch to a
 reference spec.)
 
+*Minor note (integration idea):* our equivalence check **assumes no data races**
+— it only holds when the kernel is race-free. A possible tie-in is the **Triton
+Sanitizer** project, which detects **memory data races** (possibly across program
+instances — ⚠️ unverified). Integrating it could establish/enforce that
+race-free precondition, which matters especially once we model whole-grid
+launches, where cross-instance races become relevant.
+
 ## 7. Success criteria (checkable)
 
 - tile-smt has **zero MLIR includes/symbols** and links only Z3.
