@@ -54,7 +54,7 @@ and "found & reproduced a real miscompile" is the bar for the first deliverable.
   intermediate state or cross-hardware numerics would surface differences —
   numerics belong to the FP-mode question). **Design implication:** the
   `tile-smt` memory/access interface must leave hooks for **multiple tiers
-  (global/on-chip) + region access + DMA-style copy** now (even though M1 only
+  (global/on-chip) + region access + DMA-style copy** now (even though M0 only
   implements global + linear-pointer), or this layer gets blocked later.
 - **adapters** (one per language, living in that language's own tree): Triton
   adapter first; others later. An adapter is thin: IR walk → builder calls.
@@ -83,19 +83,20 @@ and "found & reproduced a real miscompile" is the bar for the first deliverable.
 3. **Soundness self-checks**: it must catch genuine differences (the `inequal`
    gate), not just confirm equivalences.
 
-## 6. Milestones (scope now vs later)
+## 6. Milestones — numbered plan in `tv/doc/roadmap.md` (M/T/V)
 
-- **M0 (today):** Triton-coupled implementation in `tv/semantics/` (works: add,
-  softmax; eval suite green).
-- **M1:** extract **tile-smt** (core) — MLIR-free, standalone build + tests;
-  Triton becomes an adapter that calls the builder; eval stays green. (migration
-  steps: `tile-smt-design.md`)
-- **M2:** **tile-gpu-smt** when TTGIR support lands.
-- **M3:** a second adapter to *prove* independence — Helion / Pallas-GPU are
-  ~free (they emit Triton IR); a **non-MLIR** frontend (TileLang/TVM) proves
-  framework independence.
-- **M4:** cross-language equivalence; **tile-accel-smt** (TPU/Trainium); more FP
-  modes.
+Execution uses stable **M/T/V** IDs (M = major work, T = testing, V = validation
+experiments); the full plan is `tv/doc/roadmap.md`. Summary:
+- **M0** — migrate today's Triton-coupled impl onto tile-smt: extract `tile-smt`
+  (SMT side; MLIR-free; Z3-only build+tests) + a thin **Triton adapter** (Triton
+  side). Done = eval green through the adapter; tile-smt has zero MLIR.
+- **M1** — extend tile-smt to model ~all of TTIR: **M1-MVP** (simple kernels) →
+  **M1-complete** (complex, e.g. flash attention: scf.for/if, tt.dot, multi-dim
+  reduce).
+- **M2** — model **tile-gpu-smt** (TTGIR: layouts/shared/warp/async/warp-spec),
+  MVP → complete.
+- **M3** — beyond Triton; next target **TileLang** (non-MLIR frontend). (Later:
+  Pallas/Helion ≈ free; accelerator hw; cross-language equivalence.)
 
 **Long-term:** split tile-smt into its **own repository** (developed under the
 Triton repo for now).

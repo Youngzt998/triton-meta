@@ -77,7 +77,8 @@ the lib; no neutral IR); **incremental access model** (core keeps the linear
 byte-heap + pointer `Memory`, abstract enough to later swap for memref/TPU);
 **`program_id` lives in the core**; core holds no `mlir::Value` — pointer
 provenance is an opaque `MemId` the adapter maps. Implementation NOT started;
-`tv/semantics/` stays the current Triton-coupled impl until migration Step 1.
+`tv/semantics/` stays the current Triton-coupled impl until **M0**. The numbered
+plan (M/T/V) is in `tv/doc/roadmap.md`.
 
 ## 3. Development rules
 
@@ -138,7 +139,9 @@ found.
 - `tv/eval/` — evaluation suite: `pairs/`, `inequal/`, `compile-options/`,
   `solver-cost/`, `run_eval.py`, `permute_passes.py`.
 - `tv/test/validator/` — C++ unit tests (`SimpleTest.h` harness).
-- `tv/doc/` — `plan.md`, `ttir.md`, `ttgir.md`, **`tensor-languages-survey.md`**.
+- `tv/doc/` — **`roadmap.md`** (M/T/V plan), **`tile-smt-goals.md`**,
+  **`tile-smt-design.md`**, `tensor-languages-survey.md`, `plan.md`, `ttir.md`,
+  `ttgir.md`.
 - `tv/paper/noticable.md` — scaling-issue log (e.g. the store-blowup fix).
 - `tv/CLAUDE.legacy.md` — old Triton-only guidance (SUPERSEDED; historical).
 
@@ -147,9 +150,9 @@ found.
 - No control flow (`scf.if/for/while`), no `tt.call` (rely on `-inline`), no
   `tt.dot`, no multi-dim reduce; only Abstract FP mode.
 - Non-equivalence (SAT) is slow at large sizes.
-- The `tile-smt` / `tile-gpu-smt` refactor is **not started** — design
-  discussion pending. Keep new modeling code factorable along the generic-vs-GPU
-  line so the split stays cheap.
+- **M0** (migrate to tile-smt) **not started**; numbered plan in
+  `tv/doc/roadmap.md`. Keep new modeling code factorable along the
+  generic-vs-GPU line so the split stays cheap.
 - (Long-term awareness) modeling is **single program-instance** today;
   whole-**kernel-launch** semantics + functional correctness (kernel-vs-spec:
   does GEMM really compute GEMM, FA really FA) is a long-term goal, not
