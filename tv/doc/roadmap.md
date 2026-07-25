@@ -47,19 +47,52 @@ framework independence). Its own adapter drives the same tile-smt / tile-gpu-smt
 
 ---
 
-## Testing work (T)
-`T<n>` = testing work: tile-smt unit tests (Z3-only), adapter tests, the eval
-gates (pairs / inequal / compile-options), regression. Concrete `T<n>` items are
-defined as the matching `M<n>` lands; each M must keep its tests green.
-(Guiding rule: every migration step in M0 keeps `run_eval.py all` + unit tests
-green.)
+## Testing work (T) — dynamic differential testing (independent bug hunt)
 
-## Validation experiments (V)
-`V<n>` = validation experiments: running the tool at scale to learn/prove
-something — hunting real Triton miscompiles (the near-term north star), FP-mode
-comparisons (a/b/c), solver-cost studies, later cross-language equivalence.
-Concrete `V<n>` items TBD. (e.g. a `V<n>` = permutation campaign on complex
-kernels to find/reproduce a real Triton bug.)
+An **independent, dynamic** line that does **not** use tile-smt. It is the M
+line's implicit control / ground truth, and its main aim is to **brute-force find
+real compiler bugs** (may also hit crash bugs).
+
+**Method:** for every kernel in the benchmark kernels, toggle compilation passes
+so the **only variable is whether a given pass is on**; compile the kernel with
+vs without that pass, run **both on large amounts of randomly generated inputs**,
+and check the outputs are **bit-identical**. (Dynamic → needs real kernel
+execution / GPU.)
+- **Exclude precision-trading passes**: some passes intentionally trade accuracy
+  for performance — they would mismatch legitimately, so drop them.
+- **Refinement (later):** beyond pure-random inputs, craft inputs that **trigger
+  a given optimization's effect** (more likely to expose bugs). Start with random.
+
+**Sub-lines (independent of each other):**
+- **T1** = TTIR passes. **T2** = TTGIR passes.
+- While M is still Triton-only, T1/T2 scope is **Triton-only**.
+- Fully independent of the M/V lines — can run today.
+
+**T helps M and V:** when T finds a real bug, **reconstruct the two IRs** (pass
+on vs off) and feed them to **M's validator (tile-smt)** — does it also catch the
+bug? That directly tests how strong/complete our semantic modeling is, and gives
+V/M **ground-truth bug cases**.
+
+(Note: M's own unit tests + eval gates keeping green is part of each M's
+definition-of-done, not a T item — T is this dynamic differential line.)
+
+## Validation experiments (V) — static equivalence via tile-smt
+
+Exercises **tile-smt's own power** and is the real use of the tool to hunt
+compiler bugs — but **static**: the SMT solver proves IR equivalence, with **no
+tensor launch** (the key contrast with T's dynamic runs).
+
+**Method:** like T, compare an IR with a pass on vs off — but **statically with
+our SMT solver** (today's `permute_passes.py` is the seed of this line).
+
+**Sub-lines (mirror T):**
+- **V1** = TTIR-level static validation; starts once **M1** (TTIR modeling) is
+  done. **V2** = TTGIR-level; needs **M2**. (V1↔T1↔TTIR, V2↔T2↔TTGIR.)
+  > ⚠️ Confirm: you said "M1 = ttgir" — recorded here as the **TTIR level / M1**
+  > to match T1 and the M numbering; correct me if you meant the TTGIR level.
+- Precision sensitivity is set by the **FP mode**, not by excluding passes:
+  Abstract (a) ignores rounding, so precision-trading passes still look
+  equivalent; FPA (c) would see the difference. Pick the mode per experiment.
 
 ---
 
