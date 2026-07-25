@@ -27,6 +27,7 @@ sides:**
   **Triton adapter** that walks TTIR and calls the tile-smt builder.
 - *Done when:* the eval suite (`run_eval.py all`) is green through the adapter,
   and `tile-smt` has zero MLIR includes/symbols.
+- *Detailed split plan:* `tv/doc/m0-plan.md`.
 
 ### M1 — extend tile-smt to model (almost) all of Triton TTIR
 Grow the tile-smt semantic model, driven by TTIR's needs, until it cleanly models
