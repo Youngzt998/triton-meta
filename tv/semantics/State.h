@@ -1,7 +1,7 @@
 #ifndef TRITON_TV_SEMANTICS_STATE_H
 #define TRITON_TV_SEMANTICS_STATE_H
 
-#include "semantics/AbstractFp.h"
+#include "semantics/mlir/AbstractFpShim.h"
 #include "semantics/Env.h"
 #include "semantics/Memory.h"
 

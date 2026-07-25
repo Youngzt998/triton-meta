@@ -1,12 +1,13 @@
-#include "semantics/AbstractFp.h"
+// Z3-only unit tests for the tile-smt core Abstract FP model. NO MLIR: the FP
+// type is the neutral tile_smt::DType, proving AbstractFp builds/runs without
+// any MLIR present.
 
-#include "mlir/IR/BuiltinTypes.h"
-#include "mlir/IR/MLIRContext.h"
+#include "semantics/AbstractFp.h"
 
 #include "SimpleTest.h"
 #include <z3++.h>
 
-using namespace Semantics;
+using namespace tile_smt;
 
 //===----------------------------------------------------------------------===//
 // Sort / bitwidth
@@ -14,12 +15,9 @@ using namespace Semantics;
 
 TEST(AbstractFp, SortIsBitVecOfTypeWidth) {
   z3::context ctx;
-  mlir::MLIRContext mlirCtx;
-  auto f32 = mlir::Float32Type::get(&mlirCtx);
-  auto f64 = mlir::Float64Type::get(&mlirCtx);
 
-  AbstractFp e32(ctx, f32);
-  AbstractFp e64(ctx, f64);
+  AbstractFp e32(ctx, DType::F32);
+  AbstractFp e64(ctx, DType::F64);
 
   EXPECT_EQ(e32.sort().sort_kind(), Z3_BV_SORT);
   EXPECT_EQ(e32.sort().bv_size(), 32u);
@@ -32,9 +30,7 @@ TEST(AbstractFp, SortIsBitVecOfTypeWidth) {
 
 TEST(AbstractFp, ReservedConstantsAreDistinct) {
   z3::context ctx;
-  mlir::MLIRContext mlirCtx;
-  auto f32 = mlir::Float32Type::get(&mlirCtx);
-  AbstractFp e(ctx, f32);
+  AbstractFp e(ctx, DType::F32);
 
   // Materialize all five reserved consts.
   z3::expr pz = e.posZero();
@@ -68,9 +64,7 @@ TEST(AbstractFp, ReservedConstantsAreDistinct) {
 
 TEST(AbstractFp, IsZeroPredicateHoldsForReservedZeros) {
   z3::context ctx;
-  mlir::MLIRContext mlirCtx;
-  auto f32 = mlir::Float32Type::get(&mlirCtx);
-  AbstractFp e(ctx, f32);
+  AbstractFp e(ctx, DType::F32);
 
   z3::solver solver(ctx);
   e.addAxioms(solver);
@@ -99,9 +93,7 @@ TEST(AbstractFp, IsZeroPredicateHoldsForReservedZeros) {
 
 TEST(AbstractFp, AddIsFunctional) {
   z3::context ctx;
-  mlir::MLIRContext mlirCtx;
-  auto f32 = mlir::Float32Type::get(&mlirCtx);
-  AbstractFp e(ctx, f32);
+  AbstractFp e(ctx, DType::F32);
 
   z3::expr a = ctx.bv_const("a", 32);
   z3::expr b = ctx.bv_const("b", 32);
@@ -114,9 +106,7 @@ TEST(AbstractFp, AddIsFunctional) {
 
 TEST(AbstractFp, DistinctArgsCanProduceDistinctResults) {
   z3::context ctx;
-  mlir::MLIRContext mlirCtx;
-  auto f32 = mlir::Float32Type::get(&mlirCtx);
-  AbstractFp e(ctx, f32);
+  AbstractFp e(ctx, DType::F32);
 
   z3::expr a = ctx.bv_const("a", 32);
   z3::expr b = ctx.bv_const("b", 32);
@@ -136,9 +126,7 @@ TEST(AbstractFp, DistinctArgsCanProduceDistinctResults) {
 
 TEST(AbstractFp, AddCommutativityAxiom) {
   z3::context ctx;
-  mlir::MLIRContext mlirCtx;
-  auto f32 = mlir::Float32Type::get(&mlirCtx);
-  AbstractFp e(ctx, f32);
+  AbstractFp e(ctx, DType::F32);
 
   z3::expr a = ctx.bv_const("a", 32);
   z3::expr b = ctx.bv_const("b", 32);
@@ -154,9 +142,7 @@ TEST(AbstractFp, AddCommutativityAxiom) {
 
 TEST(AbstractFp, MulCommutativityAxiom) {
   z3::context ctx;
-  mlir::MLIRContext mlirCtx;
-  auto f32 = mlir::Float32Type::get(&mlirCtx);
-  AbstractFp e(ctx, f32);
+  AbstractFp e(ctx, DType::F32);
 
   z3::expr a = ctx.bv_const("a", 32);
   z3::expr b = ctx.bv_const("b", 32);
@@ -171,9 +157,7 @@ TEST(AbstractFp, MulCommutativityAxiom) {
 
 TEST(AbstractFp, NegIsInvolutive) {
   z3::context ctx;
-  mlir::MLIRContext mlirCtx;
-  auto f32 = mlir::Float32Type::get(&mlirCtx);
-  AbstractFp e(ctx, f32);
+  AbstractFp e(ctx, DType::F32);
 
   z3::expr x = ctx.bv_const("x", 32);
 
@@ -189,9 +173,7 @@ TEST(AbstractFp, AddIsNotTriviallyAssociative) {
   // Sanity check that the encoding does NOT silently impose associativity
   // (mlir-tv treats associativity as opt-in; we follow the same default).
   z3::context ctx;
-  mlir::MLIRContext mlirCtx;
-  auto f32 = mlir::Float32Type::get(&mlirCtx);
-  AbstractFp e(ctx, f32);
+  AbstractFp e(ctx, DType::F32);
 
   z3::expr a = ctx.bv_const("a", 32);
   z3::expr b = ctx.bv_const("b", 32);
@@ -211,12 +193,9 @@ TEST(AbstractFp, AddIsNotTriviallyAssociative) {
 
 TEST(AbstractFp, F32AndF64UseSeparateFunctions) {
   z3::context ctx;
-  mlir::MLIRContext mlirCtx;
-  auto f32 = mlir::Float32Type::get(&mlirCtx);
-  auto f64 = mlir::Float64Type::get(&mlirCtx);
 
-  AbstractFp e32(ctx, f32);
-  AbstractFp e64(ctx, f64);
+  AbstractFp e32(ctx, DType::F32);
+  AbstractFp e64(ctx, DType::F64);
 
   // Their add functions are distinct — different domain widths — so they
   // simply cannot be combined; this is a smoke test that both work.
@@ -233,24 +212,19 @@ TEST(AbstractFp, F32AndF64UseSeparateFunctions) {
 
 TEST(AbstractFp, RegistryReturnsSameInstanceForSameType) {
   z3::context ctx;
-  mlir::MLIRContext mlirCtx;
-  auto f32 = mlir::Float32Type::get(&mlirCtx);
   AbstractFpRegistry reg(ctx);
 
-  AbstractFp &a = reg.get(f32);
-  AbstractFp &b = reg.get(f32);
+  AbstractFp &a = reg.get(DType::F32);
+  AbstractFp &b = reg.get(DType::F32);
   EXPECT_EQ(&a, &b);
 }
 
 TEST(AbstractFp, RegistryDistinguishesF16AndBF16) {
   z3::context ctx;
-  mlir::MLIRContext mlirCtx;
-  auto f16  = mlir::Float16Type::get(&mlirCtx);
-  auto bf16 = mlir::BFloat16Type::get(&mlirCtx);
   AbstractFpRegistry reg(ctx);
 
-  AbstractFp &e16  = reg.get(f16);
-  AbstractFp &eb16 = reg.get(bf16);
+  AbstractFp &e16  = reg.get(DType::F16);
+  AbstractFp &eb16 = reg.get(DType::BF16);
   EXPECT_NE(&e16, &eb16);
   EXPECT_EQ(e16.bitwidth(),  16u);
   EXPECT_EQ(eb16.bitwidth(), 16u);
@@ -263,9 +237,7 @@ TEST(AbstractFp, RegistryDistinguishesF16AndBF16) {
 TEST(AbstractFp, MaxAndExpAreFunctional) {
   // Same inputs ⇒ same outputs (uninterpreted-function semantics).
   z3::context ctx;
-  mlir::MLIRContext mlirCtx;
-  auto f32 = mlir::Float32Type::get(&mlirCtx);
-  AbstractFp e(ctx, f32);
+  AbstractFp e(ctx, DType::F32);
 
   z3::expr a = ctx.bv_const("a", 32);
   z3::expr b = ctx.bv_const("b", 32);
@@ -278,9 +250,7 @@ TEST(AbstractFp, MaxAndExpAreFunctional) {
 TEST(AbstractFp, MaxCommutativityAxiom) {
   // maxnumf is commutative; the axiom must make max(a,b) == max(b,a).
   z3::context ctx;
-  mlir::MLIRContext mlirCtx;
-  auto f32 = mlir::Float32Type::get(&mlirCtx);
-  AbstractFp e(ctx, f32);
+  AbstractFp e(ctx, DType::F32);
 
   z3::expr a = ctx.bv_const("a", 32);
   z3::expr b = ctx.bv_const("b", 32);
@@ -297,9 +267,7 @@ TEST(AbstractFp, ExpIsNotTriviallyConstant) {
   // exp is uninterpreted: distinct inputs may map to distinct outputs (the
   // solver is free to pick such a model — exp is not forced to be constant).
   z3::context ctx;
-  mlir::MLIRContext mlirCtx;
-  auto f32 = mlir::Float32Type::get(&mlirCtx);
-  AbstractFp e(ctx, f32);
+  AbstractFp e(ctx, DType::F32);
 
   z3::expr a = ctx.bv_const("a", 32);
   z3::expr b = ctx.bv_const("b", 32);

@@ -1,7 +1,10 @@
-#ifndef TRITON_TV_SEMANTICS_ABSTRACTFP_H
-#define TRITON_TV_SEMANTICS_ABSTRACTFP_H
+#ifndef TILE_SMT_ABSTRACTFP_H
+#define TILE_SMT_ABSTRACTFP_H
 
-#include "mlir/IR/BuiltinTypes.h"
+// tile-smt core — Abstract floating-point encoding (FP mode a).
+// MLIR-free: this header depends only on Z3 and the tile-smt neutral types.
+
+#include "semantics/Types.h"
 
 #include <map>
 #include <memory>
@@ -9,7 +12,7 @@
 #include <string>
 #include <z3++.h>
 
-namespace Semantics {
+namespace tile_smt {
 
 // Abstract floating-point encoding.
 //
@@ -19,7 +22,7 @@ namespace Semantics {
 // (z3::func_decl) declared per type and per operation. Properties of those
 // functions (commutativity, NaN propagation, …) are asserted as axioms.
 //
-// One AbstractFp object exists per (FloatType, z3::context). Use the
+// One AbstractFp object exists per (DType, z3::context). Use the
 // AbstractFpRegistry to obtain them.
 //
 // Reserved constants (+0, -0, +inf, -inf, NaN) are fresh BV constants kept
@@ -28,7 +31,7 @@ namespace Semantics {
 // under verification.
 class AbstractFp {
 public:
-  AbstractFp(z3::context &ctx, mlir::FloatType type);
+  AbstractFp(z3::context &ctx, DType type);
 
   AbstractFp(const AbstractFp &) = delete;
   AbstractFp &operator=(const AbstractFp &) = delete;
@@ -36,7 +39,7 @@ public:
   // Sort used to encode FP values of this type. BitVec(typeWidth).
   z3::sort sort() const;
 
-  mlir::FloatType type() const { return fpTy; }
+  DType     type() const { return fpTy; }
   unsigned bitwidth() const { return bw; }
 
   // Reserved constants. All five are pairwise distinct (asserted by axiom).
@@ -102,7 +105,7 @@ private:
   z3::expr &lazyConst(std::optional<z3::expr> &slot, const char *name);
 
   z3::context   &ctx;
-  mlir::FloatType fpTy;
+  DType           fpTy;
   unsigned        bw;
   std::string     suffix;   // appended to all fn names to keep types distinct
 
@@ -123,22 +126,24 @@ private:
   bool axiomsNegInvolutiveEmitted  = false;
 };
 
-// One AbstractFp per (FloatType-width, context). Owns the AbstractFp objects.
+// One AbstractFp per (DType, context). Owns the AbstractFp objects.
 class AbstractFpRegistry {
 public:
   explicit AbstractFpRegistry(z3::context &ctx) : ctx(ctx) {}
 
   // Returns the AbstractFp for `type`, constructing it on first use.
-  AbstractFp &get(mlir::FloatType type);
+  AbstractFp &get(DType type);
 
   // Emit all accumulated axioms across all registered encodings.
   void addAxioms(z3::solver &solver);
 
 private:
   z3::context &ctx;
-  std::map<unsigned, std::unique_ptr<AbstractFp>> byWidth;
+  // Keyed directly by DType — f16 and bf16 land in different buckets with no
+  // width/isBF16 hack.
+  std::map<DType, std::unique_ptr<AbstractFp>> byType;
 };
 
-} // namespace Semantics
+} // namespace tile_smt
 
-#endif // TRITON_TV_SEMANTICS_ABSTRACTFP_H
+#endif // TILE_SMT_ABSTRACTFP_H

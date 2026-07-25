@@ -16,3 +16,4 @@ function(add_tile_smt_test name)
 endfunction()
 
 add_tile_smt_test(TileSmtTypesTest SRCS TypesTest.cpp)
+add_tile_smt_test(TileSmtAbstractFpTest SRCS AbstractFpTest.cpp)

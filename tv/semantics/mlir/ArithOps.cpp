@@ -1,6 +1,6 @@
 #include "semantics/mlir/ArithOps.h"
 
-#include "semantics/AbstractFp.h"
+#include "semantics/mlir/AbstractFpShim.h"
 #include "semantics/Memory.h"
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
@@ -304,7 +304,7 @@ static State handleFpBinaryOp(
                            ? llvm::cast<mlir::RankedTensorType>(resType).getElementType()
                            : resType;
   auto floatTy = llvm::cast<mlir::FloatType>(elemTy);
-  AbstractFp &afp = s.fpReg->get(floatTy);
+  AbstractFp &afp = getFp(*s.fpReg, floatTy);
 
   auto fn = [&](z3::expr a, z3::expr b) { return op_fn(afp, a, b); };
 
@@ -349,7 +349,7 @@ State Semantics::handleMathExp(const State &s, mlir::Operation *op) {
   mlir::Type elemTy  = llvm::isa<mlir::RankedTensorType>(resType)
                            ? llvm::cast<mlir::RankedTensorType>(resType).getElementType()
                            : resType;
-  AbstractFp &afp = s.fpReg->get(llvm::cast<mlir::FloatType>(elemTy));
+  AbstractFp &afp = getFp(*s.fpReg, llvm::cast<mlir::FloatType>(elemTy));
   z3::context &ctx = s.ctx;
 
   State next = s;

@@ -1,6 +1,6 @@
 #include "State.h"
 
-#include "semantics/AbstractFp.h"
+#include "semantics/mlir/AbstractFpShim.h"
 #include "semantics/mlir/ArithOps.h"
 #include "semantics/mlir/TritonOps.h"
 

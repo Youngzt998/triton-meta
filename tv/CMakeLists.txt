@@ -35,16 +35,17 @@ get_property(triton_libs GLOBAL PROPERTY TRITON_LIBS)
 # so that std::throw (used in Env::lookup) works normally.
 # ---------------------------------------------------------------------------
 add_library(TritonTVSemantics STATIC
-  semantics/AbstractFp.cpp
   semantics/Env.cpp
   semantics/Memory.cpp
   semantics/State.cpp
+  semantics/mlir/AbstractFpShim.cpp
   semantics/mlir/ArithOps.cpp
   semantics/mlir/TritonOps.cpp
 )
 
 target_include_directories(TritonTVSemantics PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(TritonTVSemantics PUBLIC
+  tile-smt          # core AbstractFp (DType-keyed) lives here
   ${triton_libs}
   MLIRIR
   MLIRSupport

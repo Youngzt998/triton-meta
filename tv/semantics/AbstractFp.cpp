@@ -1,23 +1,30 @@
-#include "AbstractFp.h"
+#include "semantics/AbstractFp.h"
 
-#include "llvm/Support/ErrorHandling.h"
+#include <stdexcept>
 
-using namespace Semantics;
+// Core (tile-smt) — MLIR-free: use std exceptions instead of llvm_unreachable.
+
+using namespace tile_smt;
 
 //===----------------------------------------------------------------------===//
 // AbstractFp
 //===----------------------------------------------------------------------===//
 
-static std::string suffixFor(mlir::FloatType ty) {
-  unsigned w = ty.getWidth();
-  // Distinguish 16-bit float types: IEEE half vs bfloat16.
-  if (w == 16 && llvm::isa<mlir::BFloat16Type>(ty))
-    return "bf16";
-  return "f" + std::to_string(w);
+static std::string suffixFor(DType ty) {
+  // Suffix strings match the pre-M0 encoding byte-for-byte so SMT function /
+  // constant names are unchanged: f16, bf16, f32, f64.
+  switch (ty) {
+  case DType::F16:  return "f16";
+  case DType::BF16: return "bf16";
+  case DType::F32:  return "f32";
+  case DType::F64:  return "f64";
+  default:          throw std::logic_error("AbstractFp: not a float DType");
+  }
 }
 
-AbstractFp::AbstractFp(z3::context &ctx, mlir::FloatType type)
-    : ctx(ctx), fpTy(type), bw(type.getWidth()), suffix(suffixFor(type)) {}
+AbstractFp::AbstractFp(z3::context &ctx, DType type)
+    : ctx(ctx), fpTy(type), bw(getByteWidth(type) * 8),
+      suffix(suffixFor(type)) {}
 
 z3::sort AbstractFp::sort() const { return ctx.bv_sort(bw); }
 
@@ -177,11 +184,11 @@ z3::expr AbstractFp::lt(const z3::expr &a, const z3::expr &b) {
   // TODO: declare an uninterpreted predicate fp_lt_<ty> once comparisons are
   // exercised by per-op handlers; equality on opaque BVs is a placeholder.
   (void)a; (void)b;
-  llvm_unreachable("AbstractFp::lt not yet implemented");
+  throw std::logic_error("AbstractFp::lt not yet implemented");
 }
 z3::expr AbstractFp::le(const z3::expr &a, const z3::expr &b) {
   (void)a; (void)b;
-  llvm_unreachable("AbstractFp::le not yet implemented");
+  throw std::logic_error("AbstractFp::le not yet implemented");
 }
 
 z3::expr AbstractFp::sum(const z3::expr &arr, const z3::expr &n) {
@@ -256,25 +263,20 @@ void AbstractFp::addAxioms(z3::solver &solver) {
 // AbstractFpRegistry
 //===----------------------------------------------------------------------===//
 
-AbstractFp &AbstractFpRegistry::get(mlir::FloatType type) {
-  // Key on (width, isBF16) — but width alone is enough since bf16 is the only
-  // 16-bit type besides f16, and we tag the AbstractFp suffix accordingly.
-  // For correctness when both f16 and bf16 are used, key on a pair.
-  unsigned w = type.getWidth();
-  unsigned key = w;
-  if (w == 16 && llvm::isa<mlir::BFloat16Type>(type))
-    key = 0x10010; // distinct bucket for bf16
-  auto it = byWidth.find(key);
-  if (it == byWidth.end()) {
+AbstractFp &AbstractFpRegistry::get(DType type) {
+  // Key directly by DType — f16 and bf16 are distinct keys, no width/isBF16
+  // hack.
+  auto it = byType.find(type);
+  if (it == byType.end()) {
     auto enc = std::make_unique<AbstractFp>(ctx, type);
     auto &ref = *enc;
-    byWidth.emplace(key, std::move(enc));
+    byType.emplace(type, std::move(enc));
     return ref;
   }
   return *it->second;
 }
 
 void AbstractFpRegistry::addAxioms(z3::solver &solver) {
-  for (auto &[_, enc] : byWidth)
+  for (auto &[_, enc] : byType)
     enc->addAxioms(solver);
 }

@@ -67,23 +67,18 @@ add_tv_test(
 add_tv_test(
   NAME TestTritonTVState
   SRCS StateTest.cpp
-       ${CMAKE_CURRENT_SOURCE_DIR}/../../semantics/AbstractFp.cpp
        ${CMAKE_CURRENT_SOURCE_DIR}/../../semantics/Memory.cpp
        ${CMAKE_CURRENT_SOURCE_DIR}/../../semantics/Env.cpp
        ${CMAKE_CURRENT_SOURCE_DIR}/../../semantics/State.cpp
+       ${CMAKE_CURRENT_SOURCE_DIR}/../../semantics/mlir/AbstractFpShim.cpp
        ${CMAKE_CURRENT_SOURCE_DIR}/../../semantics/mlir/ArithOps.cpp
        ${CMAKE_CURRENT_SOURCE_DIR}/../../semantics/mlir/TritonOps.cpp
   LIBS
+    tile-smt          # core AbstractFp (DType-keyed)
     ${triton_libs}
     MLIRIR
     MLIRSupport
 )
 
-add_tv_test(
-  NAME TestTritonTVAbstractFp
-  SRCS AbstractFpTest.cpp
-       ${CMAKE_CURRENT_SOURCE_DIR}/../../semantics/AbstractFp.cpp
-  LIBS
-    MLIRIR
-    MLIRSupport
-)
+# The Abstract-FP unit test moved to the Z3-only core suite
+# (tv/semantics/test/AbstractFpTest.cpp); it no longer needs MLIR.
