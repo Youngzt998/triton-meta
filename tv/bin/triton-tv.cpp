@@ -1,6 +1,7 @@
 #include "../../bin/RegisterTritonDialects.h"
 
 #include "builder/mlir/State.h"
+#include "semantics/Equivalence.h"
 #include "triton/Dialect/Triton/IR/Dialect.h"
 
 #include "mlir/IR/BuiltinOps.h"
@@ -13,6 +14,8 @@
 #include "llvm/Support/raw_ostream.h"
 
 #include <chrono>
+#include <utility>
+#include <vector>
 #include <z3++.h>
 
 static llvm::cl::opt<std::string>
@@ -275,33 +278,25 @@ int main(int argc, char **argv) {
   s1f.context.fp().addAxioms(solver);
   s2f.context.fp().addAxioms(solver);
 
-  // Assert that at least one output memory differs between the two programs,
-  // compared POINTWISE at a single fresh symbolic witness address. store() now
-  // builds each heap as a z3::lambda, so we must NOT use `array != array`
-  // (array extensionality over lambdas returns `unknown`); select(lambda,
-  // witness) β-reduces to a quantifier-free byte formula. (src and tgt come
-  // from different functions, so we keep the explicit srcArgs↔tgtArgs pairing
-  // rather than calling Semantics::checkEquivalence, which assumes shared
-  // args.)
-  z3::expr witness = ctx.bv_const("__witness_addr", 64);
-  z3::expr anyDiffers = ctx.bool_val(false);
+  // Pair the two programs' output memories positionally by kernel argument:
+  // src arg i's memory ↔ tgt arg i's memory. src and tgt come from different
+  // functions, so the adapter builds this MemId pairing explicitly and hands it
+  // to the MLIR-free core (which then checks that at least one paired memory
+  // differs at a fresh symbolic witness address; see tile_smt::checkEquivalence
+  // for why we compare pointwise instead of `array != array`).
+  std::vector<std::pair<tile_smt::MemId, tile_smt::MemId>> pairing;
   for (unsigned i = 0; i < srcArgs.size(); ++i) {
-    mlir::Value sa = srcArgs[i];
-    mlir::Value ta = tgtArgs[i];
-    auto srcMemIt = s1f.ptrArgToMem.find(sa);
-    auto tgtMemIt = s2f.ptrArgToMem.find(ta);
+    auto srcMemIt = s1f.ptrArgToMem.find(srcArgs[i]);
+    auto tgtMemIt = s2f.ptrArgToMem.find(tgtArgs[i]);
     if (srcMemIt != s1f.ptrArgToMem.end() &&
         tgtMemIt != s2f.ptrArgToMem.end()) {
-      anyDiffers =
-          anyDiffers ||
-          (z3::select(s1f.memState.mems.at(srcMemIt->second).array, witness) !=
-           z3::select(s2f.memState.mems.at(tgtMemIt->second).array, witness));
+      pairing.emplace_back(srcMemIt->second, tgtMemIt->second);
     }
   }
-  solver.add(anyDiffers);
 
   auto t2 = std::chrono::high_resolution_clock::now();
-  auto result = solver.check();
+  auto result =
+      tile_smt::checkEquivalence(s1f.memState, s2f.memState, pairing, solver);
   auto t3 = std::chrono::high_resolution_clock::now();
   llvm::outs() << "Solver: " << std::chrono::duration<double>(t3 - t2).count()
                << " s\n";

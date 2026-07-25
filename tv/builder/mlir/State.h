@@ -104,20 +104,10 @@ private:
   State interpretWhile(mlir::Operation *op) const;
 };
 
-// Check semantic equivalence of two final States.
-//
-// Adds to `solver` the assertion that the output memories differ in at least
-// one pointer argument (disjunction over all memories, paired by MemId). Then
-// calls solver.check().
-//
-//   z3::unsat   — no difference exists → programs are equivalent
-//   z3::sat     — counterexample found; call solver.get_model() for witness
-//   z3::unknown — solver timed out
-//
-// Both states must have been derived from the same initial symbolic inputs and
-// the same MemId assignment (e.g. initFromFunc on the same argument list).
-z3::check_result checkEquivalence(const State &s1, const State &s2,
-                                  z3::solver &solver);
+// Final-memory equivalence lives in the MLIR-free core
+// (semantics/Equivalence.h). A builder pairs the two programs' memories by
+// MemId (e.g. positionally by kernel argument) and calls
+// tile_smt::checkEquivalence with the resulting pairing + solver.
 
 } // namespace Semantics
 

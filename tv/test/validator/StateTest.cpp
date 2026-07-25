@@ -1,4 +1,5 @@
 #include "builder/mlir/State.h"
+#include "semantics/Equivalence.h"
 
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -8,6 +9,8 @@
 #include "triton/Dialect/Triton/IR/Types.h"
 
 #include "SimpleTest.h"
+#include <utility>
+#include <vector>
 #include <z3++.h>
 
 using namespace Semantics;
@@ -199,7 +202,10 @@ TEST(State, EquivalentStatesUNSAT) {
   s1.memState.mems.at(id).store(ptrTile, valTile, trueMask);
   s2.memState.mems.at(id).store(ptrTile, valTile, trueMask);
 
-  EXPECT_EQ(checkEquivalence(s1, s2, solver), z3::unsat);
+  std::vector<std::pair<MemId, MemId>> pairing = {{id, id}};
+  EXPECT_EQ(
+      tile_smt::checkEquivalence(s1.memState, s2.memState, pairing, solver),
+      z3::unsat);
 }
 
 TEST(State, NonEquivalentStatesSAT) {
@@ -232,7 +238,10 @@ TEST(State, NonEquivalentStatesSAT) {
   s2.memState.mems.at(id).store(
       ptrTile, makeConstTile(ctx, DType::I32, 20, {1}), trueMask);
 
-  EXPECT_EQ(checkEquivalence(s1, s2, solver), z3::sat);
+  std::vector<std::pair<MemId, MemId>> pairing = {{id, id}};
+  EXPECT_EQ(
+      tile_smt::checkEquivalence(s1.memState, s2.memState, pairing, solver),
+      z3::sat);
 }
 
 TEST(State, TwoOutputArgsCheckedTogether) {
@@ -278,7 +287,10 @@ TEST(State, TwoOutputArgsCheckedTogether) {
   s2.memState.mems.at(idB).store(ptrB, makeConstTile(ctx, DType::I32, 2, {1}),
                                  trueMask);
 
-  EXPECT_EQ(checkEquivalence(s1, s2, solver), z3::sat)
+  std::vector<std::pair<MemId, MemId>> pairing = {{idA, idA}, {idB, idB}};
+  EXPECT_EQ(
+      tile_smt::checkEquivalence(s1.memState, s2.memState, pairing, solver),
+      z3::sat)
       << "difference in argB must be detected";
 }
 

@@ -7,6 +7,7 @@ add_library(tile-smt STATIC
   AbstractFp.cpp
   Memory.cpp
   Context.cpp
+  Equivalence.cpp
 )
 
 # Include root is tv/ so code uses #include "semantics/Types.h" (matches the
