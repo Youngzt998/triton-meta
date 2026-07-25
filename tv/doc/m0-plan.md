@@ -19,7 +19,7 @@ Move today's Triton-coupled SMT implementation in `tv/semantics/` onto the
 Invariants that gate every sub-step:
 1. `python tv/eval/run_eval.py all` stays green (pairs + inequal + compile-options).
 2. `ninja … tv-validator-tests` + ctest `-R TestTritonTV` stay green.
-3. After migration, `grep -rE 'mlir::|triton::' tv/tile-smt/` returns nothing, and
+3. After migration, `grep -rE 'mlir::|triton::' tv/semantics/` returns nothing, and
    the `tile-smt` CMake target links only Z3 (no MLIR/Triton libs).
 4. The witness/lambda SMT encoding is preserved byte-for-byte (Memory.cpp:146-198
    store lambda; State.cpp:159-183 witness) — verdicts/timing don't regress.
@@ -27,11 +27,11 @@ Invariants that gate every sub-step:
    `tv/eval/common.py:86-87` still finds it.
 
 **Builder structure (design refinement).** The "adapter" is organized as a
-**builder layer** under `tile-smt/builder/`: `builder/mlir/` (shared by all
+**builder layer** under `tv/builder/`: `builder/mlir/` (shared by all
 MLIR-based languages — `dtypeOf`, `Env`, `MemId` mapping, the block-walk driver,
 and the standard `arith`/`math`/`scf` handlers) and `builder/triton/` (Triton's
 `tt.*` handlers + the `.ttir` entry). So `tv/semantics/` does not merely "shrink
-to an adapter" — its contents split into the **core** (`tile-smt/`) and these
+to an adapter" — its contents split into the **core** (`tv/semantics/`) and these
 **builders**. See `tile-smt-design.md` §"Builder layer". Build targets gain
 `tile-smt-builder-mlir` (core+MLIR) and `tile-smt-builder-triton`
 (core+builder-mlir+Triton). In the tables below, read "adapter" as the builder
@@ -45,39 +45,43 @@ layer, and split adapter-side rows: `Env`/`dtypeOf`/walk-driver/`arith`,`math`,
 ### 1.1 Directory layout
 ```
 tv/
-  tile-smt/                 # NEW: MLIR-free core (namespace tile_smt)
-    include/tile-smt/
-      Types.h               # DType, Shape, MemId, FPMode + helpers (getElemSort, getByteWidth, fpExpSigBits)
-      Value.h               # Scalar/Tensor/Ptr wrappers + MemId (was Z3Scalar/Z3Tile/Z3Ptr)
-      FpModel.h             # FpModel interface (AbstractFp = mode a)
-      AbstractFp.h          # moved from semantics/AbstractFp.h, DType-based
-      Memory.h              # moved from semantics/Memory.h, DType/MemId-based
-      Context.h             # NEW: builder API
-      Equivalence.h         # checkEquivalence(MemState, MemState, pairing, solver)
-    lib/  Types.cpp FpModel.cpp AbstractFp.cpp Memory.cpp Context.cpp Equivalence.cpp
-    test/ SimpleTest.h  AbstractFpTest.cpp MemoryTest.cpp ContextTest.cpp EquivalenceTest.cpp  (Z3-only, NO MLIR)
-    CMakeLists.txt          # core target: links ONLY z3
-    builder/                # per-language builders (model a language onto the core)
-      mlir/                 # shared for ALL MLIR langs: dtypeOf, Env(mlir::Value->Value),
-                            #   MemId mapping, block-walk driver, arith.*/math.*/scf.* handlers
-        CMakeLists.txt      # target tile-smt-builder-mlir (core + MLIR)
-      triton/               # Triton-specific: tt.* handlers + triton entry (parse .ttir)
-        CMakeLists.txt      # target tile-smt-builder-triton (core + builder-mlir + Triton dialect)
-  triton-tv.cpp             # tool: links tile-smt-builder-triton (binary path unchanged)
-  # (tv/semantics/ goes away — its contents split into core + builder/{mlir,triton})
+  semantics/                # CORE tile-smt semantics — MLIR-free, links ONLY z3 (namespace tile_smt)
+    Types.h                 # DType, Shape, MemId, FPMode + helpers (getElemSort/getByteWidth/fpExpSigBits)
+    Value.h                 # Scalar/Tensor/Ptr wrappers + MemId (was Z3Scalar/Z3Tile/Z3Ptr)
+    FpModel.h               # FpModel interface (AbstractFp = mode a)
+    AbstractFp.{h,cpp}      # DType-based (was semantics/AbstractFp.*)
+    Memory.{h,cpp}          # DType/MemId-based; store lambda + witness kept verbatim
+    Context.{h,cpp}         # NEW: builder API
+    Equivalence.{h,cpp}     # checkEquivalence(MemState, MemState, pairing, solver)
+    CMakeLists.txt          # core target `tile-smt` (z3 ONLY) [+ future tile-gpu-smt]
+    test/                   # Z3-only unit tests, NO MLIR (AbstractFp/Memory/Context/Equivalence + SimpleTest.h)
+  builder/                  # per-language builders (model a language onto the core)
+    mlir/                   # shared for ALL MLIR langs: dtypeOf, Env(mlir::Value->Value), MemId
+                            #   mapping, block-walk driver (State), arith.*/math.*/scf.* handlers
+      CMakeLists.txt        # target tile-smt-builder-mlir (core + MLIR)
+    triton/                 # Triton-specific: tt.* handlers
+      CMakeLists.txt        # target tile-smt-builder-triton (core + builder-mlir + Triton dialect)
+  bin/
+    triton-tv.cpp           # validator main; target `triton-tv` links tile-smt-builder-triton
+  test/ eval/ doc/ paper/   # existing (test/validator's MLIR-needing tests may move under builder/)
 ```
-`include/tile-smt/` prefix means adapter code writes `#include "tile-smt/Context.h"`
-— a namespace that survives the eventual repo split. `tile-gpu-smt/` is deferred
-(design step 5); M0 doesn't need it, so no dead code.
+Note: the existing `tv/semantics/` is refactored *in place* into the MLIR-free
+core — `Env`/`State` + the `mlir/` handlers move OUT to `builder/`, and
+`triton-tv.cpp` moves to `bin/`. Core headers+impl sit directly in `semantics/`
+(no include/lib split); the include root stays `tv/`, so code keeps
+`#include "semantics/Context.h"` (matches today's `#include "semantics/..."`).
+`tile-gpu-smt/` (a second core lib, also built from `semantics/`) is deferred to
+M2; M0 doesn't need it, so no dead code.
 
-### 1.2 The Z3-only `tile-smt` CMake target
-New `tv/tile-smt/CMakeLists.txt` replicates the Z3-find block at `tv/CMakeLists.txt:1-23`
-(hoisting that block so both dirs share it is an optional later cleanup; for M0
-duplicate to keep the change local):
+### 1.2 The Z3-only `tile-smt` CMake target (built from `tv/semantics/`)
+New `tv/semantics/CMakeLists.txt` replicates the Z3-find block at
+`tv/CMakeLists.txt:1-23` (hoisting it to share is an optional later cleanup; for
+M0 duplicate to keep the change local):
 ```cmake
-add_library(tile-smt STATIC lib/Types.cpp lib/FpModel.cpp lib/AbstractFp.cpp
-  lib/Memory.cpp lib/Context.cpp lib/Equivalence.cpp)
-target_include_directories(tile-smt PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+add_library(tile-smt STATIC
+  semantics/Types.cpp semantics/FpModel.cpp semantics/AbstractFp.cpp
+  semantics/Memory.cpp semantics/Context.cpp semantics/Equivalence.cpp)
+target_include_directories(tile-smt PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)  # tv/ root → #include "semantics/..."
 # Z3 ONLY — deliberately no ${triton_libs}, no MLIRIR, no MLIRSupport.
 if(TARGET z3::libz3)
   target_link_libraries(tile-smt PUBLIC z3::libz3)
@@ -93,15 +97,16 @@ endif()
 Contrast with today's `TritonTVSemantics` (`tv/CMakeLists.txt:31-52`) which links
 `${triton_libs} MLIRIR MLIRSupport`: `tile-smt` links none of those — the
 mechanically checkable success criterion. Keep default flags (exceptions on;
-z3++ uses `z3::exception`). `add_subdirectory(tile-smt)` goes inside
-`tv/CMakeLists.txt` (before the adapter/`triton-tv` targets), NOT the root
-CMakeLists — keeps tv wiring inside `tv/`.
+z3++ uses `z3::exception`). `tv/CMakeLists.txt` does
+`add_subdirectory(semantics)` + `add_subdirectory(builder/mlir)` +
+`add_subdirectory(builder/triton)` (before the `triton-tv` tool), all under
+`tv/` — keeps tv wiring inside `tv/`.
 
 ### 1.3 tile-smt unit tests without MLIR
-New `tv/tile-smt/test/CMakeLists.txt` mirrors `add_tv_test`
+New `tv/semantics/test/CMakeLists.txt` mirrors `add_tv_test`
 (`tv/test/validator/CMakeLists.txt:19-45`) but `LIBS` = `tile-smt` only (no MLIR,
 no `${triton_libs}`). Copy the dependency-free `SimpleTest.h` (`SimpleTest.h:1-19`)
-into `tile-smt/test/`. Migrated tests drop MLIR: today `AbstractFpTest.cpp:18`
+into `semantics/test/`. Migrated tests drop MLIR: today `AbstractFpTest.cpp:18`
 builds `mlir::Float32Type::get(&mlirCtx)`, `MemoryModelTest.cpp:57-60` builds
 `mlir::IntegerType`/`Float32Type` → become `DType::F32`/`DType::I32`. This is the
 proof the core compiles/runs without MLIR.
@@ -120,7 +125,7 @@ link the relevant builder target(s); the Z3-only `tile-smt` tests link only
 
 ## 2. Neutral types
 
-### 2.1 Concrete definitions (`tile-smt/include/tile-smt/Types.h`, `Value.h`)
+### 2.1 Concrete definitions (`semantics/Types.h`, `Value.h`)
 ```cpp
 namespace tile_smt {
 enum class DType { I1, I8, I16, I32, I64, F16, BF16, F32, F64, Ptr };
@@ -207,7 +212,7 @@ adapter just forwards `pidOp.getAxis()`.
 
 ---
 
-## 4. Builder API surface for add + softmax (`tile-smt/include/tile-smt/Context.h`)
+## 4. Builder API surface for add + softmax (`semantics/Context.h`)
 ```cpp
 namespace tile_smt {
 class Context {
@@ -270,15 +275,22 @@ over paired memories (`:272-283`). In M0: adapter builds
 
 ## 5. Ordered migration sub-steps (each small, compiling, eval+tests green)
 Strategy: stand up the core behind an adapter shim, peel handlers one group at a
-time, delete the shim last.
+time, delete the shim last. Because the core directory *is* `tv/semantics/`
+(refactored in place), the migration is: (i) grow `semantics/` into the MLIR-free
+core; (ii) move `Env`/`State`/`mlir/` handlers OUT to `builder/{mlir,triton}/`;
+(iii) move `triton-tv.cpp` to `bin/`. "shim" below = a temporary compatibility
+header / `using`-alias so intermediate steps still compile and stay green.
 
-- **Step 0 — scaffold empty core.** `tv/tile-smt/{include,lib,test}` with `Types.h`
-  (DType/Shape/MemId/FPMode) + trivial `Types.cpp` + one `TypesTest.cpp`. Add
-  `add_subdirectory(tile-smt)` in `tv/CMakeLists.txt`. Verify: `ninja tile-smt
+- **Step 0 — scaffold the core lib.** Add `tv/semantics/Types.h`
+  (DType/Shape/MemId/FPMode) + `Types.cpp`, `tv/semantics/test/` (one
+  `TypesTest.cpp` + `SimpleTest.h`), and `tv/semantics/CMakeLists.txt` defining the
+  Z3-only `tile-smt` target; wire `add_subdirectory(semantics)` in
+  `tv/CMakeLists.txt`. The existing coupled `semantics/*.cpp` keep building under
+  the old `TritonTVSemantics` target for now (coexist). Verify: `ninja tile-smt
   tile-smt-tests` green; `run_eval.py all` untouched → green.
 - **Step 1 — AbstractFp → core (DType-based) + adapter shim.** Port
   `AbstractFp.{h,cpp}`; delete `semantics/AbstractFp.{h,cpp}`, replace with a shim
-  header (`#include "tile-smt/AbstractFp.h"` + `using`) and an adapter
+  header (`#include "semantics/AbstractFp.h"` + `using`) and an adapter
   `getFp(Registry, mlir::FloatType)` wrapper via `dtypeOf`. Rewrite AbstractFpTest
   into the Z3-only core test. Verify: all ctest + `run_eval.py all` green.
 - **Step 2 — Memory + value wrappers + MemId/MemState → core.** Port
@@ -295,7 +307,7 @@ time, delete the shim last.
 - **Step 4 — `checkEquivalence` → core; `State` = driver.** Add
   `Equivalence.{h,cpp}`; rewire `triton-tv.cpp:272-283` to build the MemId pairing
   and call it. Verify: all green; `permute_passes.py` (add+softmax) all-EQUIVALENT.
-- **Step 5 — delete shims + verify boundary.** Repoint includes to `tile-smt/...`;
+- **Step 5 — delete shims + verify boundary.** Repoint includes to `semantics/...`;
   run the §7 DoD checklist.
 
 ---
@@ -317,7 +329,7 @@ time, delete the shim last.
   (last-writer-wins) + little-endian packing (`Memory.cpp:94-102`) must not change.
   Guarded by `MemoryModel.LargeTileWitnessEquivalence` (`MemoryModelTest.cpp:341-370`).
 - **6.5 tile-smt tests never include MLIR.** After Step 5,
-  `grep -rE '#include "mlir|mlir::|triton::' tv/tile-smt/` empty. `EnvTest`/`StateTest`
+  `grep -rE '#include "mlir|mlir::|triton::' tv/semantics/` empty. `EnvTest`/`StateTest`
   legitimately need MLIR → stay under `tv/test/validator/`.
 - **6.6 DenseElementsAttr iteration + i1 bool carrier are adapter concerns**
   (`ArithOps.cpp:106-117,133-141`); z3 store-chain build → core `denseIntTile/
@@ -337,8 +349,8 @@ time, delete the shim last.
    259-permutation baseline in `tv/CLAUDE.md` §5).
 3. `ninja … triton-tv tv-validator-tests tile-smt-tests` clean; ctest
    `-R TestTritonTV` and the `tile-smt-tests` group both green.
-4. `grep -rE 'mlir::|triton::|#include "mlir|#include "triton' tv/tile-smt/` empty.
+4. `grep -rE 'mlir::|triton::|#include "mlir|#include "triton' tv/semantics/` empty.
 5. `tile-smt` `target_link_libraries` is Z3-only (check `ninja -t commands tile-smt`).
 6. tile-smt test exes link only `tile-smt`(+Z3), run with no MLIR present.
-7. No `mlir::` in `tile-smt/include/tile-smt/Context.h` (all params neutral).
+7. No `mlir::` in `semantics/Context.h` (all params neutral).
 8. `triton-tv <a> <b>` exit codes unchanged (0/1/2), solver timing not regressed.

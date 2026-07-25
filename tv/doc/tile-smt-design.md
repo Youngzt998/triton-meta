@@ -147,7 +147,7 @@ The adapter supplies the bodies (by walking regions); the core supplies the merg
 The core (`tile-smt`, MLIR-free, Z3-only) is driven by **builders** (what earlier
 drafts called the "adapter") — one per source language — that walk that language's
 IR and model it onto the core via the `Context`/memory builder API. All builders
-live under **`tile-smt/builder/`**:
+live under **`tv/builder/`**:
 
 - **`builder/mlir/`** — shared tools for **all MLIR-based languages**:
   `dtypeOf(mlir::Type)→DType`, `Env` (`map<mlir::Value, Value, ValuePtrLess>`),
@@ -175,7 +175,7 @@ support, each modeling onto tile-smt (or tile-gpu-smt). Only builders touch a
 language / IR framework; the core never does.
 
 ## Migration steps (each keeps eval + unit tests green)
-1. Create `tv/tile-smt/` (namespace `tile_smt`) + `DType`. Move `AbstractFp`
+1. Create `tv/semantics/` (namespace `tile_smt`) + `DType`. Move `AbstractFp`
    in, swap `mlir::FloatType`→`DType`. Add a tiny adapter shim so existing code
    compiles.
 2. Move `Memory` + value wrappers into the lib; `mlir::Type`→`DType`; introduce
