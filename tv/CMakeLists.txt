@@ -22,6 +22,12 @@ if(NOT Z3_FOUND AND NOT (Z3_INCLUDE_DIRS AND Z3_LIBRARIES))
   message(FATAL_ERROR "Z3 not found. Install libz3-dev or set -DZ3_ROOT=/path/to/z3.")
 endif()
 
+# ---------------------------------------------------------------------------
+# tile-smt (M0) — MLIR-free core semantic model, links ONLY z3.
+# The Triton-coupled TritonTVSemantics below is being migrated onto this.
+# ---------------------------------------------------------------------------
+add_subdirectory(semantics)
+
 get_property(triton_libs GLOBAL PROPERTY TRITON_LIBS)
 
 # ---------------------------------------------------------------------------
