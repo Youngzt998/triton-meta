@@ -48,31 +48,21 @@ endfunction()
 # (tv/semantics/test/MemoryTest.cpp); Memory is now MLIR-free (DType-based) and
 # lives in the tile-smt core, so the test no longer needs MLIR.
 
+# EnvTest exercises the MLIR builder-mlir layer (makeSymbolicValue / dtypeOf /
+# Env). It does not use State, so linking builder-mlir is enough (the tt.*
+# handlers, referenced only by State's dispatch, are never pulled in).
 add_tv_test(
   NAME TestTritonTVEnv
   SRCS EnvTest.cpp
-       ${CMAKE_CURRENT_SOURCE_DIR}/../../semantics/Env.cpp
-       ${CMAKE_CURRENT_SOURCE_DIR}/../../semantics/mlir/AbstractFpShim.cpp
-  LIBS
-    tile-smt          # core Memory / Value / AbstractFp (DType-keyed)
-    ${triton_libs}
-    MLIRIR
-    MLIRSupport
+  LIBS tile-smt-builder-mlir
 )
 
+# StateTest drives the full walk (State::interpretOp references the tt.*
+# handlers), so it links builder-triton (which pulls in builder-mlir + core).
 add_tv_test(
   NAME TestTritonTVState
   SRCS StateTest.cpp
-       ${CMAKE_CURRENT_SOURCE_DIR}/../../semantics/Env.cpp
-       ${CMAKE_CURRENT_SOURCE_DIR}/../../semantics/State.cpp
-       ${CMAKE_CURRENT_SOURCE_DIR}/../../semantics/mlir/AbstractFpShim.cpp
-       ${CMAKE_CURRENT_SOURCE_DIR}/../../semantics/mlir/ArithOps.cpp
-       ${CMAKE_CURRENT_SOURCE_DIR}/../../semantics/mlir/TritonOps.cpp
-  LIBS
-    tile-smt          # core Memory / Value / AbstractFp (DType-keyed)
-    ${triton_libs}
-    MLIRIR
-    MLIRSupport
+  LIBS tile-smt-builder-triton
 )
 
 # The Abstract-FP unit test moved to the Z3-only core suite

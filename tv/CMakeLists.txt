@@ -24,47 +24,30 @@ endif()
 
 # ---------------------------------------------------------------------------
 # tile-smt (M0) — MLIR-free core semantic model, links ONLY z3.
-# The Triton-coupled TritonTVSemantics below is being migrated onto this.
 # ---------------------------------------------------------------------------
 add_subdirectory(semantics)
+
+# ---------------------------------------------------------------------------
+# Builder layer (per-language modeling onto the core):
+#   tile-smt-builder-mlir    — shared MLIR tools + arith/math/scf handlers
+#   tile-smt-builder-triton  — Triton tt.* handlers (links builder-mlir)
+# Both compile WITHOUT -fno-exceptions/-fno-rtti (the default; we do NOT apply
+# TRITON_DISABLE_EH_RTTI_FLAGS to them) so std::throw (Env::lookup) and z3++
+# exceptions work — matching the old TritonTVSemantics.
+# ---------------------------------------------------------------------------
+add_subdirectory(builder/mlir)
+add_subdirectory(builder/triton)
 
 get_property(triton_libs GLOBAL PROPERTY TRITON_LIBS)
 
 # ---------------------------------------------------------------------------
-# TritonTVSemantics — static library compiled WITHOUT -fno-exceptions/-fno-rtti
-# so that std::throw (used in Env::lookup) works normally.
-# ---------------------------------------------------------------------------
-add_library(TritonTVSemantics STATIC
-  semantics/Env.cpp
-  semantics/State.cpp
-  semantics/mlir/AbstractFpShim.cpp
-  semantics/mlir/ArithOps.cpp
-  semantics/mlir/TritonOps.cpp
-)
-
-target_include_directories(TritonTVSemantics PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(TritonTVSemantics PUBLIC
-  tile-smt          # core AbstractFp (DType-keyed) lives here
-  ${triton_libs}
-  MLIRIR
-  MLIRSupport
-)
-
-if(TARGET z3::libz3)
-  target_link_libraries(TritonTVSemantics PUBLIC z3::libz3)
-else()
-  target_include_directories(TritonTVSemantics PUBLIC ${Z3_INCLUDE_DIRS})
-  target_link_libraries(TritonTVSemantics PUBLIC ${Z3_LIBRARIES})
-endif()
-
-# ---------------------------------------------------------------------------
 # triton-tv binary
 # ---------------------------------------------------------------------------
-add_executable(triton-tv triton-tv.cpp)
+add_executable(triton-tv bin/triton-tv.cpp)
 
 target_compile_options(triton-tv PRIVATE ${TRITON_DISABLE_EH_RTTI_FLAGS})
 target_link_libraries(triton-tv PRIVATE
-  TritonTVSemantics
+  tile-smt-builder-triton   # core + builder-mlir + Triton tt.* handlers
   # tests
   TritonTestAnalysis
   TritonTestDialect

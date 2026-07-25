@@ -1,4 +1,4 @@
-#include "semantics/Env.h"
+#include "builder/mlir/Env.h"
 
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/MLIRContext.h"
@@ -17,10 +17,11 @@ using namespace Semantics;
 
 TEST(Env, MakeSymbolicScalarI1) {
   z3::context ctx;
+  Context context(ctx, FPMode::IntegerRange);
   mlir::MLIRContext mlirCtx;
   auto i1Ty = mlir::IntegerType::get(&mlirCtx, 1);
 
-  Value v = makeSymbolicValue(i1Ty, ctx, FPMode::IntegerRange, "x_i1");
+  Value v = makeSymbolicValue(i1Ty, context, "x_i1");
   ASSERT_TRUE(std::holds_alternative<Scalar>(v));
   auto &s = std::get<Scalar>(v);
   EXPECT_EQ(s.e.get_sort().sort_kind(), Z3_BOOL_SORT);
@@ -29,20 +30,22 @@ TEST(Env, MakeSymbolicScalarI1) {
 
 TEST(Env, MakeSymbolicScalarI32) {
   z3::context ctx;
+  Context context(ctx, FPMode::IntegerRange);
   mlir::MLIRContext mlirCtx;
   auto i32Ty = mlir::IntegerType::get(&mlirCtx, 32);
 
-  Value v = makeSymbolicValue(i32Ty, ctx, FPMode::IntegerRange, "x_i32");
+  Value v = makeSymbolicValue(i32Ty, context, "x_i32");
   ASSERT_TRUE(std::holds_alternative<Scalar>(v));
   EXPECT_EQ(std::get<Scalar>(v).e.get_sort().bv_size(), 32u);
 }
 
 TEST(Env, MakeSymbolicScalarF32IntegerRange) {
   z3::context ctx;
+  Context context(ctx, FPMode::IntegerRange);
   mlir::MLIRContext mlirCtx;
   auto f32Ty = mlir::Float32Type::get(&mlirCtx);
 
-  Value v = makeSymbolicValue(f32Ty, ctx, FPMode::IntegerRange, "x_f32");
+  Value v = makeSymbolicValue(f32Ty, context, "x_f32");
   ASSERT_TRUE(std::holds_alternative<Scalar>(v));
   EXPECT_EQ(std::get<Scalar>(v).e.get_sort().bv_size(), 32u);
   EXPECT_EQ(std::get<Scalar>(v).ty, DType::F32);
@@ -50,10 +53,11 @@ TEST(Env, MakeSymbolicScalarF32IntegerRange) {
 
 TEST(Env, MakeSymbolicScalarF32FPA) {
   z3::context ctx;
+  Context context(ctx, FPMode::FPA);
   mlir::MLIRContext mlirCtx;
   auto f32Ty = mlir::Float32Type::get(&mlirCtx);
 
-  Value v = makeSymbolicValue(f32Ty, ctx, FPMode::FPA, "x_f32_fpa");
+  Value v = makeSymbolicValue(f32Ty, context, "x_f32_fpa");
   ASSERT_TRUE(std::holds_alternative<Scalar>(v));
   auto &s = std::get<Scalar>(v);
   EXPECT_EQ(s.e.get_sort().sort_kind(), Z3_FLOATING_POINT_SORT);
@@ -66,11 +70,12 @@ TEST(Env, MakeSymbolicScalarF32FPA) {
 
 TEST(Env, MakeSymbolicTile1D) {
   z3::context ctx;
+  Context context(ctx, FPMode::IntegerRange);
   mlir::MLIRContext mlirCtx;
-  auto i32Ty    = mlir::IntegerType::get(&mlirCtx, 32);
+  auto i32Ty = mlir::IntegerType::get(&mlirCtx, 32);
   auto tensorTy = mlir::RankedTensorType::get({16}, i32Ty);
 
-  Value v = makeSymbolicValue(tensorTy, ctx, FPMode::IntegerRange, "t1d");
+  Value v = makeSymbolicValue(tensorTy, context, "t1d");
   ASSERT_TRUE(std::holds_alternative<Tensor>(v));
   auto &t = std::get<Tensor>(v);
 
@@ -86,11 +91,12 @@ TEST(Env, MakeSymbolicTile1D) {
 
 TEST(Env, MakeSymbolicTile2D) {
   z3::context ctx;
+  Context context(ctx, FPMode::IntegerRange);
   mlir::MLIRContext mlirCtx;
-  auto f32Ty    = mlir::Float32Type::get(&mlirCtx);
+  auto f32Ty = mlir::Float32Type::get(&mlirCtx);
   auto tensorTy = mlir::RankedTensorType::get({4, 8}, f32Ty);
 
-  Value v = makeSymbolicValue(tensorTy, ctx, FPMode::IntegerRange, "t2d");
+  Value v = makeSymbolicValue(tensorTy, context, "t2d");
   ASSERT_TRUE(std::holds_alternative<Tensor>(v));
   auto &t = std::get<Tensor>(v);
 
@@ -103,12 +109,13 @@ TEST(Env, MakeSymbolicTile2D) {
 TEST(Env, TwoTilesWithDistinctNamesAreDistinct) {
   // Two fresh tiles should be distinguishable by the solver.
   z3::context ctx;
+  Context context(ctx, FPMode::IntegerRange);
   mlir::MLIRContext mlirCtx;
-  auto i32Ty    = mlir::IntegerType::get(&mlirCtx, 32);
+  auto i32Ty = mlir::IntegerType::get(&mlirCtx, 32);
   auto tensorTy = mlir::RankedTensorType::get({4}, i32Ty);
 
-  Value v1 = makeSymbolicValue(tensorTy, ctx, FPMode::IntegerRange, "tA");
-  Value v2 = makeSymbolicValue(tensorTy, ctx, FPMode::IntegerRange, "tB");
+  Value v1 = makeSymbolicValue(tensorTy, context, "tA");
+  Value v2 = makeSymbolicValue(tensorTy, context, "tB");
 
   auto &t1 = std::get<Tensor>(v1);
   auto &t2 = std::get<Tensor>(v2);
@@ -124,13 +131,14 @@ TEST(Env, TwoTilesWithDistinctNamesAreDistinct) {
 
 TEST(Env, MakeSymbolicPtr) {
   z3::context ctx;
+  Context context(ctx, FPMode::IntegerRange);
   mlir::MLIRContext mlirCtx;
   mlirCtx.loadDialect<mlir::triton::TritonDialect>();
 
   auto f32Ty = mlir::Float32Type::get(&mlirCtx);
   auto ptrTy = mlir::triton::PointerType::get(f32Ty, 1);
 
-  Value v = makeSymbolicValue(ptrTy, ctx, FPMode::IntegerRange, "p");
+  Value v = makeSymbolicValue(ptrTy, context, "p");
   ASSERT_TRUE(std::holds_alternative<Ptr>(v));
   auto &p = std::get<Ptr>(v);
   EXPECT_EQ(p.e.get_sort().bv_size(), 64u);
@@ -162,6 +170,7 @@ makeModuleWithFunc(mlir::MLIRContext &mlirCtx,
 
 TEST(Env, BindAndLookup) {
   z3::context ctx;
+  Context context(ctx, FPMode::IntegerRange);
   mlir::MLIRContext mlirCtx;
   mlirCtx.loadDialect<mlir::triton::TritonDialect>();
 
@@ -171,8 +180,8 @@ TEST(Env, BindAndLookup) {
   auto func = *module->getBody()->op_begin<mlir::triton::FuncOp>();
   auto args = func.getBody().getArguments();
 
-  Value v0 = makeSymbolicValue(i32Ty, ctx, FPMode::IntegerRange, "a0");
-  Value v1 = makeSymbolicValue(i32Ty, ctx, FPMode::IntegerRange, "a1");
+  Value v0 = makeSymbolicValue(i32Ty, context, "a0");
+  Value v1 = makeSymbolicValue(i32Ty, context, "a1");
 
   Env env;
   EXPECT_EQ(env.size(), 0u);
@@ -198,8 +207,8 @@ TEST(Env, LookupMissingThrows) {
 
   auto i32Ty = mlir::IntegerType::get(&mlirCtx, 32);
   auto module = makeModuleWithFunc(mlirCtx, {i32Ty});
-  auto func   = *module->getBody()->op_begin<mlir::triton::FuncOp>();
-  auto arg    = func.getBody().getArguments()[0];
+  auto func = *module->getBody()->op_begin<mlir::triton::FuncOp>();
+  auto arg = func.getBody().getArguments()[0];
 
   Env env;
   EXPECT_THROW(env.lookup(arg), std::out_of_range);
@@ -207,17 +216,18 @@ TEST(Env, LookupMissingThrows) {
 
 TEST(Env, BindOverwrites) {
   z3::context ctx;
+  Context context(ctx, FPMode::IntegerRange);
   mlir::MLIRContext mlirCtx;
   mlirCtx.loadDialect<mlir::triton::TritonDialect>();
 
   auto i32Ty = mlir::IntegerType::get(&mlirCtx, 32);
   auto module = makeModuleWithFunc(mlirCtx, {i32Ty});
-  auto func   = *module->getBody()->op_begin<mlir::triton::FuncOp>();
-  auto arg    = func.getBody().getArguments()[0];
+  auto func = *module->getBody()->op_begin<mlir::triton::FuncOp>();
+  auto arg = func.getBody().getArguments()[0];
 
   Env env;
-  env.bind(arg, makeSymbolicValue(i32Ty, ctx, FPMode::IntegerRange, "old"));
-  env.bind(arg, makeSymbolicValue(i32Ty, ctx, FPMode::IntegerRange, "new"));
+  env.bind(arg, makeSymbolicValue(i32Ty, context, "old"));
+  env.bind(arg, makeSymbolicValue(i32Ty, context, "new"));
 
   EXPECT_EQ(env.size(), 1u);
   auto &s = std::get<Scalar>(env.lookup(arg));
@@ -230,17 +240,18 @@ TEST(Env, BindOverwrites) {
 
 TEST(Env, InitFuncArgs) {
   z3::context ctx;
+  Context context(ctx, FPMode::IntegerRange);
   mlir::MLIRContext mlirCtx;
   mlirCtx.loadDialect<mlir::triton::TritonDialect>();
 
-  auto i32Ty    = mlir::IntegerType::get(&mlirCtx, 32);
+  auto i32Ty = mlir::IntegerType::get(&mlirCtx, 32);
   auto tensorTy = mlir::RankedTensorType::get({8}, i32Ty);
-  auto module   = makeModuleWithFunc(mlirCtx, {i32Ty, tensorTy});
-  auto func     = *module->getBody()->op_begin<mlir::triton::FuncOp>();
-  auto args     = func.getBody().getArguments();
+  auto module = makeModuleWithFunc(mlirCtx, {i32Ty, tensorTy});
+  auto func = *module->getBody()->op_begin<mlir::triton::FuncOp>();
+  auto args = func.getBody().getArguments();
 
   Env env;
-  initFuncArgs(env, args, ctx, FPMode::IntegerRange, "src");
+  initFuncArgs(env, args, context, "src");
 
   EXPECT_EQ(env.size(), 2u);
   EXPECT_TRUE(std::holds_alternative<Scalar>(env.lookup(args[0])));

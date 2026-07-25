@@ -1,4 +1,4 @@
-#include "semantics/State.h"
+#include "builder/mlir/State.h"
 
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -21,7 +21,7 @@ using namespace Semantics;
 static mlir::OwningOpRef<mlir::ModuleOp>
 makeModule(mlir::MLIRContext &ctx, llvm::ArrayRef<mlir::Type> argTypes) {
   mlir::OpBuilder builder(&ctx);
-  auto loc    = builder.getUnknownLoc();
+  auto loc = builder.getUnknownLoc();
   auto module = mlir::ModuleOp::create(loc);
   auto funcTy = builder.getFunctionType(argTypes, {});
   builder.setInsertionPointToEnd(module.getBody());
@@ -35,8 +35,8 @@ makeModule(mlir::MLIRContext &ctx, llvm::ArrayRef<mlir::Type> argTypes) {
 // exercised separately by the handlers.
 static Tensor makePtrTile(z3::context &ctx, DType elem, uint64_t base,
                           uint64_t stride, tile_smt::Shape shape) {
-  z3::expr i  = ctx.bv_const("i", 32);
-  z3::expr b  = ctx.bv_val(base, 64);
+  z3::expr i = ctx.bv_const("i", 32);
+  z3::expr b = ctx.bv_val(base, 64);
   z3::expr st = ctx.bv_val(stride, 64);
   return Tensor{z3::lambda(i, b + st * z3::zext(i, 32)), shape, elem,
                 std::nullopt};
@@ -60,6 +60,7 @@ static Tensor makeConstTile(z3::context &ctx, DType elem, uint32_t val,
 
 TEST(State, InitFromFuncCreatesPerArgMemories) {
   z3::context ctx;
+  Context context(ctx, FPMode::IntegerRange);
   mlir::MLIRContext mlirCtx;
   mlirCtx.loadDialect<mlir::triton::TritonDialect>();
 
@@ -70,10 +71,10 @@ TEST(State, InitFromFuncCreatesPerArgMemories) {
 
   // Function: (ptr, ptr, tensor)
   auto module = makeModule(mlirCtx, {ptrTy, ptrTy, tenTy});
-  auto func   = *module->getBody()->op_begin<mlir::triton::FuncOp>();
-  auto args   = func.getBody().getArguments();
+  auto func = *module->getBody()->op_begin<mlir::triton::FuncOp>();
+  auto args = func.getBody().getArguments();
 
-  State s = State::initFromFunc(args, ctx, FPMode::IntegerRange, "src");
+  State s = State::initFromFunc(args, context, "src");
 
   // Two pointer args → two independent memories.
   EXPECT_EQ(s.memState.mems.size(), 2u);
@@ -92,16 +93,17 @@ TEST(State, InitFromFuncCreatesPerArgMemories) {
 TEST(State, PointerArgsGetIndependentMemories) {
   // Two pointer args must have distinct (SAT for ≠) symbolic memories.
   z3::context ctx;
+  Context context(ctx, FPMode::IntegerRange);
   mlir::MLIRContext mlirCtx;
   mlirCtx.loadDialect<mlir::triton::TritonDialect>();
 
-  auto ptrTy = mlir::triton::PointerType::get(
-      mlir::Float32Type::get(&mlirCtx), 1);
+  auto ptrTy =
+      mlir::triton::PointerType::get(mlir::Float32Type::get(&mlirCtx), 1);
   auto module = makeModule(mlirCtx, {ptrTy, ptrTy});
-  auto func   = *module->getBody()->op_begin<mlir::triton::FuncOp>();
-  auto args   = func.getBody().getArguments();
+  auto func = *module->getBody()->op_begin<mlir::triton::FuncOp>();
+  auto args = func.getBody().getArguments();
 
-  State s = State::initFromFunc(args, ctx, FPMode::IntegerRange, "src");
+  State s = State::initFromFunc(args, context, "src");
 
   auto &mem0 = s.memState.mems.at(s.ptrArgToMem.at(args[0]));
   auto &mem1 = s.memState.mems.at(s.ptrArgToMem.at(args[1]));
@@ -115,16 +117,17 @@ TEST(State, PointerArgsGetIndependentMemories) {
 TEST(State, PtrBaseProvenanceSetOnPointerArgs) {
   // The Ptr bound for a pointer arg must carry the MemId of that arg's memory.
   z3::context ctx;
+  Context context(ctx, FPMode::IntegerRange);
   mlir::MLIRContext mlirCtx;
   mlirCtx.loadDialect<mlir::triton::TritonDialect>();
 
-  auto ptrTy  = mlir::triton::PointerType::get(
-      mlir::Float32Type::get(&mlirCtx), 1);
+  auto ptrTy =
+      mlir::triton::PointerType::get(mlir::Float32Type::get(&mlirCtx), 1);
   auto module = makeModule(mlirCtx, {ptrTy});
-  auto func   = *module->getBody()->op_begin<mlir::triton::FuncOp>();
-  auto arg    = func.getBody().getArguments()[0];
+  auto func = *module->getBody()->op_begin<mlir::triton::FuncOp>();
+  auto arg = func.getBody().getArguments()[0];
 
-  State s = State::initFromFunc({arg}, ctx, FPMode::IntegerRange, "src");
+  State s = State::initFromFunc({arg}, context, "src");
 
   auto &ptr = std::get<Ptr>(s.env.lookup(arg));
   EXPECT_EQ(ptr.base, s.ptrArgToMem.at(arg));
@@ -138,16 +141,17 @@ TEST(State, PtrBaseProvenanceSetOnPointerArgs) {
 
 TEST(State, InterpretEmptyBlockUnchanged) {
   z3::context ctx;
+  Context context(ctx, FPMode::IntegerRange);
   mlir::MLIRContext mlirCtx;
   mlirCtx.loadDialect<mlir::triton::TritonDialect>();
 
-  auto ptrTy  = mlir::triton::PointerType::get(
-      mlir::Float32Type::get(&mlirCtx), 1);
+  auto ptrTy =
+      mlir::triton::PointerType::get(mlir::Float32Type::get(&mlirCtx), 1);
   auto module = makeModule(mlirCtx, {ptrTy});
-  auto func   = *module->getBody()->op_begin<mlir::triton::FuncOp>();
-  auto arg    = func.getBody().getArguments()[0];
+  auto func = *module->getBody()->op_begin<mlir::triton::FuncOp>();
+  auto arg = func.getBody().getArguments()[0];
 
-  State s0 = State::initFromFunc({arg}, ctx, FPMode::IntegerRange, "s");
+  State s0 = State::initFromFunc({arg}, context, "s");
 
   mlir::Block emptyBlock;
   State s1 = s0.interpretBlock(emptyBlock);
@@ -166,19 +170,20 @@ TEST(State, InterpretEmptyBlockUnchanged) {
 TEST(State, EquivalentStatesUNSAT) {
   // Two programs making identical stores to the same pointer arg → UNSAT.
   z3::context ctx;
+  Context srcCtx(ctx, FPMode::IntegerRange);
+  Context tgtCtx(ctx, FPMode::IntegerRange);
   mlir::MLIRContext mlirCtx;
   mlirCtx.loadDialect<mlir::triton::TritonDialect>();
 
-  auto f32Ty  = mlir::Float32Type::get(&mlirCtx);
-  auto i32Ty  = mlir::IntegerType::get(&mlirCtx, 32);
-  auto ptrTy  = mlir::triton::PointerType::get(f32Ty, 1);
+  auto f32Ty = mlir::Float32Type::get(&mlirCtx);
+  auto ptrTy = mlir::triton::PointerType::get(f32Ty, 1);
   auto module = makeModule(mlirCtx, {ptrTy});
-  auto func   = *module->getBody()->op_begin<mlir::triton::FuncOp>();
-  auto arg    = func.getBody().getArguments()[0];
+  auto func = *module->getBody()->op_begin<mlir::triton::FuncOp>();
+  auto arg = func.getBody().getArguments()[0];
 
   // Both programs start from the same initial state.
-  State s1 = State::initFromFunc({arg}, ctx, FPMode::IntegerRange, "src");
-  State s2 = State::initFromFunc({arg}, ctx, FPMode::IntegerRange, "tgt");
+  State s1 = State::initFromFunc({arg}, srcCtx, "src");
+  State s2 = State::initFromFunc({arg}, tgtCtx, "tgt");
 
   MemId id = s1.ptrArgToMem.at(arg); // same MemId in both (minted in arg order)
 
@@ -187,8 +192,8 @@ TEST(State, EquivalentStatesUNSAT) {
   solver.add(s1.memState.mems.at(id).array == s2.memState.mems.at(id).array);
 
   // Both programs store the same value.
-  auto ptrTile  = makePtrTile(ctx, DType::I32, 0x1000, 4, {4});
-  auto valTile  = makeConstTile(ctx, DType::I32, 42, {4});
+  auto ptrTile = makePtrTile(ctx, DType::I32, 0x1000, 4, {4});
+  auto valTile = makeConstTile(ctx, DType::I32, 42, {4});
   auto trueMask = makeMaskTile(ctx, true, {4});
 
   s1.memState.mems.at(id).store(ptrTile, valTile, trueMask);
@@ -200,31 +205,32 @@ TEST(State, EquivalentStatesUNSAT) {
 TEST(State, NonEquivalentStatesSAT) {
   // Two programs storing different values → SAT.
   z3::context ctx;
+  Context srcCtx(ctx, FPMode::IntegerRange);
+  Context tgtCtx(ctx, FPMode::IntegerRange);
   mlir::MLIRContext mlirCtx;
   mlirCtx.loadDialect<mlir::triton::TritonDialect>();
 
-  auto f32Ty  = mlir::Float32Type::get(&mlirCtx);
-  auto i32Ty  = mlir::IntegerType::get(&mlirCtx, 32);
-  auto ptrTy  = mlir::triton::PointerType::get(f32Ty, 1);
+  auto f32Ty = mlir::Float32Type::get(&mlirCtx);
+  auto ptrTy = mlir::triton::PointerType::get(f32Ty, 1);
   auto module = makeModule(mlirCtx, {ptrTy});
-  auto func   = *module->getBody()->op_begin<mlir::triton::FuncOp>();
-  auto arg    = func.getBody().getArguments()[0];
+  auto func = *module->getBody()->op_begin<mlir::triton::FuncOp>();
+  auto arg = func.getBody().getArguments()[0];
 
-  State s1 = State::initFromFunc({arg}, ctx, FPMode::IntegerRange, "src");
-  State s2 = State::initFromFunc({arg}, ctx, FPMode::IntegerRange, "tgt");
+  State s1 = State::initFromFunc({arg}, srcCtx, "src");
+  State s2 = State::initFromFunc({arg}, tgtCtx, "tgt");
 
   MemId id = s1.ptrArgToMem.at(arg);
 
   z3::solver solver(ctx);
   solver.add(s1.memState.mems.at(id).array == s2.memState.mems.at(id).array);
 
-  auto ptrTile  = makePtrTile(ctx, DType::I32, 0x2000, 4, {1});
+  auto ptrTile = makePtrTile(ctx, DType::I32, 0x2000, 4, {1});
   auto trueMask = makeMaskTile(ctx, true, {1});
 
-  s1.memState.mems.at(id).store(ptrTile, makeConstTile(ctx, DType::I32, 10, {1}),
-                                trueMask);
-  s2.memState.mems.at(id).store(ptrTile, makeConstTile(ctx, DType::I32, 20, {1}),
-                                trueMask);
+  s1.memState.mems.at(id).store(
+      ptrTile, makeConstTile(ctx, DType::I32, 10, {1}), trueMask);
+  s2.memState.mems.at(id).store(
+      ptrTile, makeConstTile(ctx, DType::I32, 20, {1}), trueMask);
 
   EXPECT_EQ(checkEquivalence(s1, s2, solver), z3::sat);
 }
@@ -232,20 +238,21 @@ TEST(State, NonEquivalentStatesSAT) {
 TEST(State, TwoOutputArgsCheckedTogether) {
   // Both output memories must match. If one differs → SAT.
   z3::context ctx;
+  Context srcCtx(ctx, FPMode::IntegerRange);
+  Context tgtCtx(ctx, FPMode::IntegerRange);
   mlir::MLIRContext mlirCtx;
   mlirCtx.loadDialect<mlir::triton::TritonDialect>();
 
-  auto f32Ty  = mlir::Float32Type::get(&mlirCtx);
-  auto i32Ty  = mlir::IntegerType::get(&mlirCtx, 32);
-  auto ptrTy  = mlir::triton::PointerType::get(f32Ty, 1);
+  auto f32Ty = mlir::Float32Type::get(&mlirCtx);
+  auto ptrTy = mlir::triton::PointerType::get(f32Ty, 1);
   auto module = makeModule(mlirCtx, {ptrTy, ptrTy});
-  auto func   = *module->getBody()->op_begin<mlir::triton::FuncOp>();
-  auto args   = func.getBody().getArguments();
-  auto argA   = args[0];
-  auto argB   = args[1];
+  auto func = *module->getBody()->op_begin<mlir::triton::FuncOp>();
+  auto args = func.getBody().getArguments();
+  auto argA = args[0];
+  auto argB = args[1];
 
-  State s1 = State::initFromFunc(args, ctx, FPMode::IntegerRange, "src");
-  State s2 = State::initFromFunc(args, ctx, FPMode::IntegerRange, "tgt");
+  State s1 = State::initFromFunc(args, srcCtx, "src");
+  State s2 = State::initFromFunc(args, tgtCtx, "tgt");
 
   MemId idA = s1.ptrArgToMem.at(argA);
   MemId idB = s1.ptrArgToMem.at(argB);

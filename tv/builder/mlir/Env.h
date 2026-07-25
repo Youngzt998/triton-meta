@@ -1,6 +1,7 @@
-#ifndef TRITON_TV_SEMANTICS_ENV_H
-#define TRITON_TV_SEMANTICS_ENV_H
+#ifndef TV_BUILDER_MLIR_ENV_H
+#define TV_BUILDER_MLIR_ENV_H
 
+#include "semantics/Context.h"
 #include "semantics/Types.h"
 #include "semantics/Value.h"
 
@@ -14,7 +15,8 @@
 
 namespace Semantics {
 
-// Adapter-side value model uses the tile-smt core value types directly.
+// Builder-side value model uses the tile-smt core value types directly.
+using tile_smt::Context;
 using tile_smt::DType;
 using tile_smt::FPMode;
 using tile_smt::MemId;
@@ -56,7 +58,9 @@ private:
   std::map<mlir::Value, Value, ValuePtrLess> bindings_;
 };
 
-// Create a fresh unconstrained symbolic Value for a given MLIR type.
+// Create a fresh unconstrained symbolic Value for a given MLIR type by reading
+// the type (adapter side) and calling the core Context builder (freshInput /
+// freshPtr).
 //
 // Scalars  → Scalar with a fresh constant of the appropriate sort.
 // Tensors  → Tensor with a fresh Array(BitVec(32), elem_sort) constant.
@@ -65,14 +69,14 @@ private:
 //
 // `name` is used as the Z3 symbol name; it should be unique per call site
 // (e.g. derived from the SSA value's debug name or argument index).
-Value makeSymbolicValue(mlir::Type type, z3::context &ctx, FPMode fpMode,
+Value makeSymbolicValue(mlir::Type type, Context &context,
                         const std::string &name);
 
 // Populate `env` with fresh symbolic values for each argument of `args`.
 // Names are generated as `<prefix>_arg0`, `<prefix>_arg1`, etc.
-void initFuncArgs(Env &env, mlir::ValueRange args, z3::context &ctx,
-                  FPMode fpMode, const std::string &prefix = "arg");
+void initFuncArgs(Env &env, mlir::ValueRange args, Context &context,
+                  const std::string &prefix = "arg");
 
 } // namespace Semantics
 
-#endif // TRITON_TV_SEMANTICS_ENV_H
+#endif // TV_BUILDER_MLIR_ENV_H

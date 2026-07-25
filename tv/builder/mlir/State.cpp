@@ -1,16 +1,15 @@
-#include "State.h"
+#include "builder/mlir/State.h"
 
-#include "semantics/mlir/AbstractFpShim.h"
-#include "semantics/mlir/ArithOps.h"
-#include "semantics/mlir/TritonOps.h"
+#include "builder/mlir/ArithOps.h"
+#include "builder/mlir/DTypeOf.h"
+#include "builder/triton/TritonOps.h"
 
-#include "triton/Dialect/Triton/IR/Types.h"
 #include "mlir/IR/Dialect.h"
+#include "triton/Dialect/Triton/IR/Types.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/ErrorHandling.h"
 
-#include <memory>
 #include <optional>
 
 using namespace Semantics;
@@ -21,22 +20,20 @@ using namespace Semantics;
 
 State::State(Env env, MemState memState,
              std::map<mlir::Value, MemId, ValuePtrLess> ptrArgToMem,
-             z3::context &ctx, FPMode fpMode,
-             std::shared_ptr<AbstractFpRegistry> fpReg)
+             Context &context)
     : env(std::move(env)), memState(std::move(memState)),
-      ptrArgToMem(std::move(ptrArgToMem)),
-      ctx(ctx), fpMode(fpMode), fpReg(std::move(fpReg)) {}
+      ptrArgToMem(std::move(ptrArgToMem)), context(context), ctx(context.z3()),
+      fpMode(context.mode()) {}
 
 //===----------------------------------------------------------------------===//
 // initFromFunc
 //===----------------------------------------------------------------------===//
 
-State State::initFromFunc(mlir::ValueRange args, z3::context &ctx,
-                          FPMode fpMode, const std::string &prefix) {
+State State::initFromFunc(mlir::ValueRange args, Context &context,
+                          const std::string &prefix) {
   Env env;
   MemState memState;
   std::map<mlir::Value, MemId, ValuePtrLess> ptrArgToMem;
-  auto fpReg = std::make_shared<AbstractFpRegistry>(ctx);
 
   // MemIds are minted in argument order, so the two programs' pointer
   // arguments pair up by position (src arg i ↔ tgt arg i get the same MemId).
@@ -49,21 +46,21 @@ State State::initFromFunc(mlir::ValueRange args, z3::context &ctx,
       // Pointer argument: mint a MemId, bind a symbolic address in env, and
       // create an independent Memory keyed by that MemId.
       MemId id = static_cast<MemId>(nextMemId++);
-      z3::expr addr = ctx.bv_const(symName.c_str(), 64);
-      env.bind(arg, Ptr{addr, dtypeOf(ptrTy.getPointeeType()), id});
+      env.bind(arg,
+               context.freshPtr(dtypeOf(ptrTy.getPointeeType()), id, symName));
       ptrArgToMem[arg] = id;
 
       std::string memName = prefix + "_mem_arg" + std::to_string(idx);
-      memState.mems.emplace(std::piecewise_construct,
-                            std::forward_as_tuple(id),
-                            std::forward_as_tuple(ctx, fpMode, memName));
+      memState.mems.emplace(
+          std::piecewise_construct, std::forward_as_tuple(id),
+          std::forward_as_tuple(context.z3(), context.mode(), memName));
     } else {
-      env.bind(arg, makeSymbolicValue(arg.getType(), ctx, fpMode, symName));
+      env.bind(arg, makeSymbolicValue(arg.getType(), context, symName));
     }
   }
 
   return State(std::move(env), std::move(memState), std::move(ptrArgToMem),
-               ctx, fpMode, std::move(fpReg));
+               context);
 }
 
 //===----------------------------------------------------------------------===//
@@ -71,9 +68,9 @@ State State::initFromFunc(mlir::ValueRange args, z3::context &ctx,
 //===----------------------------------------------------------------------===//
 
 State State::interpretBlock(mlir::Block &block) const {
-  // State is not copy/move-assignable (Memory holds z3::context by reference).
-  // Use optional::emplace to in-place construct each successor via State's
-  // move constructor, avoiding any assignment operator.
+  // State is not copy/move-assignable (it holds references). Use
+  // optional::emplace to in-place construct each successor via State's move
+  // constructor, avoiding any assignment operator.
   const State *current = this;
   std::optional<State> buf;
   for (mlir::Operation &op : block) {
@@ -91,35 +88,58 @@ State State::interpretOp(mlir::Operation *op) const {
   llvm::StringRef opName = op->getName().getStringRef();
 
   // --- Structured control flow ---
-  if (opName == "scf.if")    return interpretIf(op);
-  if (opName == "scf.for")   return interpretFor(op);
-  if (opName == "scf.while") return interpretWhile(op);
+  if (opName == "scf.if")
+    return interpretIf(op);
+  if (opName == "scf.for")
+    return interpretFor(op);
+  if (opName == "scf.while")
+    return interpretWhile(op);
 
-  // --- Triton core ops ---
-  if (opName == "tt.get_program_id") return handleTtGetProgramId(*this, op);
-  if (opName == "tt.make_range")     return handleTtMakeRange(*this, op);
-  if (opName == "tt.splat")          return handleTtSplat(*this, op);
-  if (opName == "tt.addptr")         return handleTtAddPtr(*this, op);
-  if (opName == "tt.load")           return handleTtLoad(*this, op);
-  if (opName == "tt.store")          return handleTtStore(*this, op);
-  if (opName == "tt.reduce")         return handleTtReduce(*this, op);
+  // --- Triton core ops (builder/triton) ---
+  if (opName == "tt.get_program_id")
+    return handleTtGetProgramId(*this, op);
+  if (opName == "tt.make_range")
+    return handleTtMakeRange(*this, op);
+  if (opName == "tt.splat")
+    return handleTtSplat(*this, op);
+  if (opName == "tt.addptr")
+    return handleTtAddPtr(*this, op);
+  if (opName == "tt.load")
+    return handleTtLoad(*this, op);
+  if (opName == "tt.store")
+    return handleTtStore(*this, op);
+  if (opName == "tt.reduce")
+    return handleTtReduce(*this, op);
 
   // --- Arithmetic ops ---
-  if (opName == "arith.constant") return handleArithConstant(*this, op);
-  if (opName == "arith.addi")     return handleArithAddi(*this, op);
-  if (opName == "arith.subi")     return handleArithSubi(*this, op);
-  if (opName == "arith.muli")     return handleArithMuli(*this, op);
-  if (opName == "arith.andi")     return handleArithAndi(*this, op);
-  if (opName == "arith.extsi")    return handleArithExtsi(*this, op);
-  if (opName == "arith.cmpi")     return handleArithCmpi(*this, op);
-  if (opName == "arith.addf")     return handleArithAddf(*this, op);
-  if (opName == "arith.subf")     return handleArithSubf(*this, op);
-  if (opName == "arith.mulf")     return handleArithMulf(*this, op);
-  if (opName == "arith.divf")     return handleArithDivf(*this, op);
-  if (opName == "arith.maxnumf")  return handleArithMaxnumf(*this, op);
+  if (opName == "arith.constant")
+    return handleArithConstant(*this, op);
+  if (opName == "arith.addi")
+    return handleArithAddi(*this, op);
+  if (opName == "arith.subi")
+    return handleArithSubi(*this, op);
+  if (opName == "arith.muli")
+    return handleArithMuli(*this, op);
+  if (opName == "arith.andi")
+    return handleArithAndi(*this, op);
+  if (opName == "arith.extsi")
+    return handleArithExtsi(*this, op);
+  if (opName == "arith.cmpi")
+    return handleArithCmpi(*this, op);
+  if (opName == "arith.addf")
+    return handleArithAddf(*this, op);
+  if (opName == "arith.subf")
+    return handleArithSubf(*this, op);
+  if (opName == "arith.mulf")
+    return handleArithMulf(*this, op);
+  if (opName == "arith.divf")
+    return handleArithDivf(*this, op);
+  if (opName == "arith.maxnumf")
+    return handleArithMaxnumf(*this, op);
 
   // --- math dialect ---
-  if (opName == "math.exp")       return handleMathExp(*this, op);
+  if (opName == "math.exp")
+    return handleMathExp(*this, op);
 
   // --- Function terminators — no effect on state ---
   if (opName == "tt.return" || opName == "func.return")
@@ -135,15 +155,16 @@ State State::interpretOp(mlir::Operation *op) const {
 
 State State::interpretIf(mlir::Operation *op) const {
   // Plan:
-  //   z3::expr cond = std::get<Z3Scalar>(env.lookup(op->getOperand(0))).expr;
+  //   z3::expr cond = std::get<Scalar>(env.lookup(op->getOperand(0))).e;
   //   State thenState = interpretBlock(ifOp.getThenRegion().front());
   //   State elseState = interpretBlock(ifOp.getElseRegion().front());
   //
   //   // Merge env: for each result r_i,
   //   //   merged.env[r_i] = ite(cond, thenState.env[r_i], elseState.env[r_i])
   //   // Merge per-arg memories:
-  //   //   merged.ptrMems[a].array =
-  //   //       ite(cond, thenState.ptrMems[a].array, elseState.ptrMems[a].array)
+  //   //   merged.memState[a].array =
+  //   //       ite(cond, thenState.memState[a].array,
+  //   elseState.memState[a].array)
   (void)op;
   llvm_unreachable("interpretIf: not yet implemented");
 }

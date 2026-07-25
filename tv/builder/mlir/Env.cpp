@@ -1,6 +1,6 @@
-#include "Env.h"
+#include "builder/mlir/Env.h"
 
-#include "semantics/mlir/AbstractFpShim.h"
+#include "builder/mlir/DTypeOf.h"
 
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Value.h"
@@ -26,59 +26,47 @@ const Value &Env::lookup(mlir::Value val) const {
   return it->second;
 }
 
-bool Env::contains(mlir::Value val) const {
-  return bindings_.count(val) > 0;
-}
+bool Env::contains(mlir::Value val) const { return bindings_.count(val) > 0; }
 
 size_t Env::size() const { return bindings_.size(); }
 
 //===----------------------------------------------------------------------===//
-// makeSymbolicValue
+// makeSymbolicValue — read the MLIR type (adapter), build via core Context
 //===----------------------------------------------------------------------===//
 
-Value Semantics::makeSymbolicValue(mlir::Type type, z3::context &ctx,
-                                   FPMode fpMode, const std::string &name) {
+Value Semantics::makeSymbolicValue(mlir::Type type, Context &context,
+                                   const std::string &name) {
   // Ranked tensor → Tensor: fresh Array(BitVec(32), elem_sort)
   if (auto tensorTy = llvm::dyn_cast<mlir::RankedTensorType>(type)) {
-    mlir::Type elemTy = tensorTy.getElementType();
-    DType    elem     = dtypeOf(elemTy);
-    z3::sort elemSort = tile_smt::getElemSort(ctx, elem, fpMode);
-    z3::sort arrSort  = ctx.array_sort(ctx.bv_sort(32), elemSort);
-    z3::expr arr      = ctx.constant(name.c_str(), arrSort);
+    DType elem = dtypeOf(tensorTy.getElementType());
     tile_smt::Shape shape(tensorTy.getShape().begin(),
                           tensorTy.getShape().end());
-    return Tensor{arr, std::move(shape), elem, std::nullopt};
+    return context.freshInput(elem, shape, name);
   }
 
   // Triton pointer (scalar) → Ptr: fresh BitVec(64)
   // base is a placeholder (MemId{0}) here; callers that own the memory
   // (e.g. State::initFromFunc) set the real MemId after construction.
-  if (auto ptrTy = llvm::dyn_cast<mlir::triton::PointerType>(type)) {
-    z3::expr addr = ctx.bv_const(name.c_str(), 64);
-    return Ptr{addr, dtypeOf(ptrTy.getPointeeType()), MemId{0}};
-  }
+  if (auto ptrTy = llvm::dyn_cast<mlir::triton::PointerType>(type))
+    return context.freshPtr(dtypeOf(ptrTy.getPointeeType()), MemId{0}, name);
 
-  // Integer and float scalars → Scalar
-  if (llvm::isa<mlir::IntegerType>(type) || llvm::isa<mlir::FloatType>(type)) {
-    DType    ty   = dtypeOf(type);
-    z3::sort sort = tile_smt::getElemSort(ctx, ty, fpMode);
-    z3::expr val  = ctx.constant(name.c_str(), sort);
-    return Scalar{val, ty};
-  }
+  // Integer and float scalars → Scalar (empty shape → freshInput returns
+  // Scalar)
+  if (llvm::isa<mlir::IntegerType>(type) || llvm::isa<mlir::FloatType>(type))
+    return context.freshInput(dtypeOf(type), tile_smt::Shape{}, name);
 
   // Fallback: treat as opaque 64-bit pointer (e.g. unrecognized dialect types).
-  z3::expr addr = ctx.bv_const(name.c_str(), 64);
-  return Ptr{addr, DType::Ptr, MemId{0}};
+  return context.freshPtr(DType::Ptr, MemId{0}, name);
 }
 
 //===----------------------------------------------------------------------===//
 // initFuncArgs
 //===----------------------------------------------------------------------===//
 
-void Semantics::initFuncArgs(Env &env, mlir::ValueRange args, z3::context &ctx,
-                             FPMode fpMode, const std::string &prefix) {
+void Semantics::initFuncArgs(Env &env, mlir::ValueRange args, Context &context,
+                             const std::string &prefix) {
   for (auto [idx, arg] : llvm::enumerate(args)) {
     std::string symName = prefix + "_arg" + std::to_string(idx);
-    env.bind(arg, makeSymbolicValue(arg.getType(), ctx, fpMode, symName));
+    env.bind(arg, makeSymbolicValue(arg.getType(), context, symName));
   }
 }

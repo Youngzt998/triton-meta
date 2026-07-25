@@ -1,8 +1,8 @@
-#ifndef TRITON_TV_SEMANTICS_STATE_H
-#define TRITON_TV_SEMANTICS_STATE_H
+#ifndef TV_BUILDER_MLIR_STATE_H
+#define TV_BUILDER_MLIR_STATE_H
 
-#include "semantics/mlir/AbstractFpShim.h"
-#include "semantics/Env.h"
+#include "builder/mlir/Env.h"
+#include "semantics/Context.h"
 #include "semantics/Memory.h"
 
 #include "mlir/IR/Block.h"
@@ -10,11 +10,11 @@
 #include "mlir/IR/ValueRange.h"
 
 #include <map>
-#include <memory>
 #include <z3++.h>
 
 namespace Semantics {
 
+using tile_smt::Context;
 using tile_smt::Memory;
 using tile_smt::MemState;
 
@@ -32,9 +32,15 @@ using tile_smt::MemState;
 //
 // Non-pointer arguments (scalars, tensors passed by value) live only in Env.
 //
+// The State is a builder-side DRIVER: it holds a reference to the core Context
+// (which owns the z3::context, the FP model, and the FPMode) plus the
+// MLIR-keyed Env / ptrArgToMem, and walks a tt.func calling the core builder
+// API. All derived states share the same Context by reference, so FP function
+// names and axiom emission stay consistent.
+//
 // All interpret* methods are pure: they return an updated State and do not
 // mutate *this. State is copy-constructible and move-constructible, but NOT
-// copy/move-assignable (Memory holds z3::context by reference).
+// copy/move-assignable (it holds references — the Context and z3::context).
 class State {
 public:
   Env env;
@@ -49,21 +55,19 @@ public:
 
   // Future: Memory sharedMem;  // for TTGIR ttg.local_alloc / ttg.local_store
 
-  // Shared Z3 context for all expressions in this state.
+  // The core builder for this interpretation run. Owns the z3::context, the FP
+  // model (AbstractFpRegistry), and the FPMode. Shared by reference across all
+  // derived states.
+  Context &context;
+
+  // Convenience references into `context` so handlers can keep using s.ctx /
+  // s.fpMode. They alias context.z3() / context.mode().
   z3::context &ctx;
-
-  // FP encoding mode for this interpretation run.
   FPMode fpMode;
-
-  // Registry of AbstractFp objects (uninterpreted FP function declarations).
-  // Shared across all States derived from the same initFromFunc call so that
-  // axiom emission is idempotent and function names are consistent.
-  std::shared_ptr<AbstractFpRegistry> fpReg;
 
   State(Env env, MemState memState,
         std::map<mlir::Value, MemId, ValuePtrLess> ptrArgToMem,
-        z3::context &ctx, FPMode fpMode,
-        std::shared_ptr<AbstractFpRegistry> fpReg);
+        Context &context);
 
   // Factory: build an initial State from a function's argument list.
   //
@@ -77,8 +81,8 @@ public:
   // distinct prefixes ("src", "tgt") so their Z3 symbols are distinguishable.
   // MemIds are minted in argument order, so the two programs' pointer arguments
   // pair up by position (src arg i ↔ tgt arg i get the same MemId).
-  static State initFromFunc(mlir::ValueRange args, z3::context &ctx,
-                            FPMode fpMode, const std::string &prefix = "arg");
+  static State initFromFunc(mlir::ValueRange args, Context &context,
+                            const std::string &prefix = "arg");
 
   // Interpret a single MLIR operation and return the updated state.
   // Dispatches on dialect/op name. Unimplemented ops call llvm_unreachable.
@@ -117,4 +121,4 @@ z3::check_result checkEquivalence(const State &s1, const State &s2,
 
 } // namespace Semantics
 
-#endif // TRITON_TV_SEMANTICS_STATE_H
+#endif // TV_BUILDER_MLIR_STATE_H
