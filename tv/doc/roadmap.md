@@ -87,9 +87,7 @@ our SMT solver** (today's `permute_passes.py` is the seed of this line).
 
 **Sub-lines (mirror T):**
 - **V1** = TTIR-level static validation; starts once **M1** (TTIR modeling) is
-  done. **V2** = TTGIR-level; needs **M2**. (V1↔T1↔TTIR, V2↔T2↔TTGIR.)
-  > ⚠️ Confirm: you said "M1 = ttgir" — recorded here as the **TTIR level / M1**
-  > to match T1 and the M numbering; correct me if you meant the TTGIR level.
+  done. **V2** = TTGIR-level; needs **M2**. (V1↔T1↔TTIR, V2↔T2↔TTGIR — confirmed.)
 - Precision sensitivity is set by the **FP mode**, not by excluding passes:
   Abstract (a) ignores rounding, so precision-trading passes still look
   equivalent; FPA (c) would see the difference. Pick the mode per experiment.
