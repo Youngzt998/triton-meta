@@ -33,7 +33,7 @@ add_subdirectory(semantics)
 #   tile-smt-builder-triton  — Triton tt.* handlers (links builder-mlir)
 # Both compile WITHOUT -fno-exceptions/-fno-rtti (the default; we do NOT apply
 # TRITON_DISABLE_EH_RTTI_FLAGS to them) so std::throw (Env::lookup) and z3++
-# exceptions work — matching the old TritonTVSemantics.
+# exceptions work.
 # ---------------------------------------------------------------------------
 add_subdirectory(builder/mlir)
 add_subdirectory(builder/triton)

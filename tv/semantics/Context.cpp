@@ -5,10 +5,10 @@
 
 // Core (tile-smt) — MLIR-free: use std exceptions instead of llvm_unreachable.
 //
-// All op-expression bodies were lifted VERBATIM from the pre-M0 handlers in
-// semantics/mlir/{ArithOps,TritonOps}.cpp. The Z3 constant names inside the
-// built lambdas (__ci/__bi/__ei/__ri/__si/__ai/__ue/__dense_base/...) are kept
-// unchanged so the SMT encoding is byte-for-byte identical.
+// All op-expression bodies were lifted VERBATIM from the MLIR handlers in
+// builder/{mlir,triton}/{ArithOps,TritonOps}.cpp. The Z3 constant names inside
+// the built lambdas (__ci/__bi/__ei/__ri/__si/__ai/__ue/__dense_base/...) are
+// kept unchanged so the SMT encoding is byte-for-byte identical.
 
 using namespace tile_smt;
 

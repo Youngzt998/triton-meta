@@ -12,7 +12,7 @@
 get_property(triton_libs GLOBAL PROPERTY TRITON_LIBS)
 
 # Compiled WITHOUT -fno-exceptions/-fno-rtti so std::throw (Env::lookup) and the
-# z3++ exceptions work normally — same as the old TritonTVSemantics target.
+# z3++ exceptions work normally.
 add_library(tile-smt-builder-mlir STATIC
   DTypeOf.cpp
   Env.cpp
