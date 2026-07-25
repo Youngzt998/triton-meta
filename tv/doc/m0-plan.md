@@ -25,6 +25,16 @@ Invariants that gate every sub-step:
    store lambda; State.cpp:159-183 witness) — verdicts/timing don't regress.
 5. The `tv/triton-tv` binary keeps its build path (`<build>/tv/triton-tv`) so
    `tv/eval/common.py:86-87` still finds it.
+6. **`tv/` stays self-contained** — M0 touches *only* files under `tv/`. tv's
+   sole hook into triton is the single line `add_subdirectory(tv)` in root
+   `CMakeLists.txt:475` (added long before M0; verified the *only* tv intrusion
+   — the other non-`tv/` diffs vs `main` are this fork's unrelated work:
+   `bitequiv/`, ConSan, CI, README). Gate every sub-step:
+   `git diff --name-only <M0-base> HEAD -- ':(exclude)tv/'` is **empty**
+   (`<M0-base>` = the pre-M0 commit; `fa4f7a37f` right after Step 0). Everything
+   M0 adds — `semantics/`, `builder/`, `bin/`, and all `CMakeLists.txt` — lives
+   inside `tv/`. So after a hypothetical rebase onto `main`, tv's contribution is
+   `tv/` (new files) plus that one pre-existing `add_subdirectory(tv)` line.
 
 **Builder structure (design refinement).** The "adapter" is organized as a
 **builder layer** under `tv/builder/`: `builder/mlir/` (shared by all
@@ -354,3 +364,7 @@ header / `using`-alias so intermediate steps still compile and stay green.
 6. tile-smt test exes link only `tile-smt`(+Z3), run with no MLIR present.
 7. No `mlir::` in `semantics/Context.h` (all params neutral).
 8. `triton-tv <a> <b>` exit codes unchanged (0/1/2), solver timing not regressed.
+9. **No triton-side changes** — `git diff --name-only <M0-base> HEAD --
+   ':(exclude)tv/'` is empty; tv's only hook into triton stays the single
+   pre-existing `add_subdirectory(tv)` line in root `CMakeLists.txt`. (Checked
+   after each sub-step, not just at the end.)
