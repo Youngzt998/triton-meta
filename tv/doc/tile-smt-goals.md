@@ -56,8 +56,10 @@ and "found & reproduced a real miscompile" is the bar for the first deliverable.
   `tile-smt` memory/access interface must leave hooks for **multiple tiers
   (global/on-chip) + region access + DMA-style copy** now (even though M0 only
   implements global + linear-pointer), or this layer gets blocked later.
-- **adapters** (one per language, living in that language's own tree): Triton
-  adapter first; others later. An adapter is thin: IR walk → builder calls.
+- **builders** (`tile-smt/builder/`, one per language): `builder/mlir` (shared
+  MLIR tools + `arith`/`math`/`scf`) and `builder/triton` (`tt.*` + entry) now;
+  more later. A builder is thin: IR walk → core builder-API calls. Long-term goal:
+  a builder for **every** supported language, modeling onto tile-smt/tile-gpu-smt.
 
 ## 4. Capabilities tile-smt provides
 

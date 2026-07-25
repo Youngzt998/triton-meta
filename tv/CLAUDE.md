@@ -65,8 +65,9 @@ The libraries and Triton-as-client:
 - **(future) `tile-accel-smt`** — non-GPU hardware (TPU/Mosaic, Trainium/NKI):
   DMA+semaphores, scratchpad placement, systolic staging.
 
-A thin per-language **adapter** walks that language's IR and calls the lib's
-builder API to encode + check equivalence. Triton's own **TTIR ≈ generic /
+Per-language **builders** (under `tile-smt/builder/`: `builder/mlir` shared by all
+MLIR langs incl. `arith`/`math`/`scf`, `builder/triton` for `tt.*` + entry) walk a
+language's IR and call the lib's builder API to encode + check equivalence. Triton's own **TTIR ≈ generic /
 TTGIR ≈ GPU** split is the intended library cut; cross-language evidence (TileLang,
 Pallas/Mosaic, IREE Linalg, Hidet, Helion, NKI) is in
 `tv/doc/tensor-languages-survey.md`.

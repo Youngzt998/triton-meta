@@ -142,12 +142,37 @@ The generic parts of `scf.if`/`scf.for` are hardware-neutral and belong in core:
 The adapter supplies the bodies (by walking regions); the core supplies the merge
 / unroll primitives.
 
-## Adapter (triton) shape
-- `Env`: `map<mlir::Value, Value, ValuePtrLess>` — stays in the adapter.
-- `mlir::Value(ptr arg) → MemId` map — adapter-owned.
-- `walk(tt.func)`: for each op, read operands via `Env`, read attrs from the
-  `mlir::Operation`, call the matching `Context`/memory builder, bind results.
-- `State` becomes an adapter driver holding `Env` + `MemState` + a `Context&`.
+## Builder layer — per-language modeling onto tile-smt
+
+The core (`tile-smt`, MLIR-free, Z3-only) is driven by **builders** (what earlier
+drafts called the "adapter") — one per source language — that walk that language's
+IR and model it onto the core via the `Context`/memory builder API. All builders
+live under **`tile-smt/builder/`**:
+
+- **`builder/mlir/`** — shared tools for **all MLIR-based languages**:
+  `dtypeOf(mlir::Type)→DType`, `Env` (`map<mlir::Value, Value, ValuePtrLess>`),
+  `MemId` minting + `map<mlir::Value, MemId>`, the block-walk driver
+  (`optional::emplace` threading), and handlers for the **standard MLIR dialects**
+  every MLIR frontend reuses: `arith.*`, `math.*`, `scf.*`.
+- **`builder/triton/`** — **Triton-specific**: handlers for `tt.*` ops
+  (make_range/splat/addptr/load/store/reduce/dot/program_id/…) built on top of
+  builder/mlir, plus the Triton entry (parse `.ttir`, load Triton dialects).
+- future: `builder/tilelang/` (non-MLIR, TVM), `builder/pallas/`, … — each models
+  its own IR onto tile-smt / tile-gpu-smt.
+
+`State` is a builder-side driver (holds `Context&` + `MemState` + `Env` + the
+`mlir::Value→MemId` map); the walk/dispatch + standard-dialect handlers live in
+builder/mlir, the `tt.*` handlers in builder/triton.
+
+Build targets (layered so the core stays MLIR-free):
+- `tile-smt` (core) — links **only Z3**.
+- `tile-smt-builder-mlir` — core + MLIR (`arith`/`math`/`scf` + shared tools).
+- `tile-smt-builder-triton` — core + builder-mlir + Triton dialect.
+- `triton-tv` (tool) — links builder-triton; binary path unchanged.
+
+**Long-term goal of the builder layer:** a builder for *every* language we
+support, each modeling onto tile-smt (or tile-gpu-smt). Only builders touch a
+language / IR framework; the core never does.
 
 ## Migration steps (each keeps eval + unit tests green)
 1. Create `tv/tile-smt/` (namespace `tile_smt`) + `DType`. Move `AbstractFp`

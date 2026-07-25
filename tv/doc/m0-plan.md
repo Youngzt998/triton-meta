@@ -26,6 +26,18 @@ Invariants that gate every sub-step:
 5. The `tv/triton-tv` binary keeps its build path (`<build>/tv/triton-tv`) so
    `tv/eval/common.py:86-87` still finds it.
 
+**Builder structure (design refinement).** The "adapter" is organized as a
+**builder layer** under `tile-smt/builder/`: `builder/mlir/` (shared by all
+MLIR-based languages — `dtypeOf`, `Env`, `MemId` mapping, the block-walk driver,
+and the standard `arith`/`math`/`scf` handlers) and `builder/triton/` (Triton's
+`tt.*` handlers + the `.ttir` entry). So `tv/semantics/` does not merely "shrink
+to an adapter" — its contents split into the **core** (`tile-smt/`) and these
+**builders**. See `tile-smt-design.md` §"Builder layer". Build targets gain
+`tile-smt-builder-mlir` (core+MLIR) and `tile-smt-builder-triton`
+(core+builder-mlir+Triton). In the tables below, read "adapter" as the builder
+layer, and split adapter-side rows: `Env`/`dtypeOf`/walk-driver/`arith`,`math`,
+`scf` → `builder/mlir`; `tt.*` handlers + entry → `builder/triton`.
+
 ---
 
 ## 1. Directory layout + build
@@ -44,12 +56,15 @@ tv/
       Equivalence.h         # checkEquivalence(MemState, MemState, pairing, solver)
     lib/  Types.cpp FpModel.cpp AbstractFp.cpp Memory.cpp Context.cpp Equivalence.cpp
     test/ SimpleTest.h  AbstractFpTest.cpp MemoryTest.cpp ContextTest.cpp EquivalenceTest.cpp  (Z3-only, NO MLIR)
-    CMakeLists.txt          # target linking ONLY z3
-  semantics/                # SHRINKS to the Triton adapter
-    Env.{h,cpp}             # stays: map<mlir::Value, tile_smt::Value>
-    State.{h,cpp}           # -> adapter driver: Context + MemState + Env + MemId map
-    mlir/{ArithOps,TritonOps}.{h,cpp}   # thin: read operands/attrs -> Context builder calls
-  triton-tv.cpp             # adapter entry (unchanged location)
+    CMakeLists.txt          # core target: links ONLY z3
+    builder/                # per-language builders (model a language onto the core)
+      mlir/                 # shared for ALL MLIR langs: dtypeOf, Env(mlir::Value->Value),
+                            #   MemId mapping, block-walk driver, arith.*/math.*/scf.* handlers
+        CMakeLists.txt      # target tile-smt-builder-mlir (core + MLIR)
+      triton/               # Triton-specific: tt.* handlers + triton entry (parse .ttir)
+        CMakeLists.txt      # target tile-smt-builder-triton (core + builder-mlir + Triton dialect)
+  triton-tv.cpp             # tool: links tile-smt-builder-triton (binary path unchanged)
+  # (tv/semantics/ goes away — its contents split into core + builder/{mlir,triton})
 ```
 `include/tile-smt/` prefix means adapter code writes `#include "tile-smt/Context.h"`
 — a namespace that survives the eventual repo split. `tile-gpu-smt/` is deferred
@@ -91,12 +106,15 @@ builds `mlir::Float32Type::get(&mlirCtx)`, `MemoryModelTest.cpp:57-60` builds
 `mlir::IntegerType`/`Float32Type` → become `DType::F32`/`DType::I32`. This is the
 proof the core compiles/runs without MLIR.
 
-### 1.4 The Triton adapter links both
-`TritonTVSemantics` (adapter) adds `tile-smt` to `target_link_libraries`
-(`tv/CMakeLists.txt:41-45`) alongside `${triton_libs} MLIRIR MLIRSupport`.
-`triton-tv` keeps linking `TritonTVSemantics` (+MLIR) and transitively gets
-`tile-smt`. The `tv/test/validator` exes that compile `semantics/*.cpp` directly
-(`tv/test/validator/CMakeLists.txt:47-89`) must also add `tile-smt` to `LIBS`.
+### 1.4 The builder targets link core + MLIR
+Replace today's single `TritonTVSemantics` (`tv/CMakeLists.txt:31-52`) with two
+builder targets: **`tile-smt-builder-mlir`** (links `tile-smt` + `MLIRIR`
+`MLIRSupport` + `${triton_libs}` as needed for arith/math/scf + shared tools) and
+**`tile-smt-builder-triton`** (links `tile-smt-builder-mlir` + Triton dialect libs
+for `tt.*`). `triton-tv` links `tile-smt-builder-triton` (transitively core+MLIR),
+keeping its target name/output path. The `tv/test/validator` exes that need MLIR
+link the relevant builder target(s); the Z3-only `tile-smt` tests link only
+`tile-smt`. (Only the core is MLIR-free; builders deliberately depend on MLIR.)
 
 ---
 
