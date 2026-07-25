@@ -13,16 +13,16 @@
 
 namespace tile_smt {
 
-// Scalar data type. Neutral replacement for mlir::Type in the core (a builder
-// maps its own IR types, e.g. mlir::Type, onto DType).
+// Scalar data type. Neutral replacement for a source IR's scalar type in the
+// core (a builder maps its own IR types onto DType).
 enum class DType { I1, I8, I16, I32, I64, F16, BF16, F32, F64, Ptr };
 
 // Tensor shape (row-major dimensions).
 using Shape = std::vector<int64_t>;
 
 // Opaque handle identifying which memory / address space a pointer belongs to.
-// A (language-specific) builder maps its own provenance — e.g. the mlir::Value
-// of a pointer kernel argument — onto a MemId; the core never sees source IR.
+// A (language-specific) builder maps its own provenance — e.g. the SSA value of
+// a pointer kernel argument — onto a MemId; the core never sees source IR.
 enum class MemId : uint32_t {};
 
 // Floating-point encoding strategy (pluggable). Only Abstract is implemented;

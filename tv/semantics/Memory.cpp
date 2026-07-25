@@ -1,22 +1,27 @@
-#include "Memory.h"
+#include "semantics/Memory.h"
 
-#include "mlir/IR/BuiltinTypes.h"
-#include "llvm/Support/Casting.h"
-#include "llvm/Support/ErrorHandling.h"
+#include <stdexcept>
 
-using namespace Semantics;
+// Core must stay free of MLIR/LLVM: switch on the neutral DType and use std
+// exceptions instead of llvm_unreachable.
+
+using namespace tile_smt;
 
 //===----------------------------------------------------------------------===//
 // Internal helpers
 //===----------------------------------------------------------------------===//
 
-// Returns {expBits, sigBits} for a float type (sigBits includes the hidden bit).
-static std::pair<unsigned, unsigned> getFPExpSigBits(mlir::FloatType ft) {
-  if (llvm::isa<mlir::Float16Type>(ft))  return {5, 11};
-  if (llvm::isa<mlir::BFloat16Type>(ft)) return {8, 8};
-  if (llvm::isa<mlir::Float32Type>(ft))  return {8, 24};
-  if (llvm::isa<mlir::Float64Type>(ft))  return {11, 53};
-  llvm_unreachable("unsupported float type");
+// Returns true for the float DTypes.
+static bool isFloat(DType ty) {
+  switch (ty) {
+  case DType::F16:
+  case DType::BF16:
+  case DType::F32:
+  case DType::F64:
+    return true;
+  default:
+    return false;
+  }
 }
 
 // Convert a Z3 value to a bitvector for writing into the byte-addressable heap.
@@ -25,61 +30,15 @@ static std::pair<unsigned, unsigned> getFPExpSigBits(mlir::FloatType ft) {
 //   integer (i>=8)             -> pass through
 //   i1                         -> BitVec(1)
 //   pointer                    -> pass through (already BitVec(64))
-static z3::expr toBV(z3::context &ctx, z3::expr val,
-                     mlir::Type type, FPMode mode) {
-  if (llvm::isa<mlir::FloatType>(type)) {
+static z3::expr toBV(z3::context &ctx, z3::expr val, DType ty, FPMode mode) {
+  if (isFloat(ty)) {
     if (mode == FPMode::FPA)
       return z3::expr(ctx, Z3_mk_fpa_to_ieee_bv(ctx, val));
     return val; // Abstract / IntegerRange: already BitVec(width)
   }
-  if (auto intTy = llvm::dyn_cast<mlir::IntegerType>(type)) {
-    if (intTy.getWidth() == 1)
-      return z3::ite(val, ctx.bv_val(1, 1), ctx.bv_val(0, 1));
-    return val;
-  }
-  return val; // pointers: already BitVec(64)
-}
-
-//===----------------------------------------------------------------------===//
-// Public API
-//===----------------------------------------------------------------------===//
-
-z3::sort Semantics::getElemSort(z3::context &ctx, mlir::Type type,
-                                FPMode fpMode) {
-  if (auto intTy = llvm::dyn_cast<mlir::IntegerType>(type)) {
-    if (intTy.getWidth() == 1)
-      return ctx.bool_sort();
-    return ctx.bv_sort(intTy.getWidth());
-  }
-  if (auto floatTy = llvm::dyn_cast<mlir::FloatType>(type)) {
-    switch (fpMode) {
-    case FPMode::Abstract:
-      // FP values are opaque BV ids; arithmetic is performed by uninterpreted
-      // functions declared in AbstractFp.h. The carrier matches the IEEE
-      // bit-width so values pass through the byte heap unchanged.
-      return ctx.bv_sort(floatTy.getWidth());
-    case FPMode::Real:
-      return ctx.real_sort();
-    case FPMode::IntegerRange:
-      return ctx.bv_sort(floatTy.getWidth());
-    case FPMode::FPA: {
-      auto [expBits, sigBits] = getFPExpSigBits(floatTy);
-      return ctx.fpa_sort(expBits, sigBits);
-    }
-    }
-  }
-  // Pointers and unrecognized types → 64-bit address.
-  return ctx.bv_sort(64);
-}
-
-unsigned Semantics::getByteWidth(mlir::Type type) {
-  if (auto intTy = llvm::dyn_cast<mlir::IntegerType>(type)) {
-    unsigned bits = intTy.getWidth();
-    return (bits == 1) ? 1 : (bits / 8);
-  }
-  if (auto floatTy = llvm::dyn_cast<mlir::FloatType>(type))
-    return floatTy.getWidth() / 8;
-  return 8; // pointers: 8 bytes
+  if (ty == DType::I1)
+    return z3::ite(val, ctx.bv_val(1, 1), ctx.bv_val(0, 1));
+  return val; // other integers / pointers: already BitVec
 }
 
 //===----------------------------------------------------------------------===//
@@ -102,29 +61,29 @@ z3::expr Memory::readBytes(z3::expr addr, unsigned byteWidth) const {
   return result; // BitVec(byteWidth * 8)
 }
 
-Z3Tile Memory::load(const Z3Tile &ptrTile,
-                    const Z3Tile &maskTile,
-                    const Z3Tile &otherTile) const {
+Tensor Memory::load(const Tensor &ptrTile,
+                    const Tensor &maskTile,
+                    const Tensor &otherTile) const {
   // Real mode cannot ride the byte-addressable heap (no fixed bit pattern).
   // Abstract mode uses a BV(width) carrier, so it falls through like an int.
   if (fpMode == FPMode::Real)
-    llvm_unreachable("load: Real FP mode not yet supported");
+    throw std::logic_error("load: Real FP mode not yet supported");
 
-  unsigned byteWidth = getByteWidth(otherTile.elemType);
+  unsigned byteWidth = getByteWidth(otherTile.elem);
 
   // Result tile: λi:BitVec(32). mask[i] ? loadElem(ptr[i]) : other[i]
   z3::expr i       = ctx.bv_const("__load_i", 32);
-  z3::expr ptr_i   = z3::select(ptrTile.expr,   i);
-  z3::expr mask_i  = z3::select(maskTile.expr,  i);
-  z3::expr other_i = z3::select(otherTile.expr, i);
+  z3::expr ptr_i   = z3::select(ptrTile.e,   i);
+  z3::expr mask_i  = z3::select(maskTile.e,  i);
+  z3::expr other_i = z3::select(otherTile.e, i);
 
   // Load raw bytes from heap, then convert to the element sort.
   z3::expr rawBV = readBytes(ptr_i, byteWidth); // BitVec(byteWidth * 8)
 
   z3::expr loaded_i = [&]() -> z3::expr {
-    if (auto floatTy = llvm::dyn_cast<mlir::FloatType>(otherTile.elemType)) {
+    if (isFloat(otherTile.elem)) {
       if (fpMode == FPMode::FPA) {
-        auto [expBits, sigBits] = getFPExpSigBits(floatTy);
+        auto [expBits, sigBits] = fpExpSigBits(otherTile.elem);
         z3::sort fps = ctx.fpa_sort(expBits, sigBits);
         return z3::expr(ctx, Z3_mk_fpa_to_fp_bv(ctx, rawBV, fps));
       }
@@ -132,25 +91,27 @@ Z3Tile Memory::load(const Z3Tile &ptrTile,
       // IntegerRange: bitvector significand, no conversion.
       return rawBV;
     }
-    if (auto intTy = llvm::dyn_cast<mlir::IntegerType>(otherTile.elemType)) {
+    if (otherTile.elem == DType::I1) {
       // i1 is stored as a byte; convert back to Bool.
-      return (intTy.getWidth() == 1) ? (rawBV != ctx.bv_val(0, 8)) : rawBV;
+      return rawBV != ctx.bv_val(0, 8);
     }
-    return rawBV; // pointers
+    return rawBV; // other integers / pointers
   }();
 
   z3::expr resultExpr = z3::lambda(i, z3::ite(mask_i, loaded_i, other_i));
-  return Z3Tile{resultExpr, otherTile.shape, otherTile.elemType, fpMode};
+  // A load always yields data values, never pointers → ptrBase is empty
+  // (matches the old 4-arg Z3Tile ctor which left ptrBase null).
+  return Tensor{resultExpr, otherTile.shape, otherTile.elem, std::nullopt};
 }
 
-Memory &Memory::store(const Z3Tile &ptrTile,
-                      const Z3Tile &valTile,
-                      const Z3Tile &maskTile) {
+Memory &Memory::store(const Tensor &ptrTile,
+                      const Tensor &valTile,
+                      const Tensor &maskTile) {
   // Real mode is not byte-storable; Abstract uses BV(width) so it just works.
   if (fpMode == FPMode::Real)
-    llvm_unreachable("store: Real FP mode not yet supported");
+    throw std::logic_error("store: Real FP mode not yet supported");
 
-  unsigned byteWidth = getByteWidth(valTile.elemType);
+  unsigned byteWidth = getByteWidth(valTile.elem);
 
   // Compute total number of tile elements from shape.
   unsigned n = 1;
@@ -181,10 +142,10 @@ Memory &Memory::store(const Z3Tile &ptrTile,
 
   for (unsigned idx = 0; idx < n; idx++) {
     z3::expr idxExpr = ctx.bv_val(idx, 32);
-    z3::expr ptr_i   = z3::select(ptrTile.expr,  idxExpr);
-    z3::expr mask_i  = z3::select(maskTile.expr, idxExpr);
-    z3::expr val_i   = z3::select(valTile.expr,  idxExpr);
-    z3::expr bv_i    = toBV(ctx, val_i, valTile.elemType, fpMode);
+    z3::expr ptr_i   = z3::select(ptrTile.e,  idxExpr);
+    z3::expr mask_i  = z3::select(maskTile.e, idxExpr);
+    z3::expr val_i   = z3::select(valTile.e,  idxExpr);
+    z3::expr bv_i    = toBV(ctx, val_i, valTile.elem, fpMode);
 
     for (unsigned j = 0; j < byteWidth; j++) {
       z3::expr byteAddr = ptr_i + ctx.bv_val(j, 64);

@@ -36,7 +36,6 @@ get_property(triton_libs GLOBAL PROPERTY TRITON_LIBS)
 # ---------------------------------------------------------------------------
 add_library(TritonTVSemantics STATIC
   semantics/Env.cpp
-  semantics/Memory.cpp
   semantics/State.cpp
   semantics/mlir/AbstractFpShim.cpp
   semantics/mlir/ArithOps.cpp

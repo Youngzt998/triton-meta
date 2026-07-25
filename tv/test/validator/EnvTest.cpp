@@ -20,11 +20,11 @@ TEST(Env, MakeSymbolicScalarI1) {
   mlir::MLIRContext mlirCtx;
   auto i1Ty = mlir::IntegerType::get(&mlirCtx, 1);
 
-  Z3Value v = makeSymbolicValue(i1Ty, ctx, FPMode::IntegerRange, "x_i1");
-  ASSERT_TRUE(std::holds_alternative<Z3Scalar>(v));
-  auto &s = std::get<Z3Scalar>(v);
-  EXPECT_EQ(s.expr.get_sort().sort_kind(), Z3_BOOL_SORT);
-  EXPECT_EQ(s.mlirType, i1Ty);
+  Value v = makeSymbolicValue(i1Ty, ctx, FPMode::IntegerRange, "x_i1");
+  ASSERT_TRUE(std::holds_alternative<Scalar>(v));
+  auto &s = std::get<Scalar>(v);
+  EXPECT_EQ(s.e.get_sort().sort_kind(), Z3_BOOL_SORT);
+  EXPECT_EQ(s.ty, DType::I1);
 }
 
 TEST(Env, MakeSymbolicScalarI32) {
@@ -32,9 +32,9 @@ TEST(Env, MakeSymbolicScalarI32) {
   mlir::MLIRContext mlirCtx;
   auto i32Ty = mlir::IntegerType::get(&mlirCtx, 32);
 
-  Z3Value v = makeSymbolicValue(i32Ty, ctx, FPMode::IntegerRange, "x_i32");
-  ASSERT_TRUE(std::holds_alternative<Z3Scalar>(v));
-  EXPECT_EQ(std::get<Z3Scalar>(v).expr.get_sort().bv_size(), 32u);
+  Value v = makeSymbolicValue(i32Ty, ctx, FPMode::IntegerRange, "x_i32");
+  ASSERT_TRUE(std::holds_alternative<Scalar>(v));
+  EXPECT_EQ(std::get<Scalar>(v).e.get_sort().bv_size(), 32u);
 }
 
 TEST(Env, MakeSymbolicScalarF32IntegerRange) {
@@ -42,10 +42,10 @@ TEST(Env, MakeSymbolicScalarF32IntegerRange) {
   mlir::MLIRContext mlirCtx;
   auto f32Ty = mlir::Float32Type::get(&mlirCtx);
 
-  Z3Value v = makeSymbolicValue(f32Ty, ctx, FPMode::IntegerRange, "x_f32");
-  ASSERT_TRUE(std::holds_alternative<Z3Scalar>(v));
-  EXPECT_EQ(std::get<Z3Scalar>(v).expr.get_sort().bv_size(), 32u);
-  EXPECT_EQ(std::get<Z3Scalar>(v).fpMode, FPMode::IntegerRange);
+  Value v = makeSymbolicValue(f32Ty, ctx, FPMode::IntegerRange, "x_f32");
+  ASSERT_TRUE(std::holds_alternative<Scalar>(v));
+  EXPECT_EQ(std::get<Scalar>(v).e.get_sort().bv_size(), 32u);
+  EXPECT_EQ(std::get<Scalar>(v).ty, DType::F32);
 }
 
 TEST(Env, MakeSymbolicScalarF32FPA) {
@@ -53,11 +53,11 @@ TEST(Env, MakeSymbolicScalarF32FPA) {
   mlir::MLIRContext mlirCtx;
   auto f32Ty = mlir::Float32Type::get(&mlirCtx);
 
-  Z3Value v = makeSymbolicValue(f32Ty, ctx, FPMode::FPA, "x_f32_fpa");
-  ASSERT_TRUE(std::holds_alternative<Z3Scalar>(v));
-  auto &s = std::get<Z3Scalar>(v);
-  EXPECT_EQ(s.expr.get_sort().sort_kind(), Z3_FLOATING_POINT_SORT);
-  EXPECT_EQ(s.fpMode, FPMode::FPA);
+  Value v = makeSymbolicValue(f32Ty, ctx, FPMode::FPA, "x_f32_fpa");
+  ASSERT_TRUE(std::holds_alternative<Scalar>(v));
+  auto &s = std::get<Scalar>(v);
+  EXPECT_EQ(s.e.get_sort().sort_kind(), Z3_FLOATING_POINT_SORT);
+  EXPECT_EQ(s.ty, DType::F32);
 }
 
 //===----------------------------------------------------------------------===//
@@ -70,18 +70,18 @@ TEST(Env, MakeSymbolicTile1D) {
   auto i32Ty    = mlir::IntegerType::get(&mlirCtx, 32);
   auto tensorTy = mlir::RankedTensorType::get({16}, i32Ty);
 
-  Z3Value v = makeSymbolicValue(tensorTy, ctx, FPMode::IntegerRange, "t1d");
-  ASSERT_TRUE(std::holds_alternative<Z3Tile>(v));
-  auto &t = std::get<Z3Tile>(v);
+  Value v = makeSymbolicValue(tensorTy, ctx, FPMode::IntegerRange, "t1d");
+  ASSERT_TRUE(std::holds_alternative<Tensor>(v));
+  auto &t = std::get<Tensor>(v);
 
   EXPECT_EQ(t.shape.size(), 1u);
   EXPECT_EQ(t.shape[0], 16);
-  EXPECT_EQ(t.elemType, i32Ty);
+  EXPECT_EQ(t.elem, DType::I32);
 
   // Sort must be Array(BitVec(32), BitVec(32))
-  EXPECT_EQ(t.expr.get_sort().sort_kind(), Z3_ARRAY_SORT);
-  EXPECT_EQ(t.expr.get_sort().array_domain().bv_size(), 32u);
-  EXPECT_EQ(t.expr.get_sort().array_range().bv_size(), 32u);
+  EXPECT_EQ(t.e.get_sort().sort_kind(), Z3_ARRAY_SORT);
+  EXPECT_EQ(t.e.get_sort().array_domain().bv_size(), 32u);
+  EXPECT_EQ(t.e.get_sort().array_range().bv_size(), 32u);
 }
 
 TEST(Env, MakeSymbolicTile2D) {
@@ -90,14 +90,14 @@ TEST(Env, MakeSymbolicTile2D) {
   auto f32Ty    = mlir::Float32Type::get(&mlirCtx);
   auto tensorTy = mlir::RankedTensorType::get({4, 8}, f32Ty);
 
-  Z3Value v = makeSymbolicValue(tensorTy, ctx, FPMode::IntegerRange, "t2d");
-  ASSERT_TRUE(std::holds_alternative<Z3Tile>(v));
-  auto &t = std::get<Z3Tile>(v);
+  Value v = makeSymbolicValue(tensorTy, ctx, FPMode::IntegerRange, "t2d");
+  ASSERT_TRUE(std::holds_alternative<Tensor>(v));
+  auto &t = std::get<Tensor>(v);
 
   EXPECT_EQ(t.shape.size(), 2u);
   EXPECT_EQ(t.shape[0], 4);
   EXPECT_EQ(t.shape[1], 8);
-  EXPECT_EQ(t.elemType, f32Ty);
+  EXPECT_EQ(t.elem, DType::F32);
 }
 
 TEST(Env, TwoTilesWithDistinctNamesAreDistinct) {
@@ -107,14 +107,14 @@ TEST(Env, TwoTilesWithDistinctNamesAreDistinct) {
   auto i32Ty    = mlir::IntegerType::get(&mlirCtx, 32);
   auto tensorTy = mlir::RankedTensorType::get({4}, i32Ty);
 
-  Z3Value v1 = makeSymbolicValue(tensorTy, ctx, FPMode::IntegerRange, "tA");
-  Z3Value v2 = makeSymbolicValue(tensorTy, ctx, FPMode::IntegerRange, "tB");
+  Value v1 = makeSymbolicValue(tensorTy, ctx, FPMode::IntegerRange, "tA");
+  Value v2 = makeSymbolicValue(tensorTy, ctx, FPMode::IntegerRange, "tB");
 
-  auto &t1 = std::get<Z3Tile>(v1);
-  auto &t2 = std::get<Z3Tile>(v2);
+  auto &t1 = std::get<Tensor>(v1);
+  auto &t2 = std::get<Tensor>(v2);
 
   z3::solver solver(ctx);
-  solver.add(t1.expr != t2.expr);
+  solver.add(t1.e != t2.e);
   EXPECT_EQ(solver.check(), z3::sat);
 }
 
@@ -130,11 +130,11 @@ TEST(Env, MakeSymbolicPtr) {
   auto f32Ty = mlir::Float32Type::get(&mlirCtx);
   auto ptrTy = mlir::triton::PointerType::get(f32Ty, 1);
 
-  Z3Value v = makeSymbolicValue(ptrTy, ctx, FPMode::IntegerRange, "p");
-  ASSERT_TRUE(std::holds_alternative<Z3Ptr>(v));
-  auto &p = std::get<Z3Ptr>(v);
-  EXPECT_EQ(p.expr.get_sort().bv_size(), 64u);
-  EXPECT_EQ(p.pointeeType, f32Ty);
+  Value v = makeSymbolicValue(ptrTy, ctx, FPMode::IntegerRange, "p");
+  ASSERT_TRUE(std::holds_alternative<Ptr>(v));
+  auto &p = std::get<Ptr>(v);
+  EXPECT_EQ(p.e.get_sort().bv_size(), 64u);
+  EXPECT_EQ(p.pointee, DType::F32);
 }
 
 //===----------------------------------------------------------------------===//
@@ -171,8 +171,8 @@ TEST(Env, BindAndLookup) {
   auto func = *module->getBody()->op_begin<mlir::triton::FuncOp>();
   auto args = func.getBody().getArguments();
 
-  Z3Value v0 = makeSymbolicValue(i32Ty, ctx, FPMode::IntegerRange, "a0");
-  Z3Value v1 = makeSymbolicValue(i32Ty, ctx, FPMode::IntegerRange, "a1");
+  Value v0 = makeSymbolicValue(i32Ty, ctx, FPMode::IntegerRange, "a0");
+  Value v1 = makeSymbolicValue(i32Ty, ctx, FPMode::IntegerRange, "a1");
 
   Env env;
   EXPECT_EQ(env.size(), 0u);
@@ -185,10 +185,10 @@ TEST(Env, BindAndLookup) {
   EXPECT_TRUE(env.contains(args[1]));
 
   // Looked-up expressions carry the right names.
-  auto &r0 = std::get<Z3Scalar>(env.lookup(args[0]));
-  auto &r1 = std::get<Z3Scalar>(env.lookup(args[1]));
-  EXPECT_TRUE(r0.expr.to_string().find("a0") != std::string::npos);
-  EXPECT_TRUE(r1.expr.to_string().find("a1") != std::string::npos);
+  auto &r0 = std::get<Scalar>(env.lookup(args[0]));
+  auto &r1 = std::get<Scalar>(env.lookup(args[1]));
+  EXPECT_TRUE(r0.e.to_string().find("a0") != std::string::npos);
+  EXPECT_TRUE(r1.e.to_string().find("a1") != std::string::npos);
 }
 
 TEST(Env, LookupMissingThrows) {
@@ -220,8 +220,8 @@ TEST(Env, BindOverwrites) {
   env.bind(arg, makeSymbolicValue(i32Ty, ctx, FPMode::IntegerRange, "new"));
 
   EXPECT_EQ(env.size(), 1u);
-  auto &s = std::get<Z3Scalar>(env.lookup(arg));
-  EXPECT_TRUE(s.expr.to_string().find("new") != std::string::npos);
+  auto &s = std::get<Scalar>(env.lookup(arg));
+  EXPECT_TRUE(s.e.to_string().find("new") != std::string::npos);
 }
 
 //===----------------------------------------------------------------------===//
@@ -243,12 +243,12 @@ TEST(Env, InitFuncArgs) {
   initFuncArgs(env, args, ctx, FPMode::IntegerRange, "src");
 
   EXPECT_EQ(env.size(), 2u);
-  EXPECT_TRUE(std::holds_alternative<Z3Scalar>(env.lookup(args[0])));
-  EXPECT_TRUE(std::holds_alternative<Z3Tile>(env.lookup(args[1])));
+  EXPECT_TRUE(std::holds_alternative<Scalar>(env.lookup(args[0])));
+  EXPECT_TRUE(std::holds_alternative<Tensor>(env.lookup(args[1])));
 
   // Verify name prefix was applied.
-  auto &s = std::get<Z3Scalar>(env.lookup(args[0]));
-  EXPECT_TRUE(s.expr.to_string().find("src_arg0") != std::string::npos);
+  auto &s = std::get<Scalar>(env.lookup(args[0]));
+  EXPECT_TRUE(s.e.to_string().find("src_arg0") != std::string::npos);
 }
 
 int main() { return simpletest::runAll(); }

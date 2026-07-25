@@ -44,21 +44,17 @@ function(add_tv_test)
   endif()
 endfunction()
 
-add_tv_test(
-  NAME TestTritonTVMemory
-  SRCS MemoryModelTest.cpp
-       ${CMAKE_CURRENT_SOURCE_DIR}/../../semantics/Memory.cpp
-  LIBS
-    MLIRIR
-    MLIRSupport
-)
+# The Memory unit test moved to the Z3-only core suite
+# (tv/semantics/test/MemoryTest.cpp); Memory is now MLIR-free (DType-based) and
+# lives in the tile-smt core, so the test no longer needs MLIR.
 
 add_tv_test(
   NAME TestTritonTVEnv
   SRCS EnvTest.cpp
-       ${CMAKE_CURRENT_SOURCE_DIR}/../../semantics/Memory.cpp
        ${CMAKE_CURRENT_SOURCE_DIR}/../../semantics/Env.cpp
+       ${CMAKE_CURRENT_SOURCE_DIR}/../../semantics/mlir/AbstractFpShim.cpp
   LIBS
+    tile-smt          # core Memory / Value / AbstractFp (DType-keyed)
     ${triton_libs}
     MLIRIR
     MLIRSupport
@@ -67,14 +63,13 @@ add_tv_test(
 add_tv_test(
   NAME TestTritonTVState
   SRCS StateTest.cpp
-       ${CMAKE_CURRENT_SOURCE_DIR}/../../semantics/Memory.cpp
        ${CMAKE_CURRENT_SOURCE_DIR}/../../semantics/Env.cpp
        ${CMAKE_CURRENT_SOURCE_DIR}/../../semantics/State.cpp
        ${CMAKE_CURRENT_SOURCE_DIR}/../../semantics/mlir/AbstractFpShim.cpp
        ${CMAKE_CURRENT_SOURCE_DIR}/../../semantics/mlir/ArithOps.cpp
        ${CMAKE_CURRENT_SOURCE_DIR}/../../semantics/mlir/TritonOps.cpp
   LIBS
-    tile-smt          # core AbstractFp (DType-keyed)
+    tile-smt          # core Memory / Value / AbstractFp (DType-keyed)
     ${triton_libs}
     MLIRIR
     MLIRSupport

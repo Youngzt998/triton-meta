@@ -225,21 +225,24 @@ int main(int argc, char **argv) {
     mlir::Value sa = srcArgs[i];
     mlir::Value ta = tgtArgs[i];
 
-    bool srcHasMem = s1.ptrMems.count(sa) > 0;
-    bool tgtHasMem = s2.ptrMems.count(ta) > 0;
+    auto srcMemIt = s1.ptrArgToMem.find(sa);
+    auto tgtMemIt = s2.ptrArgToMem.find(ta);
+    bool srcHasMem = srcMemIt != s1.ptrArgToMem.end();
+    bool tgtHasMem = tgtMemIt != s2.ptrArgToMem.end();
 
     if (srcHasMem && tgtHasMem) {
       // Pointer arg: initial heap contents are equal AND the pointer addresses
       // themselves must match (they're the same kernel-level argument).
-      solver.add(s1.ptrMems.at(sa).array == s2.ptrMems.at(ta).array);
-      auto &sp = std::get<Semantics::Z3Ptr>(s1.env.lookup(sa));
-      auto &tp = std::get<Semantics::Z3Ptr>(s2.env.lookup(ta));
-      solver.add(sp.expr == tp.expr);
+      solver.add(s1.memState.mems.at(srcMemIt->second).array ==
+                 s2.memState.mems.at(tgtMemIt->second).array);
+      auto &sp = std::get<Semantics::Ptr>(s1.env.lookup(sa));
+      auto &tp = std::get<Semantics::Ptr>(s2.env.lookup(ta));
+      solver.add(sp.e == tp.e);
     } else {
       // Scalar/tensor arg: symbolic values are equal.
       std::visit([&](auto &v1) {
         using T = std::decay_t<decltype(v1)>;
-        solver.add(v1.expr == std::get<T>(s2.env.lookup(ta)).expr);
+        solver.add(v1.e == std::get<T>(s2.env.lookup(ta)).e);
       }, s1.env.lookup(sa));
     }
   }
@@ -274,10 +277,15 @@ int main(int argc, char **argv) {
   for (unsigned i = 0; i < srcArgs.size(); ++i) {
     mlir::Value sa = srcArgs[i];
     mlir::Value ta = tgtArgs[i];
-    if (s1f.ptrMems.count(sa) && s2f.ptrMems.count(ta)) {
+    auto srcMemIt = s1f.ptrArgToMem.find(sa);
+    auto tgtMemIt = s2f.ptrArgToMem.find(ta);
+    if (srcMemIt != s1f.ptrArgToMem.end() &&
+        tgtMemIt != s2f.ptrArgToMem.end()) {
       anyDiffers = anyDiffers ||
-                   (z3::select(s1f.ptrMems.at(sa).array, witness) !=
-                    z3::select(s2f.ptrMems.at(ta).array, witness));
+                   (z3::select(s1f.memState.mems.at(srcMemIt->second).array,
+                               witness) !=
+                    z3::select(s2f.memState.mems.at(tgtMemIt->second).array,
+                               witness));
     }
   }
   solver.add(anyDiffers);

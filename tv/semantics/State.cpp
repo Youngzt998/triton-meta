@@ -19,10 +19,12 @@ using namespace Semantics;
 // State
 //===----------------------------------------------------------------------===//
 
-State::State(Env env, std::map<mlir::Value, Memory, ValuePtrLess> ptrMems,
+State::State(Env env, MemState memState,
+             std::map<mlir::Value, MemId, ValuePtrLess> ptrArgToMem,
              z3::context &ctx, FPMode fpMode,
              std::shared_ptr<AbstractFpRegistry> fpReg)
-    : env(std::move(env)), ptrMems(std::move(ptrMems)),
+    : env(std::move(env)), memState(std::move(memState)),
+      ptrArgToMem(std::move(ptrArgToMem)),
       ctx(ctx), fpMode(fpMode), fpReg(std::move(fpReg)) {}
 
 //===----------------------------------------------------------------------===//
@@ -32,27 +34,36 @@ State::State(Env env, std::map<mlir::Value, Memory, ValuePtrLess> ptrMems,
 State State::initFromFunc(mlir::ValueRange args, z3::context &ctx,
                           FPMode fpMode, const std::string &prefix) {
   Env env;
-  std::map<mlir::Value, Memory, ValuePtrLess> ptrMems;
+  MemState memState;
+  std::map<mlir::Value, MemId, ValuePtrLess> ptrArgToMem;
   auto fpReg = std::make_shared<AbstractFpRegistry>(ctx);
+
+  // MemIds are minted in argument order, so the two programs' pointer
+  // arguments pair up by position (src arg i ↔ tgt arg i get the same MemId).
+  uint32_t nextMemId = 0;
 
   for (auto [idx, arg] : llvm::enumerate(args)) {
     std::string symName = prefix + "_arg" + std::to_string(idx);
 
     if (auto ptrTy = llvm::dyn_cast<mlir::triton::PointerType>(arg.getType())) {
-      // Pointer argument: symbolic address in env + independent Memory.
+      // Pointer argument: mint a MemId, bind a symbolic address in env, and
+      // create an independent Memory keyed by that MemId.
+      MemId id = static_cast<MemId>(nextMemId++);
       z3::expr addr = ctx.bv_const(symName.c_str(), 64);
-      env.bind(arg, Z3Ptr{addr, ptrTy.getPointeeType(), arg});
+      env.bind(arg, Ptr{addr, dtypeOf(ptrTy.getPointeeType()), id});
+      ptrArgToMem[arg] = id;
 
       std::string memName = prefix + "_mem_arg" + std::to_string(idx);
-      ptrMems.emplace(std::piecewise_construct,
-                      std::forward_as_tuple(arg),
-                      std::forward_as_tuple(ctx, fpMode, memName));
+      memState.mems.emplace(std::piecewise_construct,
+                            std::forward_as_tuple(id),
+                            std::forward_as_tuple(ctx, fpMode, memName));
     } else {
       env.bind(arg, makeSymbolicValue(arg.getType(), ctx, fpMode, symName));
     }
   }
 
-  return State(std::move(env), std::move(ptrMems), ctx, fpMode, std::move(fpReg));
+  return State(std::move(env), std::move(memState), std::move(ptrArgToMem),
+               ctx, fpMode, std::move(fpReg));
 }
 
 //===----------------------------------------------------------------------===//
@@ -171,10 +182,10 @@ z3::check_result Semantics::checkEquivalence(const State &s1, const State &s2,
   z3::context &ctx = solver.ctx();
   z3::expr witness = ctx.bv_const("__witness_addr", 64);
   z3::expr anyDiffers = ctx.bool_val(false);
-  for (auto &[arg, mem1] : s1.ptrMems) {
-    auto it = s2.ptrMems.find(arg);
-    assert(it != s2.ptrMems.end() &&
-           "s2 is missing a ptrMems entry present in s1");
+  for (auto &[id, mem1] : s1.memState.mems) {
+    auto it = s2.memState.mems.find(id);
+    assert(it != s2.memState.mems.end() &&
+           "s2 is missing a memState entry present in s1");
     anyDiffers = anyDiffers || (z3::select(mem1.array, witness) !=
                                 z3::select(it->second.array, witness));
   }

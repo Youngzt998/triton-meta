@@ -13,61 +13,58 @@
 
 using namespace Semantics;
 
+using tile_smt::getElemSort;
+
 //===----------------------------------------------------------------------===//
 // Internal helpers
 //===----------------------------------------------------------------------===//
 
-// Build a Z3Tile from a uniform (splat) constant value.
-static Z3Tile splatConstTile(z3::context &ctx, z3::expr val,
-                              mlir::Type elemTy, FPMode fpMode,
-                              llvm::ArrayRef<int64_t> shape) {
+// Build a Tensor from a uniform (splat) constant value.
+static Tensor splatConstTile(z3::context &ctx, z3::expr val, DType elem,
+                             llvm::ArrayRef<int64_t> shape) {
   z3::expr i = ctx.bv_const("__ci", 32);
-  llvm::SmallVector<int64_t> shapeVec(shape.begin(), shape.end());
-  return Z3Tile{z3::lambda(i, val), std::move(shapeVec), elemTy, fpMode, {}};
+  tile_smt::Shape shapeVec(shape.begin(), shape.end());
+  return Tensor{z3::lambda(i, val), std::move(shapeVec), elem, std::nullopt};
 }
 
-// Apply a binary operation element-wise to two Z3Values (scalar or tile).
+// Apply a binary operation element-wise to two Values (scalar or tile).
 // op_fn takes (lhs_elem, rhs_elem) and returns the result element.
-// resultElemTy / resultFpMode describe the result element (may differ from
-// input, e.g. cmpi returns i1 from integer inputs).
-static Z3Value applyBinaryOp(
+// resultElem describes the result element type (may differ from input, e.g.
+// cmpi returns i1 from integer inputs).
+static Value applyBinaryOp(
     z3::context &ctx,
-    const Z3Value &lhs, const Z3Value &rhs,
-    mlir::Type resultElemTy, FPMode resultFpMode,
+    const Value &lhs, const Value &rhs, DType resultElem,
     const std::function<z3::expr(z3::expr, z3::expr)> &op_fn) {
 
-  if (auto *l = std::get_if<Z3Scalar>(&lhs)) {
-    z3::expr res = op_fn(l->expr, std::get<Z3Scalar>(rhs).expr);
-    return Z3Scalar{res, resultElemTy, resultFpMode};
+  if (auto *l = std::get_if<Scalar>(&lhs)) {
+    z3::expr res = op_fn(l->e, std::get<Scalar>(rhs).e);
+    return Scalar{res, resultElem};
   }
-  if (auto *l = std::get_if<Z3Tile>(&lhs)) {
-    auto *r = &std::get<Z3Tile>(rhs);
+  if (auto *l = std::get_if<Tensor>(&lhs)) {
+    auto *r = &std::get<Tensor>(rhs);
     z3::expr i = ctx.bv_const("__bi", 32);
-    z3::expr res = op_fn(z3::select(l->expr, i), z3::select(r->expr, i));
-    return Z3Tile{z3::lambda(i, res), l->shape, resultElemTy, resultFpMode, {}};
+    z3::expr res = op_fn(z3::select(l->e, i), z3::select(r->e, i));
+    return Tensor{z3::lambda(i, res), l->shape, resultElem, std::nullopt};
   }
-  llvm_unreachable("applyBinaryOp: unexpected Z3Value variant");
+  llvm_unreachable("applyBinaryOp: unexpected Value variant");
 }
 
-// Overload that preserves input element type.
-static Z3Value applyBinaryOp(
-    z3::context &ctx, const Z3Value &lhs, const Z3Value &rhs,
+// Overload that preserves the input element type.
+static Value applyBinaryOp(
+    z3::context &ctx, const Value &lhs, const Value &rhs,
     const std::function<z3::expr(z3::expr, z3::expr)> &op_fn) {
-  mlir::Type ty = std::holds_alternative<Z3Scalar>(lhs)
-                      ? std::get<Z3Scalar>(lhs).mlirType
-                      : std::get<Z3Tile>(lhs).elemType;
-  FPMode fp = std::holds_alternative<Z3Scalar>(lhs)
-                  ? std::get<Z3Scalar>(lhs).fpMode
-                  : std::get<Z3Tile>(lhs).fpMode;
-  return applyBinaryOp(ctx, lhs, rhs, ty, fp, op_fn);
+  DType ty = std::holds_alternative<Scalar>(lhs)
+                 ? std::get<Scalar>(lhs).ty
+                 : std::get<Tensor>(lhs).elem;
+  return applyBinaryOp(ctx, lhs, rhs, ty, op_fn);
 }
 
-// Get the element type of an op result (scalar or tensor).
-static mlir::Type getResultElemType(mlir::Operation *op) {
+// Get the element DType of an op result (scalar or tensor).
+static DType getResultElemType(mlir::Operation *op) {
   mlir::Type t = op->getResult(0).getType();
   if (auto tt = llvm::dyn_cast<mlir::RankedTensorType>(t))
-    return tt.getElementType();
-  return t;
+    return dtypeOf(tt.getElementType());
+  return dtypeOf(t);
 }
 
 //===----------------------------------------------------------------------===//
@@ -80,31 +77,33 @@ State Semantics::handleArithConstant(const State &s, mlir::Operation *op) {
   mlir::Attribute value = cop.getValue();
   z3::context &ctx = s.ctx;
 
-  // Compute the Z3Value through a lambda so all branches return directly,
-  // avoiding any need to default-construct Z3Value (z3::expr has no default ctor).
-  auto makeVal = [&]() -> Z3Value {
+  // Compute the Value through a lambda so all branches return directly,
+  // avoiding any need to default-construct Value (z3::expr has no default ctor).
+  auto makeVal = [&]() -> Value {
     // --- scalar integer ---
     if (auto intAttr = llvm::dyn_cast<mlir::IntegerAttr>(value)) {
       auto intTy = llvm::cast<mlir::IntegerType>(resType);
       unsigned bw = intTy.getWidth();
+      DType elem = dtypeOf(resType);
       if (bw == 1)
-        return Z3Scalar{ctx.bool_val(intAttr.getInt() != 0), resType, s.fpMode};
-      return Z3Scalar{ctx.bv_val(intAttr.getInt(), bw), resType, s.fpMode};
+        return Scalar{ctx.bool_val(intAttr.getInt() != 0), elem};
+      return Scalar{ctx.bv_val(intAttr.getInt(), bw), elem};
     }
     // --- dense integer tensor ---
     if (auto denseAttr = llvm::dyn_cast<mlir::DenseIntElementsAttr>(value)) {
       auto tensorTy = llvm::cast<mlir::RankedTensorType>(resType);
       mlir::Type elemTy = tensorTy.getElementType();
+      DType elem = dtypeOf(elemTy);
       unsigned bw = llvm::cast<mlir::IntegerType>(elemTy).getWidth();
       llvm::SmallVector<int64_t> shape(tensorTy.getShape().begin(),
                                        tensorTy.getShape().end());
       if (denseAttr.isSplat()) {
         int64_t v = denseAttr.getSplatValue<llvm::APInt>().getSExtValue();
         z3::expr val = (bw == 1) ? ctx.bool_val(v != 0) : ctx.bv_val(v, bw);
-        return splatConstTile(ctx, val, elemTy, s.fpMode, shape);
+        return splatConstTile(ctx, val, elem, shape);
       }
       // Non-splat: build via z3::store chain.
-      z3::sort elemSort = getElemSort(ctx, elemTy, s.fpMode);
+      z3::sort elemSort = getElemSort(ctx, elem, s.fpMode);
       z3::expr arr = ctx.constant("__dense_base",
                                   ctx.array_sort(ctx.bv_sort(32), elemSort));
       unsigned idx = 0;
@@ -114,12 +113,14 @@ State Semantics::handleArithConstant(const State &s, mlir::Operation *op) {
         arr = z3::store(arr, ctx.bv_val(idx, 32), e);
         ++idx;
       }
-      return Z3Tile{arr, shape, elemTy, s.fpMode, {}};
+      tile_smt::Shape shapeVec(shape.begin(), shape.end());
+      return Tensor{arr, std::move(shapeVec), elem, std::nullopt};
     }
     // --- dense float tensor ---
     if (auto denseFP = llvm::dyn_cast<mlir::DenseFPElementsAttr>(value)) {
       auto tensorTy = llvm::cast<mlir::RankedTensorType>(resType);
       auto floatTy  = llvm::cast<mlir::FloatType>(tensorTy.getElementType());
+      DType elem    = dtypeOf(floatTy);
       unsigned bw   = floatTy.getWidth();
       llvm::SmallVector<int64_t> shape(tensorTy.getShape().begin(),
                                        tensorTy.getShape().end());
@@ -128,9 +129,9 @@ State Semantics::handleArithConstant(const State &s, mlir::Operation *op) {
       if (denseFP.isSplat()) {
         uint64_t bits =
             denseFP.getSplatValue<llvm::APFloat>().bitcastToAPInt().getZExtValue();
-        return splatConstTile(ctx, ctx.bv_val(bits, bw), floatTy, s.fpMode, shape);
+        return splatConstTile(ctx, ctx.bv_val(bits, bw), elem, shape);
       }
-      z3::sort elemSort = getElemSort(ctx, floatTy, s.fpMode);
+      z3::sort elemSort = getElemSort(ctx, elem, s.fpMode);
       z3::expr arr = ctx.constant("__dense_fp_base",
                                   ctx.array_sort(ctx.bv_sort(32), elemSort));
       unsigned idx = 0;
@@ -139,14 +140,15 @@ State Semantics::handleArithConstant(const State &s, mlir::Operation *op) {
         arr = z3::store(arr, ctx.bv_val(idx, 32), ctx.bv_val(bits, bw));
         ++idx;
       }
-      return Z3Tile{arr, shape, floatTy, s.fpMode, {}};
+      tile_smt::Shape shapeVec(shape.begin(), shape.end());
+      return Tensor{arr, std::move(shapeVec), elem, std::nullopt};
     }
     // --- scalar float ---
     if (auto floatAttr = llvm::dyn_cast<mlir::FloatAttr>(value)) {
       auto floatTy = llvm::cast<mlir::FloatType>(resType);
       unsigned bw  = floatTy.getWidth();
       uint64_t bits = floatAttr.getValue().bitcastToAPInt().getZExtValue();
-      return Z3Scalar{ctx.bv_val(bits, bw), resType, s.fpMode};
+      return Scalar{ctx.bv_val(bits, bw), dtypeOf(floatTy)};
     }
     llvm_unreachable("arith.constant: unsupported attribute kind");
   };
@@ -161,8 +163,8 @@ State Semantics::handleArithConstant(const State &s, mlir::Operation *op) {
 //===----------------------------------------------------------------------===//
 
 State Semantics::handleArithAddi(const State &s, mlir::Operation *op) {
-  Z3Value lhs = s.env.lookup(op->getOperand(0));
-  Z3Value rhs = s.env.lookup(op->getOperand(1));
+  Value lhs = s.env.lookup(op->getOperand(0));
+  Value rhs = s.env.lookup(op->getOperand(1));
   State next = s;
   next.env.bind(op->getResult(0),
     applyBinaryOp(s.ctx, lhs, rhs,
@@ -171,8 +173,8 @@ State Semantics::handleArithAddi(const State &s, mlir::Operation *op) {
 }
 
 State Semantics::handleArithSubi(const State &s, mlir::Operation *op) {
-  Z3Value lhs = s.env.lookup(op->getOperand(0));
-  Z3Value rhs = s.env.lookup(op->getOperand(1));
+  Value lhs = s.env.lookup(op->getOperand(0));
+  Value rhs = s.env.lookup(op->getOperand(1));
   State next = s;
   next.env.bind(op->getResult(0),
     applyBinaryOp(s.ctx, lhs, rhs,
@@ -181,8 +183,8 @@ State Semantics::handleArithSubi(const State &s, mlir::Operation *op) {
 }
 
 State Semantics::handleArithMuli(const State &s, mlir::Operation *op) {
-  Z3Value lhs = s.env.lookup(op->getOperand(0));
-  Z3Value rhs = s.env.lookup(op->getOperand(1));
+  Value lhs = s.env.lookup(op->getOperand(0));
+  Value rhs = s.env.lookup(op->getOperand(1));
   State next = s;
   next.env.bind(op->getResult(0),
     applyBinaryOp(s.ctx, lhs, rhs,
@@ -191,13 +193,12 @@ State Semantics::handleArithMuli(const State &s, mlir::Operation *op) {
 }
 
 State Semantics::handleArithAndi(const State &s, mlir::Operation *op) {
-  Z3Value lhs = s.env.lookup(op->getOperand(0));
-  Z3Value rhs = s.env.lookup(op->getOperand(1));
-  mlir::Type elemTy = getResultElemType(op);
+  Value lhs = s.env.lookup(op->getOperand(0));
+  Value rhs = s.env.lookup(op->getOperand(1));
+  DType elem = getResultElemType(op);
 
   // i1 → Bool in Z3: use logical &&. Other widths: use bitwise &.
-  bool isBool = llvm::isa<mlir::IntegerType>(elemTy) &&
-                llvm::cast<mlir::IntegerType>(elemTy).getWidth() == 1;
+  bool isBool = (elem == DType::I1);
 
   State next = s;
   next.env.bind(op->getResult(0),
@@ -214,11 +215,11 @@ State Semantics::handleArithAndi(const State &s, mlir::Operation *op) {
 
 State Semantics::handleArithExtsi(const State &s, mlir::Operation *op) {
   auto extOp = llvm::cast<mlir::arith::ExtSIOp>(op);
-  Z3Value src = s.env.lookup(extOp.getIn());
+  Value src = s.env.lookup(extOp.getIn());
   mlir::Type dstType = extOp.getType();
   z3::context &ctx = s.ctx;
 
-  // Determine source and destination bit widths.
+  // Determine destination bit width.
   auto getDstBw = [&](mlir::Type t) -> unsigned {
     if (auto tt = llvm::dyn_cast<mlir::RankedTensorType>(t))
       return llvm::cast<mlir::IntegerType>(tt.getElementType()).getWidth();
@@ -226,28 +227,28 @@ State Semantics::handleArithExtsi(const State &s, mlir::Operation *op) {
   };
   unsigned dstBw = getDstBw(dstType);
 
-  auto extend = [&](const Z3Value &v, mlir::Type dstElemTy) -> Z3Value {
-    if (auto *sc = std::get_if<Z3Scalar>(&v)) {
-      unsigned srcBw = sc->expr.get_sort().bv_size();
-      return Z3Scalar{z3::sext(sc->expr, dstBw - srcBw), dstElemTy, s.fpMode};
+  auto extend = [&](const Value &v, DType dstElem) -> Value {
+    if (auto *sc = std::get_if<Scalar>(&v)) {
+      unsigned srcBw = sc->e.get_sort().bv_size();
+      return Scalar{z3::sext(sc->e, dstBw - srcBw), dstElem};
     }
-    if (auto *ti = std::get_if<Z3Tile>(&v)) {
-      unsigned srcBw = llvm::cast<mlir::IntegerType>(ti->elemType).getWidth();
+    if (auto *ti = std::get_if<Tensor>(&v)) {
+      unsigned srcBw = ti->e.get_sort().array_range().bv_size();
       unsigned extra = dstBw - srcBw;
       z3::expr i     = ctx.bv_const("__ei", 32);
-      z3::expr elem  = z3::sext(z3::select(ti->expr, i), extra);
-      return Z3Tile{z3::lambda(i, elem), ti->shape, dstElemTy, s.fpMode, {}};
+      z3::expr elem  = z3::sext(z3::select(ti->e, i), extra);
+      return Tensor{z3::lambda(i, elem), ti->shape, dstElem, std::nullopt};
     }
-    llvm_unreachable("extsi: unexpected Z3Value variant");
+    llvm_unreachable("extsi: unexpected Value variant");
   };
 
-  mlir::Type dstElemTy =
+  DType dstElem =
       llvm::isa<mlir::RankedTensorType>(dstType)
-          ? llvm::cast<mlir::RankedTensorType>(dstType).getElementType()
-          : dstType;
+          ? dtypeOf(llvm::cast<mlir::RankedTensorType>(dstType).getElementType())
+          : dtypeOf(dstType);
 
   State next = s;
-  next.env.bind(op->getResult(0), extend(src, dstElemTy));
+  next.env.bind(op->getResult(0), extend(src, dstElem));
   return next;
 }
 
@@ -257,13 +258,11 @@ State Semantics::handleArithExtsi(const State &s, mlir::Operation *op) {
 
 State Semantics::handleArithCmpi(const State &s, mlir::Operation *op) {
   auto cmpiOp = llvm::cast<mlir::arith::CmpIOp>(op);
-  Z3Value lhs = s.env.lookup(cmpiOp.getLhs());
-  Z3Value rhs = s.env.lookup(cmpiOp.getRhs());
+  Value lhs = s.env.lookup(cmpiOp.getLhs());
+  Value rhs = s.env.lookup(cmpiOp.getRhs());
   mlir::arith::CmpIPredicate pred = cmpiOp.getPredicate();
 
   // Result element type is always i1 (Bool in Z3).
-  mlir::Type i1Ty = mlir::IntegerType::get(op->getContext(), 1);
-
   auto cmpFn = [pred](z3::expr a, z3::expr b) -> z3::expr {
     switch (pred) {
     case mlir::arith::CmpIPredicate::eq:  return a == b;
@@ -282,7 +281,7 @@ State Semantics::handleArithCmpi(const State &s, mlir::Operation *op) {
 
   State next = s;
   next.env.bind(op->getResult(0),
-    applyBinaryOp(s.ctx, lhs, rhs, i1Ty, s.fpMode, cmpFn));
+    applyBinaryOp(s.ctx, lhs, rhs, DType::I1, cmpFn));
   return next;
 }
 
@@ -295,8 +294,8 @@ static State handleFpBinaryOp(
     const State &s, mlir::Operation *op,
     const std::function<z3::expr(AbstractFp &, z3::expr, z3::expr)> &op_fn) {
 
-  Z3Value lhs = s.env.lookup(op->getOperand(0));
-  Z3Value rhs = s.env.lookup(op->getOperand(1));
+  Value lhs = s.env.lookup(op->getOperand(0));
+  Value rhs = s.env.lookup(op->getOperand(1));
 
   // Get float type from the result.
   mlir::Type resType = op->getResult(0).getType();
@@ -310,7 +309,7 @@ static State handleFpBinaryOp(
 
   State next = s;
   next.env.bind(op->getResult(0),
-    applyBinaryOp(s.ctx, lhs, rhs, elemTy, s.fpMode, fn));
+    applyBinaryOp(s.ctx, lhs, rhs, dtypeOf(floatTy), fn));
   return next;
 }
 
@@ -344,24 +343,25 @@ State Semantics::handleArithMaxnumf(const State &s, mlir::Operation *op) {
 //===----------------------------------------------------------------------===//
 
 State Semantics::handleMathExp(const State &s, mlir::Operation *op) {
-  Z3Value in = s.env.lookup(op->getOperand(0));
+  Value in = s.env.lookup(op->getOperand(0));
   mlir::Type resType = op->getResult(0).getType();
   mlir::Type elemTy  = llvm::isa<mlir::RankedTensorType>(resType)
                            ? llvm::cast<mlir::RankedTensorType>(resType).getElementType()
                            : resType;
-  AbstractFp &afp = getFp(*s.fpReg, llvm::cast<mlir::FloatType>(elemTy));
+  auto floatTy = llvm::cast<mlir::FloatType>(elemTy);
+  AbstractFp &afp = getFp(*s.fpReg, floatTy);
+  DType elem = dtypeOf(floatTy);
   z3::context &ctx = s.ctx;
 
   State next = s;
-  if (auto *sc = std::get_if<Z3Scalar>(&in)) {
-    next.env.bind(op->getResult(0),
-                  Z3Scalar{afp.exp(sc->expr), elemTy, s.fpMode});
+  if (auto *sc = std::get_if<Scalar>(&in)) {
+    next.env.bind(op->getResult(0), Scalar{afp.exp(sc->e), elem});
   } else {
-    auto &t = std::get<Z3Tile>(in);
+    auto &t = std::get<Tensor>(in);
     z3::expr i = ctx.bv_const("__ue", 32);
-    z3::expr e = afp.exp(z3::select(t.expr, i));
+    z3::expr e = afp.exp(z3::select(t.e, i));
     next.env.bind(op->getResult(0),
-                  Z3Tile{z3::lambda(i, e), t.shape, elemTy, s.fpMode, {}});
+                  Tensor{z3::lambda(i, e), t.shape, elem, std::nullopt});
   }
   return next;
 }

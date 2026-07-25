@@ -15,6 +15,9 @@
 
 namespace Semantics {
 
+using tile_smt::Memory;
+using tile_smt::MemState;
+
 // Complete symbolic program state at a point during execution.
 //
 // Memory model: one independent symbolic Memory per kernel pointer argument
@@ -22,6 +25,10 @@ namespace Semantics {
 // are required to pass non-aliasing pointer arguments; the compiler freely
 // reorders accesses across distinct arguments. Each argument's Memory is an
 // Array(BitVec(64), BitVec(8)) whose index is the absolute byte address.
+//
+// Per-argument memories live in `memState`, keyed by an opaque tile_smt::MemId.
+// The adapter maps each pointer-argument mlir::Value to its MemId via
+// `ptrArgToMem`; the core Memory / MemState never see mlir::Value.
 //
 // Non-pointer arguments (scalars, tensors passed by value) live only in Env.
 //
@@ -32,9 +39,13 @@ class State {
 public:
   Env env;
 
-  // One Memory per !tt.ptr<T> kernel argument.
-  // Key: the mlir::Value of the pointer argument (pointer identity).
-  std::map<mlir::Value, Memory, ValuePtrLess> ptrMems;
+  // One Memory per !tt.ptr<T> kernel argument, keyed by MemId.
+  MemState memState;
+
+  // Maps each pointer-argument mlir::Value to the MemId of its Memory.
+  // The adapter owns this map (core never sees mlir::Value); handlers use it
+  // only at function entry (initFromFunc) and equivalence pairing.
+  std::map<mlir::Value, MemId, ValuePtrLess> ptrArgToMem;
 
   // Future: Memory sharedMem;  // for TTGIR ttg.local_alloc / ttg.local_store
 
@@ -49,25 +60,23 @@ public:
   // axiom emission is idempotent and function names are consistent.
   std::shared_ptr<AbstractFpRegistry> fpReg;
 
-  State(Env env, std::map<mlir::Value, Memory, ValuePtrLess> ptrMems,
+  State(Env env, MemState memState,
+        std::map<mlir::Value, MemId, ValuePtrLess> ptrArgToMem,
         z3::context &ctx, FPMode fpMode,
         std::shared_ptr<AbstractFpRegistry> fpReg);
 
   // Factory: build an initial State from a function's argument list.
   //
   // For each argument:
-  //   - !tt.ptr<T>  → fresh Z3Ptr in env (with baseArg set) +
-  //                   fresh Memory in ptrMems named "<prefix>_mem_argN"
-  //   - tensor<...> → fresh Z3Tile in env
-  //   - scalar      → fresh Z3Scalar in env
+  //   - !tt.ptr<T>  → fresh Ptr in env (with base MemId set) +
+  //                   fresh Memory in memState named "<prefix>_mem_argN"
+  //   - tensor<...> → fresh Tensor in env
+  //   - scalar      → fresh Scalar in env
   //
   // Call this once for each of the two programs being compared, using
   // distinct prefixes ("src", "tgt") so their Z3 symbols are distinguishable.
-  // Both calls must use the SAME symbolic values for the shared inputs — this
-  // is achieved by calling initFromFunc twice with different prefixes and then
-  // asserting that corresponding input memories start equal (or, more simply,
-  // by sharing the initial symbolic inputs across both programs before any
-  // stores happen).
+  // MemIds are minted in argument order, so the two programs' pointer arguments
+  // pair up by position (src arg i ↔ tgt arg i get the same MemId).
   static State initFromFunc(mlir::ValueRange args, z3::context &ctx,
                             FPMode fpMode, const std::string &prefix = "arg");
 
@@ -82,18 +91,9 @@ private:
   // Control flow handlers — framework stubs, concrete semantics deferred.
 
   // scf.if: execute both branches from *this; merge with z3::ite on condition.
-  //   merged.env[r_i]         = ite(cond, thenState.env[r_i], elseState.env[r_i])
-  //   merged.ptrMems[a].array = ite(cond, thenState.ptrMems[a].array,
-  //                                       elseState.ptrMems[a].array)
   State interpretIf(mlir::Operation *op) const;
 
-  // scf.for — strategies (in order of preference):
-  //   A. Static unrolling: trip count is a compile-time constant; thread
-  //      state through N body copies. O(N * body_size) formula; practical
-  //      for small N (≤ ~16).
-  //   B. Loop invariant (deferred): user-supplied predicate I(state);
-  //      assert I(init) ∧ (I(s) → I(body(s))); use I(final).
-  //   C. Abstraction (deferred): treat loop as opaque transformer.
+  // scf.for — static unrolling (deferred).
   State interpretFor(mlir::Operation *op) const;
 
   // scf.while — deferred.
@@ -103,14 +103,15 @@ private:
 // Check semantic equivalence of two final States.
 //
 // Adds to `solver` the assertion that the output memories differ in at least
-// one pointer argument (disjunction over all ptrMems). Then calls
-// solver.check().
+// one pointer argument (disjunction over all memories, paired by MemId). Then
+// calls solver.check().
 //
 //   z3::unsat   — no difference exists → programs are equivalent
 //   z3::sat     — counterexample found; call solver.get_model() for witness
 //   z3::unknown — solver timed out
 //
-// Both states must have been derived from the same initial symbolic inputs.
+// Both states must have been derived from the same initial symbolic inputs and
+// the same MemId assignment (e.g. initFromFunc on the same argument list).
 z3::check_result checkEquivalence(const State &s1, const State &s2,
                                   z3::solver &solver);
 

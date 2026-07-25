@@ -14,6 +14,9 @@
 
 using namespace Semantics;
 
+using tile_smt::getByteWidth;
+using tile_smt::getElemSort;
+
 //===----------------------------------------------------------------------===//
 // tt.get_program_id
 //===----------------------------------------------------------------------===//
@@ -30,9 +33,8 @@ State Semantics::handleTtGetProgramId(const State &s, mlir::Operation *op) {
   }
   z3::expr pid = s.ctx.bv_const(pidName, 32);
 
-  mlir::Type i32Ty = mlir::IntegerType::get(op->getContext(), 32);
   State next = s;
-  next.env.bind(pidOp.getResult(), Z3Scalar{pid, i32Ty, s.fpMode});
+  next.env.bind(pidOp.getResult(), Scalar{pid, DType::I32});
   return next;
 }
 
@@ -45,17 +47,17 @@ State Semantics::handleTtMakeRange(const State &s, mlir::Operation *op) {
   uint32_t start = rangeOp.getStart();
 
   auto resultTy = llvm::cast<mlir::RankedTensorType>(rangeOp.getResult().getType());
-  mlir::Type elemTy = resultTy.getElementType();
-  llvm::SmallVector<int64_t> shape(resultTy.getShape().begin(),
-                                   resultTy.getShape().end());
+  DType elem = dtypeOf(resultTy.getElementType());
+  tile_smt::Shape shape(resultTy.getShape().begin(),
+                        resultTy.getShape().end());
 
   // range[i] = start + i  (element at position i has value start + i)
   z3::expr i    = s.ctx.bv_const("__ri", 32);
-  z3::expr elem = s.ctx.bv_val(start, 32) + i;
+  z3::expr elemExpr = s.ctx.bv_val(start, 32) + i;
 
   State next = s;
   next.env.bind(rangeOp.getResult(),
-    Z3Tile{z3::lambda(i, elem), std::move(shape), elemTy, s.fpMode, {}});
+    Tensor{z3::lambda(i, elemExpr), std::move(shape), elem, std::nullopt});
   return next;
 }
 
@@ -65,21 +67,21 @@ State Semantics::handleTtMakeRange(const State &s, mlir::Operation *op) {
 
 State Semantics::handleTtSplat(const State &s, mlir::Operation *op) {
   auto splatOp = llvm::cast<mlir::triton::SplatOp>(op);
-  Z3Value src = s.env.lookup(splatOp.getSrc());
+  Value src = s.env.lookup(splatOp.getSrc());
 
   auto resultTy = llvm::cast<mlir::RankedTensorType>(splatOp.getResult().getType());
-  mlir::Type elemTy = resultTy.getElementType();
-  llvm::SmallVector<int64_t> shape(resultTy.getShape().begin(),
-                                   resultTy.getShape().end());
+  DType elem = dtypeOf(resultTy.getElementType());
+  tile_smt::Shape shape(resultTy.getShape().begin(),
+                        resultTy.getShape().end());
 
   z3::expr i = s.ctx.bv_const("__si", 32);
 
   // z3::expr has no default constructor, so build the tile through a lambda.
-  auto makeTile = [&]() -> Z3Tile {
-    if (auto *sc = std::get_if<Z3Scalar>(&src))
-      return Z3Tile{z3::lambda(i, sc->expr), shape, elemTy, s.fpMode, {}};
-    if (auto *ptr = std::get_if<Z3Ptr>(&src))
-      return Z3Tile{z3::lambda(i, ptr->expr), shape, elemTy, s.fpMode, ptr->baseArg};
+  auto makeTile = [&]() -> Tensor {
+    if (auto *sc = std::get_if<Scalar>(&src))
+      return Tensor{z3::lambda(i, sc->e), shape, elem, std::nullopt};
+    if (auto *ptr = std::get_if<Ptr>(&src))
+      return Tensor{z3::lambda(i, ptr->e), shape, elem, ptr->base};
     llvm_unreachable("tt.splat: source must be scalar or pointer");
   };
 
@@ -94,42 +96,43 @@ State Semantics::handleTtSplat(const State &s, mlir::Operation *op) {
 
 State Semantics::handleTtAddPtr(const State &s, mlir::Operation *op) {
   auto addptrOp = llvm::cast<mlir::triton::AddPtrOp>(op);
-  Z3Value ptrV = s.env.lookup(addptrOp.getPtr());
-  Z3Value offV = s.env.lookup(addptrOp.getOffset());
+  Value ptrV = s.env.lookup(addptrOp.getPtr());
+  Value offV = s.env.lookup(addptrOp.getOffset());
 
   // Scalar pointer + scalar offset:  newPtr = ptr + sizeof(pointee) * offset.
   // (Softmax computes a per-row base pointer this way before splatting it.)
-  if (auto *ptr = std::get_if<Z3Ptr>(&ptrV)) {
-    unsigned pteSize = getByteWidth(ptr->pointeeType);
-    z3::expr off = std::get<Z3Scalar>(offV).expr;
+  if (auto *ptr = std::get_if<Ptr>(&ptrV)) {
+    unsigned pteSize = getByteWidth(ptr->pointee);
+    z3::expr off = std::get<Scalar>(offV).e;
     unsigned offBw = off.get_sort().bv_size();
     z3::expr off64 = (offBw == 64) ? off : z3::sext(off, 64 - offBw);
-    z3::expr addr = ptr->expr + s.ctx.bv_val((uint64_t)pteSize, 64) * off64;
+    z3::expr addr = ptr->e + s.ctx.bv_val((uint64_t)pteSize, 64) * off64;
     State next = s;
-    next.env.bind(addptrOp.getResult(),
-                  Z3Ptr{addr, ptr->pointeeType, ptr->baseArg});
+    next.env.bind(addptrOp.getResult(), Ptr{addr, ptr->pointee, ptr->base});
     return next;
   }
 
-  auto &ptrTile = std::get<Z3Tile>(ptrV);
-  auto &offTile = std::get<Z3Tile>(offV);
+  auto &ptrTile = std::get<Tensor>(ptrV);
+  auto &offTile = std::get<Tensor>(offV);
 
-  // Determine pointee byte size from the ptr tile element type.
-  auto ptrTy       = llvm::cast<mlir::triton::PointerType>(ptrTile.elemType);
-  unsigned pteSize = getByteWidth(ptrTy.getPointeeType());
+  // Determine pointee byte size from the ptr tile's element type. Tensor.elem
+  // is just DType::Ptr (the pointee is not carried on the tile), so read the
+  // pointee from the op's pointer-tile type via MLIR.
+  auto ptrTensorTy = llvm::cast<mlir::RankedTensorType>(addptrOp.getPtr().getType());
+  auto ptrTy       = llvm::cast<mlir::triton::PointerType>(ptrTensorTy.getElementType());
+  unsigned pteSize = getByteWidth(dtypeOf(ptrTy.getPointeeType()));
 
   z3::expr i      = s.ctx.bv_const("__ai", 32);
-  z3::expr ptr_i  = z3::select(ptrTile.expr, i);           // BV(64) address
-  z3::expr off_i  = z3::select(offTile.expr, i);           // BV(32) element offset
+  z3::expr ptr_i  = z3::select(ptrTile.e, i);             // BV(64) address
+  z3::expr off_i  = z3::select(offTile.e, i);             // BV(32) element offset
 
   // Sign-extend the element offset to 64 bits and scale by pointee size.
   z3::expr off64  = z3::sext(off_i, 32);                   // BV(32) → BV(64)
   z3::expr stride = s.ctx.bv_val((uint64_t)pteSize, 64);
   z3::expr addr_i = ptr_i + stride * off64;
 
-  llvm::SmallVector<int64_t> shape = ptrTile.shape;
-  Z3Tile result{z3::lambda(i, addr_i), std::move(shape), ptrTile.elemType,
-                s.fpMode, ptrTile.ptrBase};
+  Tensor result{z3::lambda(i, addr_i), ptrTile.shape, ptrTile.elem,
+                ptrTile.ptrBase};
 
   State next = s;
   next.env.bind(addptrOp.getResult(), std::move(result));
@@ -142,37 +145,36 @@ State Semantics::handleTtAddPtr(const State &s, mlir::Operation *op) {
 
 State Semantics::handleTtLoad(const State &s, mlir::Operation *op) {
   auto loadOp  = llvm::cast<mlir::triton::LoadOp>(op);
-  auto &ptrTile = std::get<Z3Tile>(s.env.lookup(loadOp.getPtr()));
+  auto &ptrTile = std::get<Tensor>(s.env.lookup(loadOp.getPtr()));
 
   // Mask operand (required by add_kernel; guard for completeness).
   mlir::Value maskVal = loadOp.getMask();
   assert(maskVal && "tt.load: unmasked loads not yet supported");
-  auto &maskTile = std::get<Z3Tile>(s.env.lookup(maskVal));
+  auto &maskTile = std::get<Tensor>(s.env.lookup(maskVal));
 
   // Other (passthrough) tile — synthesize a zero tile if absent.
   auto resultTy  = llvm::cast<mlir::RankedTensorType>(loadOp.getResult().getType());
-  mlir::Type elemTy = resultTy.getElementType();
-  llvm::SmallVector<int64_t> shape(resultTy.getShape().begin(),
-                                   resultTy.getShape().end());
+  DType elem = dtypeOf(resultTy.getElementType());
+  tile_smt::Shape shape(resultTy.getShape().begin(),
+                        resultTy.getShape().end());
 
   mlir::Value otherVal = loadOp.getOther();
-  Z3Tile otherTile = [&]() -> Z3Tile {
+  Tensor otherTile = [&]() -> Tensor {
     if (otherVal)
-      return std::get<Z3Tile>(s.env.lookup(otherVal));
+      return std::get<Tensor>(s.env.lookup(otherVal));
     // Default other: zero (or false for i1).
-    z3::sort elemSort = getElemSort(s.ctx, elemTy, s.fpMode);
+    z3::sort elemSort = getElemSort(s.ctx, elem, s.fpMode);
     z3::expr zero = elemSort.is_bool() ? s.ctx.bool_val(false)
                                        : s.ctx.bv_val(0, elemSort.bv_size());
     z3::expr i = s.ctx.bv_const("__lo_i", 32);
-    return Z3Tile{z3::lambda(i, zero), shape, elemTy, s.fpMode, {}};
+    return Tensor{z3::lambda(i, zero), shape, elem, std::nullopt};
   }();
 
-  // Find the Memory for this pointer's base argument.
-  mlir::Value base = ptrTile.ptrBase;
-  assert(base && "tt.load: pointer tile has no ptrBase — provenance lost");
-  const Memory &mem = s.ptrMems.at(base);
+  // Find the Memory for this pointer's base memory.
+  assert(ptrTile.ptrBase && "tt.load: pointer tile has no ptrBase — provenance lost");
+  const Memory &mem = s.memState.mems.at(*ptrTile.ptrBase);
 
-  Z3Tile loaded = mem.load(ptrTile, maskTile, otherTile);
+  Tensor loaded = mem.load(ptrTile, maskTile, otherTile);
 
   State next = s;
   next.env.bind(loadOp.getResult(), std::move(loaded));
@@ -185,21 +187,20 @@ State Semantics::handleTtLoad(const State &s, mlir::Operation *op) {
 
 State Semantics::handleTtStore(const State &s, mlir::Operation *op) {
   auto storeOp  = llvm::cast<mlir::triton::StoreOp>(op);
-  auto &ptrTile = std::get<Z3Tile>(s.env.lookup(storeOp.getPtr()));
-  auto &valTile = std::get<Z3Tile>(s.env.lookup(storeOp.getValue()));
+  auto &ptrTile = std::get<Tensor>(s.env.lookup(storeOp.getPtr()));
+  auto &valTile = std::get<Tensor>(s.env.lookup(storeOp.getValue()));
 
   // Mask operand (required by add_kernel; guard for completeness).
   mlir::Value maskVal = storeOp.getMask();
   assert(maskVal && "tt.store: unmasked stores not yet supported");
-  auto &maskTile = std::get<Z3Tile>(s.env.lookup(maskVal));
+  auto &maskTile = std::get<Tensor>(s.env.lookup(maskVal));
 
-  // Find the Memory for this pointer's base argument.
-  mlir::Value base = ptrTile.ptrBase;
-  assert(base && "tt.store: pointer tile has no ptrBase — provenance lost");
+  // Find the Memory for this pointer's base memory.
+  assert(ptrTile.ptrBase && "tt.store: pointer tile has no ptrBase — provenance lost");
 
   // Copy state and mutate the target Memory in the copy.
   State next = s;
-  next.ptrMems.at(base).store(ptrTile, valTile, maskTile);
+  next.memState.mems.at(*ptrTile.ptrBase).store(ptrTile, valTile, maskTile);
   return next;
 }
 
@@ -218,28 +219,27 @@ State Semantics::handleTtStore(const State &s, mlir::Operation *op) {
 State Semantics::handleTtReduce(const State &s, mlir::Operation *op) {
   assert(op->getNumOperands() == 1 &&
          "tt.reduce: only single-operand reductions are supported");
-  auto &inTile = std::get<Z3Tile>(s.env.lookup(op->getOperand(0)));
+  auto &inTile = std::get<Tensor>(s.env.lookup(op->getOperand(0)));
 
   unsigned n = 1;
   for (int64_t d : inTile.shape)
     n *= static_cast<unsigned>(d);
   assert(n >= 1 && "tt.reduce: empty tile");
 
-  mlir::Type elemTy = inTile.elemType;
+  DType elem = inTile.elem;
   z3::context &ctx = s.ctx;
 
   mlir::Block &combine = op->getRegion(0).front();
   mlir::Value argA = combine.getArgument(0);
   mlir::Value argB = combine.getArgument(1);
 
-  auto elemAt = [&](unsigned i) -> Z3Value {
-    return Z3Scalar{z3::select(inTile.expr, ctx.bv_val(i, 32)), elemTy,
-                    inTile.fpMode};
+  auto elemAt = [&](unsigned i) -> Value {
+    return Scalar{z3::select(inTile.e, ctx.bv_val(i, 32)), elem};
   };
 
   // Interpret the combine region with its two block args bound to (a, b) and
   // return the value yielded by tt.reduce.return.
-  auto applyCombine = [&](const Z3Value &a, const Z3Value &b) -> Z3Value {
+  auto applyCombine = [&](const Value &a, const Value &b) -> Value {
     State seed = s; // shares ctx + fpReg; env additionally binds the two args
     seed.env.bind(argA, a);
     seed.env.bind(argB, b);
@@ -254,7 +254,7 @@ State Semantics::handleTtReduce(const State &s, mlir::Operation *op) {
     llvm_unreachable("tt.reduce: combine region has no tt.reduce.return");
   };
 
-  Z3Value acc = elemAt(0);
+  Value acc = elemAt(0);
   for (unsigned i = 1; i < n; i++)
     acc = applyCombine(acc, elemAt(i));
 
