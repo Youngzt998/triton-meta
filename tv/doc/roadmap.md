@@ -89,9 +89,15 @@ our SMT solver** (today's `permute_passes.py` is the seed of this line).
 **Sub-lines (mirror T):**
 - **V1** = TTIR-level static validation; starts once **M1** (TTIR modeling) is
   done. **V2** = TTGIR-level; needs **M2**. (V1↔T1↔TTIR, V2↔T2↔TTGIR — confirmed.)
-- Precision sensitivity is set by the **FP mode**, not by excluding passes:
-  Abstract (a) ignores rounding, so precision-trading passes still look
-  equivalent; FPA (c) would see the difference. Pick the mode per experiment.
+- Precision sensitivity is set by the **FP encoding + axiom profile** (two knobs;
+  design §"FP axiom profiles"), not by excluding passes. Two profiles drive V:
+  - **Exact / bit-to-bit** (FPA, or Abstract reassoc-off) — proves a pass is
+    bit-for-bit; a precision-trading pass correctly shows as NOT equivalent.
+  - **Reassoc-allowed** (Abstract + associativity axioms, or Real) — proves a
+    precision-trading pass did only *legal* FP reordering (tree reduce, FMA
+    fusion).
+  Run a suspect pass under both: exact-SAT + reassoc-UNSAT = benign perf reorder;
+  reassoc-SAT = real bug. (Both to be added; code not started.)
 
 ---
 

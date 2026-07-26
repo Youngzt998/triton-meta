@@ -134,6 +134,44 @@ Interface: a `FpModel` strategy (today's `AbstractFp` = mode a); `Context` holds
 the chosen `FpModel` and routes float ops through it. Adapters don't care which
 mode — they just call `ctx.add/mul/exp/...`.
 
+## FP axiom profiles (algebraic strictness — orthogonal to encoding)
+The encoding (a/b/c/d) picks HOW a float value is represented; a **second,
+orthogonal knob** picks WHICH algebraic laws float ops obey — different
+verification jobs need different strictness. Two switchable profiles:
+
+- **(1) Exact / bit-to-bit** — floats obey only true IEEE-754: NO reassociation,
+  NO distributivity, `+` is not associative. Proves a pass is **bit-for-bit**
+  identical. Realized by encoding **(c) FPA** (true IEEE), or **(a) Abstract with
+  reassoc off** (today's default: any reorder stays SAT). The strict bar.
+- **(2) Reassoc-allowed / algebraic** — additionally assume the laws a
+  performance pass is *allowed* to use: at least **associativity** of `+`/`×`
+  (commutativity already on); optionally distributivity, `+0`/`×1` identities,
+  and FMA-contraction (`a*b+c → fma`). Verifies optimizations that
+  **intentionally reorder FP work for speed** (tree/blocked reductions,
+  reassociation, FMA fusion) — NOT bit-exact but correct *under the relaxed
+  model*. Realized by **(a) Abstract + associativity axioms**, or by encoding
+  **(b) Real** (reals satisfy all algebraic laws for free).
+
+**Using both together (the point).** Run a suspect FP pass under both profiles:
+- Exact UNSAT → the pass is bit-for-bit safe (strongest).
+- Exact SAT but Reassoc-allowed UNSAT → not bit-exact, but only *legal
+  reordering* — the intended, benign behavior of a perf pass.
+- Reassoc-allowed also SAT → a **real bug** (not even justified by reassociation).
+This lets tv separate "deliberate precision change" from "miscompile" — a single
+strict check cannot.
+
+**Soundness caveat.** Profile (2) is equivalence *given the assumed laws*: if a
+reorder also changes overflow/NaN/±0 behavior (e.g. reassociating near inf), (2)
+may call it equivalent when true IEEE would not. So (2) proves "only legal
+reassociation," NOT absolute correctness; Exact / FPA stays the ground truth.
+Scope which extra laws (2) turns on to what the specific pass class is allowed to
+do.
+
+Interface: a second field on `FpModel`/`Context` — an `AxiomProfile`
+(exact | reassoc) plus a bitset of enabled laws — independent of `FPMode`.
+`AbstractFp::addAxioms` gains the associativity (and optional distributivity /
+identity / FMA) axioms, emitted only under the reassoc profile.
+
 ## Control-flow merge (core; when scf.* lands)
 The generic parts of `scf.if`/`scf.for` are hardware-neutral and belong in core:
 - `if`: `merge(cond, thenState, elseState)` = `ite` over each result `Value` and
