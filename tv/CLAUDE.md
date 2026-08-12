@@ -167,6 +167,8 @@ tv/
   benchmark/     benchmark_kernels.py — 420+ collected @triton.jit kernels
   doc/           roadmap.md · tile-smt-goals.md · tile-smt-design.md ·
                  m0-plan.md · code-navigation.md · tensor-languages-survey.md
+    kb/          knowledge base on external tools — REFERENCE, NOT plans
+                 (alive2-loops.md). Nothing in kb/ is an adopted decision.
   paper/         noticable.md — scaling-issue log (e.g. the store-blowup fix)
 ```
 
@@ -179,27 +181,23 @@ recommended reading order, key invariants, the 3-edit recipe for adding an op).
 7 of ~48 `tt.*` ops, ~12 of ~30 `arith.*`, 1 of ~14 `math.*`, **0 of 7**
 control-flow ops.
 
-Decisions already made for M1 (not yet implemented):
+**Decided:**
 - **Loops** — `--loop-model=unroll | summarize | auto`. `summarize` lifts a loop
   to a combinator over `k ∈ [0,N)`; its enabling analysis is **affine recurrence
   recognition** (turn `ptr += stride` into `base + k*stride`), decomposed by
   **SCC of the carried-value dependence graph**. `scf.while` is out of scope
   (measured: 2.4% of kernels, all irregular).
-- **Bounded honesty** (from an Alive2 source audit) — copy its `#sink` (drop
-  over-bound paths so truncation can't cause false alarms), but **not** its
-  reporting: emit a **three-way verdict** `proved / proved-up-to-k / unknown`,
-  make "some path hit the bound" machine-readable, and print `k` on every pass.
-  Alive2 prints the same success string for a truncated run as for a real proof.
-- **Cost model** — blowup is `trip_count × tile_width`, and today **both** are
-  statically unfolded (`Context::reduce` folds element-wise; `Memory::store`
-  unfolds lanes). At least one must become symbolic.
-- **Unmodeled ops** must return an `UNSUPPORTED` verdict, not crash.
-- **`--timeout`** on the solver (today there is none inside the binary).
-- Generalize the core op set away from its Triton shape (§2).
+- **Generalize the core op set** away from its Triton shape (§2).
 
-Still open (see the design docs): pointer aliasing (may-alias vs the current
-no-alias assumption), UB policy, `program_id` range constraint, `tt.dot`
-fidelity, reduce ordering, M1's target-kernel list.
+**Measured fact (not a decision):** solver blowup is `trip_count × tile_width`,
+and today **both** are statically unfolded — `Context::reduce` folds
+element-wise, `Memory::store` unfolds lanes.
+
+**Open — proposals only, nothing decided:** how to report a bounded/truncated
+result; unmodeled-op behavior (hard crash today vs an `UNSUPPORTED` verdict); a
+solver `--timeout` (none inside the binary today); pointer aliasing (may-alias
+vs today's no-alias assumption); UB policy; `program_id` range constraint;
+`tt.dot` fidelity; reduce ordering; M1's target-kernel list.
 
 **Long-term awareness:** modeling is **single program-instance**;
 whole-**kernel-launch** semantics + functional correctness (does GEMM really
