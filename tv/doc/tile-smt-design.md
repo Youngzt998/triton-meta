@@ -52,6 +52,47 @@ using Value = std::variant<Scalar, Tensor, Ptr>;
 Rationale for `MemId`: the core must not hold `mlir::Value`. Provenance (needed to
 pick the right per-arg `Memory`) becomes an opaque id owned by the adapter.
 
+## Abstract tensor operation set (core) — and how builders map onto it
+The core owns a **reasonably complete but abstract set of tensor operations**,
+defined by their **semantics**, not by any language's op names, and depending on
+**no language**. A builder's whole job is to **map its own language's tensor
+operations onto this set**. Core + builder together are the complete path from a
+GPU kernel to SMT semantics — neither half is that path on its own.
+
+| Category | Abstract core op | Triton surface | Other languages |
+|---|---|---|---|
+| Elementwise | `map(f, tensors...)` over a primitive scalar-function set (arith/compare/select/cast/transcendental) | `arith.*`, `math.*` | same shape everywhere |
+| Structural | `iota`, `splat`, `broadcast`, `reshape`, `transpose`, `join`/`split`, `slice` | `tt.make_range/splat/broadcast/expand_dims/reshape/trans/join/split` | TVM/TensorIR index maps; `jnp`-style |
+| Reduction | `reduce(axis, combine)`, `scan(axis, combine)` | `tt.reduce`, `tt.scan` | `T.reduce`, `jnp.sum`/`lax.scan` |
+| Contraction | `contract(K)` — sum-of-products over shared indices | `tt.dot`, `tt.dot_scaled` | `T.gemm`, `lax.dot_general`, NKI matmul |
+| Data-dependent index | `gather`/`scatter` | `tt.gather`, `tt.histogram` | same |
+| Memory access | **masked windowed read/write** over an address space | `tt.load/store(ptrs, mask, other)`, `tt.descriptor_load` | TileLang `T.copy`, Pallas `pl.load(ref, idx)`, NKI DMA |
+| Loops | loop combinators over `k ∈ [0,N)` (map / reduce / general fold — see §"FP axiom profiles" and the loop model) | `scf.for` | `T.serial`, `lax.fori_loop` |
+| Program identity | `program_id(axis)`, `num_programs(axis)` | `tt.get_program_id/get_num_programs` | `pl.program_id`, `nl.program_id` |
+
+**The mapping is many-to-many, and that is the point.** One core op serves many
+surface syntaxes — `tt.load(ptrs,mask,other)`, `T.copy`, and `pl.load(ref,idx)`
+are all *masked windowed read*, differing only in how the window is addressed.
+Conversely one language op may expand into several core ops (`tt.dot_scaled` =
+decode scales → `map(mul)` → `contract`).
+
+**Completeness test:** adding a new language should require **no new core ops** —
+only a new builder. (This is success criterion §7 in `tile-smt-goals.md`.)
+
+**Layering note.** *How a window is addressed* is NOT an abstract tensor op.
+Pointer arithmetic is Triton's (and the GPU's) addressing model; memref/TPU
+languages address by indices into a ref. So pointer ops belong to the access
+layer beneath the tensor algebra (today: the linear byte-heap + pointer model),
+and layouts/warps belong to `tile-gpu-smt` — never to the abstract set above.
+
+⚠️ **Current gap (M1 work).** Today's `Context` was lifted from the Triton op
+handlers, so parts of it are still Triton-shaped and should be generalized:
+`addPtr`/`splatPtr` are pointer-level (see the layering note); `iota` is fine but
+named after `make_range`; `reduce` is 1-D and single-operand; there is no
+`contract`, no `gather`/`scatter`, no `scan`, and no `broadcast`/`reshape`/
+`transpose`. The op list below is therefore the *current* API, not the target
+abstract set.
+
 ## Builder API (sketch)
 ```cpp
 class Context {                    // owns z3::context, AbstractFpRegistry, FPMode

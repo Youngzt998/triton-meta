@@ -5,8 +5,7 @@
 > **Language.** Chat/explanations in Chinese; keep **all code, comments, commit
 > messages, and docs (including this file) in English**.
 > **History.** The old, Triton-only version of this file is
-> `tv/CLAUDE.legacy.md` (SUPERSEDED — do not follow it; some of its claims are
-> stale). The refactor direction is in `tv/doc/tensor-languages-survey.md`.
+> `tv/CLAUDE.legacy.md` (SUPERSEDED — do not follow it).
 
 ---
 
@@ -18,75 +17,86 @@ Exit codes: `0` = EQUIVALENT (UNSAT), `1` = NOT EQUIVALENT (SAT, prints a
 counterexample), `2` = UNKNOWN. Today it validates **Triton TTIR** (add_kernel,
 softmax) at realistic sizes.
 
-**Current design facts (accurate — trust these over the legacy file):**
+**M0 is DONE.** The code is split into an MLIR-free core + per-language builders
+(§6). Verified: core has zero MLIR, `libtile-smt.a` links only Z3, all unit tests
+and the eval suite green.
+
+**Current design facts (accurate — trust these over any older doc):**
 - **Memory = Option B**: one byte-addressable Z3 array `Array(BV64,BV8)` per
   pointer argument (Triton args don't alias). `Memory::store` builds a **single
   `z3::lambda`** heap update; `checkEquivalence` compares at a **symbolic witness
-  address** (`select(m1,w) != select(m2,w)`), NOT array extensionality.
-  (`tv/semantics/Memory.{h,cpp}`, `tv/semantics/State.cpp`)
+  address** (`select(m1,w) != select(m2,w)`), NOT array extensionality — the
+  latter returns `unknown`. (`semantics/Memory.*`, `semantics/Equivalence.*`)
 - **FP = Abstract mode only**: each FP value is an opaque `BitVec` id; ops are
-  uninterpreted Z3 functions + minimal axioms (add/mul/max commutativity,
-  neg-involution, distinct reserved consts). FP encoding is designed as a
-  **pluggable mode** — (a) Abstract [only one implemented], (b) Real, (c) FPA,
-  (d) int-approx/interval later; first focus a/b/c (see
-  `tv/doc/tile-smt-design.md` §"FP encoding modes"). (`tv/semantics/AbstractFp.{h,cpp}`)
-- **Engine = `State`** (`env` + per-arg `ptrMems`), pure
-  `interpretOp`/`interpretBlock` walking a `tt.func`. Ops modeled: `arith`/`math`
-  elementwise (incl. `divf`/`maxnumf`/`math.exp`), `tt.make_range`/`splat`/
-  `addptr` (tile **and** scalar)/`load`/`store` (masked), `tt.reduce`
-  (combine-region fold). **No control flow yet** (`scf.if/for/while` are
-  `llvm_unreachable`), no `tt.call` (rely on `-inline`), no `tt.dot`, no
-  multi-dim reduce.
-- **Unit tests**: header-only harness `tv/test/validator/SimpleTest.h` (no
-  GoogleTest).
+  uninterpreted Z3 functions with **only 5 axioms** (5 reserved consts distinct;
+  add/mul/max commutative; neg involutive). Deliberately no associativity, no
+  NaN propagation, no zero identities. `lt`/`le` throw. (`semantics/AbstractFp.*`)
+- **Ops modeled**: `arith` constant/addi/subi/muli/andi/extsi/cmpi(10 preds)/
+  addf/subf/mulf/divf/maxnumf; `math.exp`; `tt.` get_program_id/make_range/splat/
+  addptr(scalar **and** tile)/load/store (both **require a mask**)/reduce
+  (combine-region fold, **1-D single-operand only**).
+- **Not modeled**: control flow (`scf.if/for/while` are `llvm_unreachable`),
+  `tt.call` (rely on `-inline`), `tt.dot`, multi-dim reduce, `arith.cmpf`,
+  `arith.select`, most casts, all `math.*` except `exp`. An unmodeled op is a
+  **hard crash**, not a graceful "unsupported" verdict (to fix in M1).
 - **Practical note**: proving EQUIVALENCE (UNSAT) is fast even at 1024 elems;
   proving NON-equivalence (SAT) is much harder — use **small tiles** for
   inequality cases.
 
-## 2. Macro goal — decouple tensor semantics (the direction we're moving to)
+## 2. Macro goal — abstract tensor semantics, mapped per language
 
-Today `tv/semantics/` is coupled to Triton. The goal is to factor the SMT
-modeling into a **pure, MLIR-independent SMT semantic model** that builds with
-**only Z3** (no MLIR/Triton/TVM headers), driven by any language through a
-builder API. Full goals + success criteria: `tv/doc/tile-smt-goals.md`.
+**The whole pipeline = abstract tensor semantics (core) + per-language mapping
+(builder).** Those two together are what turns a GPU kernel into SMT semantics:
 
-**Near-term north star:** first ship a complete impl on **Triton** and use it to
-**find & reproduce a real Triton compilation bug**; design for extension, but
-Triton is the first language.
+- The **core** owns a *reasonably complete but abstract* set of **tensor
+  operations** — elementwise map, reduce/scan, contraction, structural
+  (iota/splat/broadcast/reshape/transpose), gather/scatter, masked windowed
+  memory access, loop combinators, program identity. They are defined by their
+  **semantics**, not by any language's op names, and depend on **no language**.
+- Each **builder** has exactly one job: **map its own language's tensor
+  operations onto that abstract set**. The mapping is not 1:1 — one core op
+  serves many surface syntaxes (Triton `tt.load(ptrs,mask,other)`, TileLang
+  `T.copy`, Pallas `pl.load(ref,idx)` are all "masked windowed read"), and one
+  language op may expand into several core ops.
+- **Completeness test:** adding a new language should need **no new core ops**.
 
-The libraries and Triton-as-client:
-- **`tile-smt`** — hardware-neutral core: logical tensor values; `map` /
-  `reduce(axis)` / `contract(K)`; **affine windowed access + optional predicate**;
-  memory as an address space; correctness = final-memory equality. **No
-  pointers/warps/layouts baked in.**
-- **`tile-gpu-smt`** — GPU/SIMT layer: pointer+mask lowering, register layouts
-  / `convert_layout`, shared memory, warp/lane, async (TMA/mbarrier), warp
-  specialization.
-- **(future) `tile-accel-smt`** — non-GPU hardware (TPU/Mosaic, Trainium/NKI):
-  DMA+semaphores, scratchpad placement, systolic staging.
+⚠️ **Known gap:** today's `Context` API was lifted from the Triton handlers, so
+parts of it are still Triton-shaped — e.g. `addPtr`/`splatPtr` are *pointer-level*
+addressing, not abstract tensor ops (memref/TPU languages don't address by
+pointer). Generalizing the op set along the lines above is M1 work. See
+`tv/doc/tile-smt-design.md` §"Abstract tensor operation set".
 
-Per-language **builders** (under `tv/builder/`: `builder/mlir` shared by all
-MLIR langs incl. `arith`/`math`/`scf`, `builder/triton` for `tt.*` + entry) walk a
-language's IR and call the lib's builder API to encode + check equivalence. Triton's own **TTIR ≈ generic /
-TTGIR ≈ GPU** split is the intended library cut; cross-language evidence (TileLang,
-Pallas/Mosaic, IREE Linalg, Hidet, Helion, NKI) is in
-`tv/doc/tensor-languages-survey.md`.
+**Near-term north star:** ship a complete implementation on **Triton** and use it
+to **find & reproduce a real Triton compilation bug**.
 
-**Status:** survey done; **interface draft written** —
-`tv/doc/tile-smt-design.md`. Locked decisions: **Builder API** (adapter calls
-the lib; no neutral IR); **incremental access model** (core keeps the linear
-byte-heap + pointer `Memory`, abstract enough to later swap for memref/TPU);
-**`program_id` lives in the core**; core holds no `mlir::Value` — pointer
-provenance is an opaque `MemId` the adapter maps. Implementation NOT started;
-`tv/semantics/` stays the current Triton-coupled impl until **M0**. The numbered
-plan (M/T/V) is in `tv/doc/roadmap.md`.
+The library split:
+- **`tile-smt`** — hardware-neutral core (the abstract tensor semantics above).
+- **`tile-gpu-smt`** — GPU/SIMT layer (M2): layouts/`convert_layout`, shared
+  memory, warp/lane, async TMA/mbarrier, warp specialization.
+- **(future) `tile-accel-smt`** — TPU/Mosaic + Trainium/NKI; **one layer covers
+  both**.
+
+Full goals + success criteria: `tv/doc/tile-smt-goals.md`. Interfaces:
+`tv/doc/tile-smt-design.md`. Numbered plan: `tv/doc/roadmap.md`.
+
+**Locked decisions:** Builder API (adapter calls the lib; no neutral IR);
+incremental access model (linear byte-heap + pointer, abstract enough to swap for
+memref/TPU later); `program_id` in the core; core holds no `mlir::Value` —
+pointer provenance is an opaque `MemId`; **FP axiom profiles** (exact bit-to-bit
+vs reassoc-allowed); **loop model** `--loop-model=unroll|summarize|auto` (§7).
 
 ## 3. Development rules
 
-- All `tv/` work stays **inside `tv/`**; push only to branch **`tv`** or
-  **`tv-trials`**.
-- Any change to a design component **must update** the tests in
-  `tv/test/validator/`.
+- 🔴 **NEVER change any Triton file to serve tv** — not even the repo root
+  `CLAUDE.md`. tv's *only* hook into Triton is the single pre-existing line
+  `add_subdirectory(tv)` in the root `CMakeLists.txt`. Everything tv adds lives
+  under `tv/`. Gate: `git diff --name-only <base> HEAD -- ':(exclude)tv/'` must
+  be empty. (Out-of-tree is infeasible: Triton's core is CMake OBJECT libraries
+  with no exported package — `triton-tv` links ~305 raw `.o` files.)
+- **This project does not run `pre-commit`** (the repo root CLAUDE.md asks for
+  it; tv is exempt, and we do not edit that file to say so).
+- Push only to branch **`tv`** or **`tv-trials`**.
+- Any change to a design component **must update** the tests.
 - **Chinese** for chat; **English** for code/comments/commits/docs.
 - Commit policy: may **auto-commit new changes** (short one-line msg, no Claude
   author line); **ask before** history rewrites (squash/amend/rebase).
@@ -94,24 +104,27 @@ plan (M/T/V) is in `tv/doc/roadmap.md`.
 ## 4. Build (offline recipe on this machine)
 
 C++ changes require a rebuild. Full recipe + rationale: memory
-`tv-env-and-remote-state`. Essentials:
+`tv-env-and-remote-state`. **Do not run `pip install -e .`** while other sessions
+are working — it relinks the shared `libtriton.so`. Use ninja:
 
 ```bash
 cd /home/youngzt/tv/triton && source .venv/bin/activate
 export TRITON_OFFLINE_BUILD=1 TRITON_BUILD_PROTON=OFF \
        LLVM_SYSPATH=/home/youngzt/triton-llvm/build-0729a74e \
        JSON_SYSPATH=/usr TRITON_BUILD_WITH_CLANG_LLD=1 MAX_JOBS=100
-pip install -e . --no-build-isolation          # configure the CMake build
-ninja -C build/cmake.linux-x86_64-cpython-3.12 triton-tv tv-validator-tests
+BD=build/cmake.linux-x86_64-cpython-3.12
+ninja -C $BD tile-smt tile-smt-tests        # core only — fast, no MLIR
+ninja -C $BD triton-tv tv-validator-tests   # full; the triton-tv link is slow
 ```
 
 ## 5. Testing
 
-**Unit tests** (C++): build `tv-validator-tests`, then run the exes under
-`build/.../tv/test/validator/` or `.venv/bin/ctest --test-dir <build> -R TestTritonTV`.
+**Unit tests.** Two groups:
+- **core (Z3-only, no MLIR)** — `ctest --test-dir $BD -R TileSmt` (5 tests:
+  Types, AbstractFp, Memory, Context, Equivalence).
+- **builder (needs MLIR)** — `ctest --test-dir $BD -R TestTritonTV` (Env, State).
 
-**Routine testing — validator gates + optimization-permutation campaign** (drives
-the built `triton-tv`; the SMT solver is the verifier):
+**Routine testing — validator gates + optimization-permutation campaign:**
 
 ```bash
 python tv/eval/run_eval.py all       # gates: pairs + inequal + compile-options, then timing
@@ -123,40 +136,73 @@ python tv/eval/permute_passes.py \
 
 - **pairs** — curated equivalent/non-equivalent pairs (verdict must match tag).
 - **inequal** — genuinely non-equivalent pairs; must ALL be caught as NEQ
-  (soundness). Use small tiles (NEQ is a SAT search, cheap only when small).
+  (soundness). Use small tiles.
 - **compile-options** — pass variants vs the unoptimized standard; must be EQUIV.
-- **permute_passes.py** — applies every 1/2/3-pass TTIR-optimization permutation
-  to an unoptimized kernel and validates each vs the reference. `EQUIVALENT` for
-  all = healthy; any `NOT EQUIVALENT` = a potential Triton miscompile (it saves
-  `BUG_neq.ttir` and stops — re-check soundness before filing).
+- **permute_passes.py** — every 1/2/3-pass TTIR-optimization permutation vs the
+  reference. Any `NOT EQUIVALENT` = a potential miscompile (saves `BUG_neq.ttir`
+  and stops — re-check soundness before filing).
 
-Last runs: add & softmax each 259 permutations all EQUIVALENT; no miscompile
-found.
+Last runs: pairs 4/4, inequal 6/6, compile-options 9/9; add & softmax each 259
+permutations all EQUIVALENT; no miscompile found yet.
+
+⚠️ `tv/eval/compile-options/generate.py` picks the target from the **live GPU**
+if one exists. On a different machine that silently changes which architecture's
+IR you are validating — pin it explicitly when it matters.
 
 ## 6. Where things are
 
-- `tv/semantics/` — `Memory`, `AbstractFp`, `Env`, `State` + `mlir/` op handlers
-  (the Triton-coupled implementation to be refactored into the libs).
-- `tv/eval/` — evaluation suite: `pairs/`, `inequal/`, `compile-options/`,
-  `solver-cost/`, `run_eval.py`, `permute_passes.py`.
-- `tv/test/validator/` — C++ unit tests (`SimpleTest.h` harness).
-- `tv/doc/` — **`roadmap.md`** (M/T/V plan), **`tile-smt-goals.md`**,
-  **`tile-smt-design.md`**, `tensor-languages-survey.md`, `plan.md`, `ttir.md`,
-  `ttgir.md`.
-- `tv/paper/noticable.md` — scaling-issue log (e.g. the store-blowup fix).
-- `tv/CLAUDE.legacy.md` — old Triton-only guidance (SUPERSEDED; historical).
+```
+tv/
+  semantics/     CORE `tile-smt` — MLIR-free, links ONLY z3 (namespace tile_smt)
+                 Types · Value · AbstractFp · Memory · Context · Equivalence
+    test/        Z3-only unit tests (SimpleTest.h harness)
+  builder/       per-language builders — the ONLY place that includes MLIR
+    mlir/        shared by all MLIR languages: DTypeOf · Env · State (walk +
+                 dispatch + control-flow stubs) · ArithOps
+    triton/      Triton-specific: TritonOps (tt.*)
+  bin/           triton-tv.cpp — validator main
+  test/validator/  builder-level C++ tests (need MLIR)
+  eval/          pairs/ inequal/ compile-options/ solver-cost/ run_eval.py
+                 permute_passes.py
+  benchmark/     benchmark_kernels.py — 420+ collected @triton.jit kernels
+  doc/           roadmap.md · tile-smt-goals.md · tile-smt-design.md ·
+                 m0-plan.md · code-navigation.md · tensor-languages-survey.md
+  paper/         noticable.md — scaling-issue log (e.g. the store-blowup fix)
+```
+
+**Start here to read the code:** `tv/doc/code-navigation.md` (layer map,
+recommended reading order, key invariants, the 3-edit recipe for adding an op).
 
 ## 7. Known limitations / next work
 
-- No control flow (`scf.if/for/while`), no `tt.call` (rely on `-inline`), no
-  `tt.dot`, no multi-dim reduce; only Abstract FP mode.
-- Non-equivalence (SAT) is slow at large sizes.
-- **M0** (migrate to tile-smt) **not started**; numbered plan in
-  `tv/doc/roadmap.md`. Keep new modeling code factorable along the
-  generic-vs-GPU line so the split stays cheap.
-- (Long-term awareness) modeling is **single program-instance** today;
-  whole-**kernel-launch** semantics + functional correctness (kernel-vs-spec:
-  does GEMM really compute GEMM, FA really FA) is a long-term goal, not
-  near-term. Don't design anything that blocks it. (Equivalence assumes
-  **race-free**; may tie in the Triton Sanitizer project for cross-instance
-  data-race detection — ⚠️ unverified.)
+**M1 is next** — extend the core to (almost) all of TTIR. Coverage today:
+7 of ~48 `tt.*` ops, ~12 of ~30 `arith.*`, 1 of ~14 `math.*`, **0 of 7**
+control-flow ops.
+
+Decisions already made for M1 (not yet implemented):
+- **Loops** — `--loop-model=unroll | summarize | auto`. `summarize` lifts a loop
+  to a combinator over `k ∈ [0,N)`; its enabling analysis is **affine recurrence
+  recognition** (turn `ptr += stride` into `base + k*stride`), decomposed by
+  **SCC of the carried-value dependence graph**. `scf.while` is out of scope
+  (measured: 2.4% of kernels, all irregular).
+- **Bounded honesty** (from an Alive2 source audit) — copy its `#sink` (drop
+  over-bound paths so truncation can't cause false alarms), but **not** its
+  reporting: emit a **three-way verdict** `proved / proved-up-to-k / unknown`,
+  make "some path hit the bound" machine-readable, and print `k` on every pass.
+  Alive2 prints the same success string for a truncated run as for a real proof.
+- **Cost model** — blowup is `trip_count × tile_width`, and today **both** are
+  statically unfolded (`Context::reduce` folds element-wise; `Memory::store`
+  unfolds lanes). At least one must become symbolic.
+- **Unmodeled ops** must return an `UNSUPPORTED` verdict, not crash.
+- **`--timeout`** on the solver (today there is none inside the binary).
+- Generalize the core op set away from its Triton shape (§2).
+
+Still open (see the design docs): pointer aliasing (may-alias vs the current
+no-alias assumption), UB policy, `program_id` range constraint, `tt.dot`
+fidelity, reduce ordering, M1's target-kernel list.
+
+**Long-term awareness:** modeling is **single program-instance**;
+whole-**kernel-launch** semantics + functional correctness (does GEMM really
+compute GEMM) is a long-term goal — don't design anything that blocks it.
+Equivalence assumes **race-free**; a possible tie-in is the Triton Sanitizer for
+cross-instance data-race detection (⚠️ unverified).
