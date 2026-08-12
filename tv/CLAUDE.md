@@ -188,6 +188,16 @@ control-flow ops.
   **SCC of the carried-value dependence graph**. `scf.while` is out of scope
   (measured: 2.4% of kernels, all irregular).
 - **Generalize the core op set** away from its Triton shape (§2).
+- **Atomics are out of scope** (`tt.atomic_rmw`/`cas`, `tl.atomic_add`) — not
+  because they are hard, but because the question is ill-posed: they are
+  non-deterministic across program instances, and FP add is not associative, so
+  the result is not deterministic and "bit-exact equivalence" has no meaning.
+  Must report UNSUPPORTED, never a verdict.
+- **M1 sub-phases are defined by measured coverage**, not a hand-picked kernel
+  list — see `tv/doc/roadmap.md` §M1. Baseline: **15.7%** (100/636) of the
+  hand-written corpus is modelable today; the top blockers are dtype casts, for
+  loops, `tl.where`, and data-dependent `if` — **`tt.dot` ranks only 9th**.
+  MVP target ≥40% hand-written / ≥80% inductor; complete ≥60% + flash attention.
 
 **Measured fact (not a decision):** solver blowup is `trip_count × tile_width`,
 and today **both** are statically unfolded — `Context::reduce` folds

@@ -31,10 +31,41 @@ sides:**
 
 ### M1 — extend tile-smt to model (almost) all of Triton TTIR
 Grow the tile-smt semantic model, driven by TTIR's needs, until it cleanly models
-the vast majority of TTIR semantics. **Two sub-phases:**
-- **M1-MVP** — common/simple kernels (elementwise, softmax-class, basic reduce).
-- **M1-complete** — complex kernels (e.g. **flash attention**): control flow
-  (`scf.for`/`if`), `tt.dot`, multi-dim reduce, and whatever else FA needs.
+the vast majority of TTIR semantics.
+
+**Two kernel corpora** drive it (they are complementary, not overlapping in role):
+- `tv/benchmark/benchmark_kernels.py` — 636 **hand-written** kernels (FlagGems,
+  FLA, TritonBench, torchao). Complex: attention, linear attention, quantized
+  GEMM, nested loops. Source of the *hard* features → drives M1-complete.
+- `tv/benchmark/inductor_kernels.py` — **TorchInductor-generated** kernels
+  (`torch.compile`). Regular: fused pointwise + reduction, template-produced,
+  and generatable in unlimited quantity. Source of *breadth* → drives M1-MVP.
+  Also the highest-value bug target: it is the most-executed Triton code there
+  is.
+
+**Measured starting point** (AST scan of the 636-kernel corpus, 2026-08):
+**15.7%** (100/636) are fully modelable today. The blockers are NOT what we
+assumed — `tt.dot` blocks only 37 kernels and ranks 9th. The real blockers are
+dtype casts (`.to()`, 266), **for loops** (197), `tl.where`/select (185),
+data-dependent `if` (121), `maximum`/`minimum`/`abs` (100/60/49). Greedy unlock
+order: data-dependent if (+45) → `where` (+24) → casts (+34) → for loop (+24) →
+`dot` (+17), reaching ~47% cumulative.
+
+**Sub-phases, defined by measurable coverage (not by a hand-picked kernel list):**
+- **M1-MVP** — data-dependent `scf.if`, `select`, dtype casts, `maximum`/
+  `minimum`/`abs`, the common `math.*`, and loops in `unroll` mode.
+  *Done when:* **≥40%** of the hand-written corpus and **≥80%** of the inductor
+  corpus are modelable.
+- **M1-complete** — `tt.dot`, multi-dim reduce, `make_block_ptr`, and loops in
+  `summarize` mode. *Done when:* **≥60%** of the hand-written corpus is
+  modelable **and flash attention validates**.
+
+**Explicitly out of scope: atomics** (`tt.atomic_rmw`, `tt.atomic_cas`,
+`tl.atomic_add` — the 3rd-largest blocker at 24 kernels). Not because they are
+hard, but because **the question is ill-posed**: atomics are non-deterministic
+across program instances, and since FP addition is not associative, the result
+itself is not deterministic — so "bit-exact equivalence" has no meaning for
+them. Such kernels must report UNSUPPORTED, never a verdict.
 
 ### M2 — model tile-gpu-smt (TTGIR / GPU layer)
 Start the GPU layer: layouts / `convert_layout`, shared memory, warp/lane, async
