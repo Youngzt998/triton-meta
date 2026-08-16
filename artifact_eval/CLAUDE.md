@@ -1,6 +1,5 @@
-Read `AGENTS.md` in this directory before doing anything here. It is the single source of truth
-for how to work on this artifact — the bit-exactness rule, which kernel knobs are safe, how the
-measurements must be taken, and the build trap. This file exists only to point at it, so the two
-cannot drift apart.
+Read `AGENTS.md` in this directory first. It is the single source of truth for reproducing this
+artifact — environment, build, what to run, and how to read the output — so the two files cannot
+drift apart.
 
-`README.md` is the reviewer-facing description: what the artifact evaluates and how to run it.
+`README.md` is the reviewer-facing description of what the artifact evaluates.
