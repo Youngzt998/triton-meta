@@ -1,0 +1,46 @@
+==============================================================================
+A. planted fault: mutate the candidate TTGIR by hand
+==============================================================================
+   planted acc-init 0.0 -> 1.0 detected as different: True | {"index": 0, "count": 65536, "total": 65536, "ref": -26.670228958129883, "cand": -25.670230865478516, "ref_bits": "0xffffffffc1d55ca1", "cand_bits": "0xffffffffc1cd5ca2", "max_abs_diff": 1.0000076293945312}
+   negative control (same program twice) reported equal: True
+==============================================================================
+B. a numerics-changing pass must be reported
+==============================================================================
+  fp32 dot MMA vs FMA    drop=['accelerate-matmul']                        -> mismatch  diff 65534/65536 maxabs=0.05711
+  reduction reorder      drop=['optimize-thread-locality']                 -> vacuous   
+   (optimize-thread-locality may legitimately be vacuous on this shape)
+==============================================================================
+C. the features under test really fire
+==============================================================================
+  -- WARP SPECIALIZATION (Hopper): reference = pipeline without ['hopper-warpspec'], candidate = full
+     ttg.warp_specialize                          ref=   0   cand=   1
+     partition0(                                  ref=   0   cand=   1
+     ttng.warp_group_dot                          ref=   3   cand=   2
+     ttng.async_tma_copy_global_to_local          ref=   6   cand=   3
+     ttng.init_barrier                            ref=   3   cand=  33
+     ttng.wait_barrier                            ref=   1   cand=   8
+     ttng.producer_commit                         ref=   0   cand=   0
+     ttg.memdesc_index                            ref=  13   cand=  55
+  ws on/off              drop=['hopper-warpspec']                          -> equal     
+   -> {'drop': ['hopper-warpspec'], 'markers_present': ['ttng.async_tma_copy_global_to_local', 'ttg.warp_specialize'], 'status': 'equal'}
+  -- SOFTWARE PIPELINING (cp.async): reference = pipeline without ['pipeline'], candidate = full
+     ttg.async_copy_global_to_local               ref=   0   cand=   8
+     ttg.async_commit_group                       ref=   0   cand=   8
+     ttg.async_wait                               ref=   0   cand=   2
+     ttg.memdesc_index                            ref=   0   cand=  10
+     ttg.local_alloc                              ref=   2   cand=   2
+  pipeline on/off        drop=['pipeline']                                 -> equal     
+   -> {'drop': ['pipeline'], 'markers_present': ['ttng.warp_group_dot'], 'status': 'equal'}
+  -- TMA LOWERING: reference = pipeline without ['tma-lowering'], candidate = full
+     ttng.async_tma_copy_global_to_local          ref=   2   cand=   2
+     ttng.async_tma_copy_local_to_global          ref=   1   cand=   1
+     tt.descriptor_load                           ref=   0   cand=   0
+     tt.descriptor_store                          ref=   0   cand=   0
+     ttng.tensormap_create                        ref=   0   cand=   2
+  -- ATTENTION + WARP SPEC: reference = pipeline without ['hopper-warpspec'], candidate = full
+     ttg.warp_specialize                          ref=   0   cand=   1
+     ttng.warp_group_dot                          ref=   4   cand=   4
+     tt.reduce                                    ref=   4   cand=   8
+     ttng.async_tma_copy_global_to_local          ref=   5   cand=   4
+==============================================================================
+FAILED CHECKS: none — harness is able to detect differences
