@@ -2,6 +2,9 @@ cache/
 *.ptx
 *.jsonl
 run_*.log
-fusion/
-fusion_oracle/
+fusion/*.jsonl
+fusion_oracle/*.jsonl
 __pycache__/
+fusion_real/*.jsonl
+fusion_moe/*.jsonl
+*/cache/
