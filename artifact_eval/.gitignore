@@ -1,10 +1,15 @@
 cache/
 *.ptx
 *.jsonl
-run_*.log
+
 fusion/*.jsonl
 fusion_oracle/*.jsonl
 __pycache__/
 fusion_real/*.jsonl
 fusion_moe/*.jsonl
 */cache/
+data/gemm_bitmatch.csv
+data/gemm_fusion_dense.csv
+data/gemm_fusion_moe.csv
+data/gemm_perf.csv
+*.log
