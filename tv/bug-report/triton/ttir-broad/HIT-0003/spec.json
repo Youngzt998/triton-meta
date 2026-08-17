@@ -1,0 +1,154 @@
+{
+ "id": "bench::_conv_transpose2d_stride2_pad1_3x3_kernel_312550c9__shrunk16",
+ "src": "bench",
+ "fn": "_conv_transpose2d_stride2_pad1_3x3_kernel_312550c9",
+ "args": [
+  {
+   "k": "tensor",
+   "name": "input_pointer",
+   "n": 32768,
+   "dtype": "float32",
+   "index": false
+  },
+  {
+   "k": "tensor",
+   "name": "weight_pointer",
+   "n": 1152,
+   "dtype": "float32",
+   "index": false
+  },
+  {
+   "k": "tensor",
+   "name": "output_pointer",
+   "n": 61504,
+   "dtype": "float32",
+   "index": false
+  },
+  {
+   "k": "int",
+   "name": "batch_size",
+   "v": 32
+  },
+  {
+   "k": "int",
+   "name": "input_height",
+   "v": 16
+  },
+  {
+   "k": "int",
+   "name": "input_width",
+   "v": 16
+  },
+  {
+   "k": "int",
+   "name": "output_channels",
+   "v": 32
+  },
+  {
+   "k": "int",
+   "name": "output_height",
+   "v": 31
+  },
+  {
+   "k": "int",
+   "name": "output_width",
+   "v": 31
+  },
+  {
+   "k": "int",
+   "name": "compact_height",
+   "v": 16
+  },
+  {
+   "k": "int",
+   "name": "compact_width",
+   "v": 16
+  },
+  {
+   "k": "int",
+   "name": "input_n_stride",
+   "v": 16384
+  },
+  {
+   "k": "int",
+   "name": "input_c_stride",
+   "v": 256
+  },
+  {
+   "k": "int",
+   "name": "input_height_stride",
+   "v": 16
+  },
+  {
+   "k": "int",
+   "name": "input_width_stride",
+   "v": 1
+  },
+  {
+   "k": "int",
+   "name": "weight_ci_stride",
+   "v": 288
+  },
+  {
+   "k": "int",
+   "name": "weight_co_stride",
+   "v": 9
+  },
+  {
+   "k": "int",
+   "name": "weight_height_stride",
+   "v": 3
+  },
+  {
+   "k": "int",
+   "name": "weight_width_stride",
+   "v": 1
+  },
+  {
+   "k": "int",
+   "name": "output_n_stride",
+   "v": 30752
+  },
+  {
+   "k": "int",
+   "name": "output_c_stride",
+   "v": 961
+  },
+  {
+   "k": "int",
+   "name": "output_height_stride",
+   "v": 31
+  },
+  {
+   "k": "int",
+   "name": "output_width_stride",
+   "v": 1
+  },
+  {
+   "k": "int",
+   "name": "input_channels",
+   "v": 64
+  },
+  {
+   "k": "int",
+   "name": "BLOCK_NHW",
+   "v": 64
+  },
+  {
+   "k": "int",
+   "name": "BLOCK_CI",
+   "v": 16
+  },
+  {
+   "k": "int",
+   "name": "BLOCK_CO",
+   "v": 16
+  }
+ ],
+ "grid": [
+  32,
+  1,
+  1
+ ],
+ "num_warps": 4
+}
