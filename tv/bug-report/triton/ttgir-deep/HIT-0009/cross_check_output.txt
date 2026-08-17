@@ -1,0 +1,4 @@
+acc integral? True max|acc| 1828.0
+ref   vs torch fp32 model: bitequal=True  ndiff=0  maxabs=0.0
+cand  vs torch fp32 model: bitequal=False  ndiff=43898  maxabs=24.0
+ref vs cand ndiff: 43898
