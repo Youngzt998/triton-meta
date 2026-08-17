@@ -1,0 +1,52 @@
+{
+  "case": "loop_reduce[BC=64,BR=16,C=1024,NS=5,R=64,W=4]",
+  "family": "loop_reduce",
+  "cfg": {
+    "R": 64,
+    "C": 1024,
+    "BR": 16,
+    "BC": 64,
+    "NS": 5,
+    "W": 4
+  },
+  "opts": {
+    "num_warps": 4,
+    "num_stages": 5
+  },
+  "grid": [
+    4,
+    1,
+    1
+  ],
+  "drop": [
+    "coalesce"
+  ],
+  "culprit": [
+    "coalesce"
+  ],
+  "groups": [
+    "layout"
+  ],
+  "dist": "wide",
+  "diff": {
+    "index": 1,
+    "count": 23,
+    "total": 64,
+    "ref": 11351702528.0,
+    "cand": 11351703552.0,
+    "ref_bits": "0x5029274f",
+    "cand_bits": "0x50292750",
+    "max_abs_diff": 2048.0
+  },
+  "signature": {
+    "x_ptr": "*fp32",
+    "o_ptr": "*fp32",
+    "R": "i32",
+    "C": "i32"
+  },
+  "constexprs": {
+    "NS": 5,
+    "BR": 16,
+    "BC": 64
+  }
+}
