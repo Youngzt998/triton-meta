@@ -13,3 +13,4 @@
 | HIT-0009 | hopper-warpspec on mm_epilogue | CONFIRMED | hopper-only | TODO | `hopper-warpspec` |
 | HIT-0010 | remove-layout-conversions-1 on nested | needs-review | hopper-only | TODO | `remove-layout-conversions-1` |
 | HIT-0011 | coalesce on loop_reduce | needs-review | hopper-only | TODO | `coalesce` |
+| HIT-0012 | coalesce on nested | needs-review | generic | TODO | `coalesce` |
