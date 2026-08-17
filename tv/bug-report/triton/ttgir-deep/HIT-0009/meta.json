@@ -1,0 +1,68 @@
+{
+  "case": "mm_epilogue[BK=64,BM=128,BN=128,K=256,M=512,N=512,NS=2,W=4,WS=1,dt=bf16]",
+  "family": "mm_epilogue",
+  "cfg": {
+    "dt": "bf16",
+    "M": 512,
+    "N": 512,
+    "K": 256,
+    "BM": 128,
+    "BN": 128,
+    "BK": 64,
+    "NS": 2,
+    "WS": 1,
+    "W": 4
+  },
+  "opts": {
+    "num_warps": 4,
+    "num_stages": 2
+  },
+  "grid": [
+    16,
+    1,
+    1
+  ],
+  "drop": [
+    "hopper-warpspec",
+    "interleave-tmem"
+  ],
+  "culprit": [
+    "hopper-warpspec"
+  ],
+  "groups": [
+    "sched"
+  ],
+  "dist": "intvalued",
+  "diff": {
+    "index": 32768,
+    "count": 43898,
+    "total": 262144,
+    "ref": -1216.0,
+    "cand": -1232.0,
+    "ref_bits": "0xffffffffffffc498",
+    "cand_bits": "0xffffffffffffc49a",
+    "max_abs_diff": 24.0
+  },
+  "signature": {
+    "a_ptr": "*bf16",
+    "b_ptr": "*bf16",
+    "d_ptr": "*fp32",
+    "c_ptr": "*bf16",
+    "a0": "i32",
+    "b0": "i32",
+    "c0": "i32",
+    "M": "i32",
+    "N": "i32",
+    "K": "i32"
+  },
+  "constexprs": {
+    "a1": 1,
+    "b1": 1,
+    "c1": 1,
+    "NS": 2,
+    "BM": 128,
+    "BN": 128,
+    "BK": 64,
+    "WS": true
+  }
+}

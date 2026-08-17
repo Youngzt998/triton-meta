@@ -10,3 +10,4 @@
 | HIT-0006 | coalesce on loop_reduce | needs-review | hopper-only | TODO | `coalesce` |
 | HIT-0007 | coalesce on nested | needs-review | generic | TODO | `coalesce` |
 | HIT-0008 | coalesce on nested | needs-review | generic | TODO | `coalesce` |
+| HIT-0009 | hopper-warpspec on mm_epilogue | CONFIRMED | hopper-only | TODO | `hopper-warpspec` |
