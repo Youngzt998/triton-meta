@@ -1,0 +1,56 @@
+{
+ "id": "ind::triton_per_fused_mean_std_var_0_fdf7c466__shrunk2",
+ "src": "inductor",
+ "fn": "triton_per_fused_mean_std_var_0_fdf7c466",
+ "args": [
+  {
+   "k": "tensor",
+   "name": "in_out_ptr0",
+   "n": 98304,
+   "dtype": "float32",
+   "index": false
+  },
+  {
+   "k": "tensor",
+   "name": "in_out_ptr1",
+   "n": 98304,
+   "dtype": "float32",
+   "index": false
+  },
+  {
+   "k": "tensor",
+   "name": "in_out_ptr2",
+   "n": 98304,
+   "dtype": "float32",
+   "index": false
+  },
+  {
+   "k": "tensor",
+   "name": "in_ptr0",
+   "n": 98304,
+   "dtype": "float32",
+   "index": false
+  },
+  {
+   "k": "int",
+   "name": "xnumel",
+   "v": 128
+  },
+  {
+   "k": "int",
+   "name": "r0_numel",
+   "v": 384
+  },
+  {
+   "k": "const",
+   "name": "XBLOCK",
+   "v": 8
+  }
+ ],
+ "grid": [
+  8,
+  1,
+  1
+ ],
+ "num_warps": 4
+}
