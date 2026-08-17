@@ -32,6 +32,33 @@ TMA / descriptor lowering, MMAv3 selection, and the layout family.
 `ref.ttgir`, `cand.ttgir`, `ir.diff` and `meta.json`.  `HITS.md` is the rolling
 summary table.
 
+## Scope of a finding (PLAN section 4, as rewritten 2026-08-17)
+
+A finding here means exactly one thing: **two compilations of the same kernel
+that differ only in the TTGIR pass set produce different bits on the same
+input.** No claim that it is a compiler bug is made at record time. Nothing is
+dropped for looking like floating-point noise; judgment calls are attached as
+labels so the whole set can be filtered later, with all results in hand.
+
+Two things ARE dropped, because they would be fake findings:
+
+* a kernel that is not bit-identical to itself (a data race is undefined
+  behaviour, so the compiler may do anything -- these are recorded in
+  `state["nondet_cases"]` and not investigated);
+* a difference that does not survive perturbing the GPU allocator (heap shift),
+  which points at an out-of-bounds or uninitialised read rather than a value
+  difference.
+
+The most useful label is the **integer-input control**. With inputs that are
+integers in `[-8, 8]`, every fp32 accumulator in these kernels stays below
+`2^24`, so every accumulator add is exact and summation order cannot matter. A
+difference that survives integer inputs therefore cannot be floating-point
+reassociation. It separates the classes cleanly: `accelerate-matmul` on an fp32
+dot differs on random inputs but is *equal* on integer inputs (reassociation),
+while `hopper-warpspec` on `mm_epilogue` still differs (not reassociation).
+`backfilled_labels.json` holds this label set for the findings recorded before
+the rule change.
+
 The **SMT reachability analysis** section of each report is left as
 `TODO: written by a reviewing agent` on purpose: the fuzzer is a script with no
 agent in the loop, and that section needs real reasoning about the semantics at

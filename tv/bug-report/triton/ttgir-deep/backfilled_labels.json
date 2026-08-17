@@ -1,0 +1,109 @@
+[
+  {
+    "id": "HIT-0001",
+    "family": "nested",
+    "culprit": [
+      "coalesce"
+    ],
+    "pass-class": "layout",
+    "heap-shift-survives": "3/3",
+    "int-input-control": {
+      "exact": "yes",
+      "bound": 8192,
+      "exact_below": 16777216,
+      "holds": true,
+      "why": "partial sums of integers, then acc*0.5 which is exact in binary floating point",
+      "result": "equal"
+    },
+    "ndiff": 90,
+    "total": 128,
+    "max_abs_diff": 1.1444091796875e-05
+  },
+  {
+    "id": "HIT-0003",
+    "family": "loop_reduce",
+    "culprit": [
+      "coalesce"
+    ],
+    "pass-class": "layout",
+    "heap-shift-survives": "3/3",
+    "int-input-control": {
+      "exact": "yes",
+      "bound": 65536,
+      "exact_below": 16777216,
+      "holds": true,
+      "why": "acc += v*v with |v| <= 8 gives |acc| <= 64*C, and tl.sum / tl.max over integers are exact",
+      "result": "equal"
+    },
+    "ndiff": 23,
+    "total": 64,
+    "max_abs_diff": 2048.0
+  },
+  {
+    "id": "HIT-0004",
+    "family": "nested",
+    "culprit": [
+      "remove-layout-conversions-1"
+    ],
+    "pass-class": "layout",
+    "heap-shift-survives": "3/3",
+    "int-input-control": {
+      "exact": "yes",
+      "bound": 16384,
+      "exact_below": 16777216,
+      "holds": true,
+      "why": "partial sums of integers, then acc*0.5 which is exact in binary floating point",
+      "result": "equal"
+    },
+    "ndiff": 91,
+    "total": 128,
+    "max_abs_diff": 3.0517578125e-05
+  },
+  {
+    "id": "HIT-0009",
+    "family": "mm_epilogue",
+    "culprit": [
+      "hopper-warpspec"
+    ],
+    "pass-class": "sched",
+    "heap-shift-survives": "3/3",
+    "int-input-control": {
+      "exact": "accumulator-only",
+      "bound": 16384,
+      "exact_below": 16777216,
+      "holds": true,
+      "why": "the dot accumulator is exact (|acc| <= 8*8*K); the epilogue (bias add, sigmoid, row max, subtract) is then a deterministic function of that accumulator, so a difference still cannot come from reordering the sum",
+      "result": "differs",
+      "ndiff": 43898,
+      "total": 262144,
+      "max_abs_diff": 24.0
+    },
+    "ndiff": 43898,
+    "total": 262144,
+    "max_abs_diff": 24.0
+  },
+  {
+    "id": "HIT-0013",
+    "family": "attn",
+    "culprit": [
+      "remove-layout-conversions-2",
+      "remove-layout-conversions-3"
+    ],
+    "pass-class": "layout",
+    "heap-shift-survives": "3/3",
+    "int-input-control": {
+      "exact": "no",
+      "bound": 0,
+      "exact_below": 16777216,
+      "holds": false,
+      "why": "exp2 inside the loop makes the second dot's operands non-integer, so the accumulator is not exact",
+      "result": "differs",
+      "ndiff": 1,
+      "total": 512,
+      "max_abs_diff": 1.1920928955078125e-07
+    },
+    "ndiff": 168,
+    "total": 512,
+    "max_abs_diff": 1.9073486328125e-06
+  }
+]
