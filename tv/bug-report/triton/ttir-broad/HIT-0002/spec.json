@@ -1,0 +1,181 @@
+{
+ "id": "ind::triton_for_fused_1_a94716eb__shrunk16",
+ "src": "inductor",
+ "fn": "triton_for_fused_1_a94716eb",
+ "args": [
+  {
+   "k": "tensor",
+   "name": "in_ptr0",
+   "n": 8192,
+   "dtype": "float32",
+   "index": false
+  },
+  {
+   "k": "tensor",
+   "name": "in_ptr1",
+   "n": 8192,
+   "dtype": "float32",
+   "index": false
+  },
+  {
+   "k": "tensor",
+   "name": "in_ptr2",
+   "n": 8192,
+   "dtype": "float32",
+   "index": false
+  },
+  {
+   "k": "tensor",
+   "name": "in_ptr3",
+   "n": 8192,
+   "dtype": "float32",
+   "index": false
+  },
+  {
+   "k": "tensor",
+   "name": "in_ptr4",
+   "n": 8192,
+   "dtype": "float32",
+   "index": false
+  },
+  {
+   "k": "tensor",
+   "name": "in_ptr5",
+   "n": 8192,
+   "dtype": "float32",
+   "index": false
+  },
+  {
+   "k": "tensor",
+   "name": "in_ptr6",
+   "n": 8192,
+   "dtype": "float32",
+   "index": false
+  },
+  {
+   "k": "tensor",
+   "name": "in_ptr7",
+   "n": 8192,
+   "dtype": "float32",
+   "index": false
+  },
+  {
+   "k": "tensor",
+   "name": "in_ptr8",
+   "n": 8192,
+   "dtype": "float32",
+   "index": false
+  },
+  {
+   "k": "tensor",
+   "name": "in_ptr9",
+   "n": 8192,
+   "dtype": "float32",
+   "index": false
+  },
+  {
+   "k": "tensor",
+   "name": "in_ptr10",
+   "n": 8192,
+   "dtype": "float32",
+   "index": false
+  },
+  {
+   "k": "tensor",
+   "name": "in_ptr11",
+   "n": 8192,
+   "dtype": "float32",
+   "index": false
+  },
+  {
+   "k": "tensor",
+   "name": "in_ptr12",
+   "n": 8192,
+   "dtype": "float32",
+   "index": false
+  },
+  {
+   "k": "tensor",
+   "name": "in_ptr13",
+   "n": 8192,
+   "dtype": "float32",
+   "index": false
+  },
+  {
+   "k": "tensor",
+   "name": "in_ptr14",
+   "n": 8192,
+   "dtype": "float32",
+   "index": false
+  },
+  {
+   "k": "tensor",
+   "name": "out_ptr1",
+   "n": 8192,
+   "dtype": "float32",
+   "index": false
+  },
+  {
+   "k": "tensor",
+   "name": "out_ptr2",
+   "n": 8192,
+   "dtype": "float32",
+   "index": false
+  },
+  {
+   "k": "tensor",
+   "name": "out_ptr3",
+   "n": 8192,
+   "dtype": "float32",
+   "index": false
+  },
+  {
+   "k": "tensor",
+   "name": "out_ptr5",
+   "n": 8192,
+   "dtype": "float32",
+   "index": false
+  },
+  {
+   "k": "tensor",
+   "name": "out_ptr6",
+   "n": 8192,
+   "dtype": "float32",
+   "index": false
+  },
+  {
+   "k": "tensor",
+   "name": "out_ptr7",
+   "n": 8192,
+   "dtype": "float32",
+   "index": false
+  },
+  {
+   "k": "tensor",
+   "name": "out_ptr9",
+   "n": 8192,
+   "dtype": "float32",
+   "index": false
+  },
+  {
+   "k": "tensor",
+   "name": "out_ptr10",
+   "n": 8192,
+   "dtype": "float32",
+   "index": false
+  },
+  {
+   "k": "tensor",
+   "name": "out_ptr11",
+   "n": 8192,
+   "dtype": "float32",
+   "index": false
+  }
+ ],
+ "grid": [
+  48,
+  1,
+  1
+ ],
+ "num_warps": 4
+}
