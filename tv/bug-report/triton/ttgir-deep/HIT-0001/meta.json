@@ -1,0 +1,54 @@
+{
+  "case": "nested[BC=64,BR=32,C=512,NS=1,OUTER=2,R=128,W=4]",
+  "family": "nested",
+  "cfg": {
+    "R": 128,
+    "C": 512,
+    "BR": 32,
+    "BC": 64,
+    "NS": 1,
+    "OUTER": 2,
+    "W": 4
+  },
+  "opts": {
+    "num_warps": 4,
+    "num_stages": 1
+  },
+  "grid": [
+    4,
+    1,
+    1
+  ],
+  "drop": [
+    "coalesce"
+  ],
+  "culprit": [
+    "coalesce"
+  ],
+  "groups": [
+    "layout"
+  ],
+  "dist": "randn",
+  "diff": {
+    "index": 1,
+    "count": 90,
+    "total": 128,
+    "ref": 61.35198211669922,
+    "cand": 61.35198974609375,
+    "ref_bits": "0x4275686e",
+    "cand_bits": "0x42756870",
+    "max_abs_diff": 1.1444091796875e-05
+  },
+  "signature": {
+    "x_ptr": "*fp32",
+    "o_ptr": "*fp32",
+    "R": "i32",
+    "C": "i32"
+  },
+  "constexprs": {
+    "NS": 1,
+    "BR": 32,
+    "BC": 64,
+    "OUTER": 2
+  }
+}
