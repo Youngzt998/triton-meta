@@ -1,0 +1,52 @@
+--- ref.ttgir
++++ cand.ttgir
+@@ -1,3 +1,3 @@
+-#blocked = #ttg.blocked<{sizePerThread = [1, 1], threadsPerWarp = [1, 32], warpsPerCTA = [2, 2], order = [1, 0]}>
++#blocked = #ttg.blocked<{sizePerThread = [1, 4], threadsPerWarp = [2, 16], warpsPerCTA = [4, 1], order = [1, 0]}>
+ #blocked1 = #ttg.blocked<{sizePerThread = [1], threadsPerWarp = [32], warpsPerCTA = [4], order = [0]}>
+ #loc = loc("/home/youngzt/fuzz/ttgir-deep/harness/kernels.py":256:1)
+@@ -5,5 +5,5 @@
+ #loc21 = loc("/home/youngzt/fuzz/ttgir-deep/harness/kernels.py":266:29)
+ #loc25 = loc("/home/youngzt/fuzz/ttgir-deep/harness/kernels.py":267:9)
+-#shared = #ttg.swizzled_shared<{vec = 1, perPhase = 1, maxPhase = 1, order = [0, 1]}>
++#shared = #ttg.swizzled_shared<{vec = 1, perPhase = 1, maxPhase = 1, order = [1, 0]}>
+ #smem = #ttg.shared_memory
+ #loc31 = loc("x_ptr"(#loc))
+@@ -17,10 +17,10 @@
+ module attributes {"ttg.num-ctas" = 1 : i32, "ttg.num-warps" = 4 : i32, ttg.target = "cuda:90", "ttg.threads-per-warp" = 32 : i32, "ttng.two-ctas" = false} {
+   tt.func public @k_loop_reduce(%x_ptr: !tt.ptr<f32> {tt.divisibility = 16 : i32} loc("x_ptr"(#loc)), %o_ptr: !tt.ptr<f32> {tt.divisibility = 16 : i32} loc("o_ptr"(#loc)), %R: i32 {tt.divisibility = 16 : i32} loc("R"(#loc)), %C: i32 {tt.divisibility = 16 : i32} loc("C"(#loc))) attributes {noinline = false} {
+-    %cst = arith.constant dense<0xFF800000> : tensor<16xf32, #ttg.slice<{dim = 1, parent = #blocked}>>
++    %cst = arith.constant dense<0.000000e+00> : tensor<16x64xf32, #blocked>
++    %cst_0 = arith.constant dense<0xFF800000> : tensor<16x64xf32, #blocked>
++    %cst_1 = arith.constant dense<0xFF800000> : tensor<16xf32, #ttg.slice<{dim = 1, parent = #blocked}>>
+     %c63_i32 = arith.constant 63 : i32
+     %c1_i32 = arith.constant 1 : i32
+     %c0_i32 = arith.constant 0 : i32
+-    %cst_0 = arith.constant dense<0xFF800000> : tensor<16x64xf32, #blocked>
+-    %cst_1 = arith.constant dense<0.000000e+00> : tensor<16x64xf32, #blocked>
+     %c64_i32 = arith.constant 64 : i32
+     %c16_i32 = arith.constant 16 : i32
+@@ -60,5 +60,5 @@
+     %mx_25 = tt.splat %mx : i1 -> tensor<16x64xi1, #blocked>
+     %mx_26 = arith.andi %mx_25, %m_21 : tensor<16x64xi1, #blocked>
+-    %v_27 = ttg.async_copy_global_to_local %v_23, %v_24 mask %mx_26 other %cst_1 : tensor<16x64x!tt.ptr<f32>, #blocked> -> <16x64xf32, #shared, #smem, mutable>
++    %v_27 = ttg.async_copy_global_to_local %v_23, %v_24 mask %mx_26 other %cst {contiguity = 4 : i32} : tensor<16x64x!tt.ptr<f32>, #blocked> -> <16x64xf32, #shared, #smem, mutable>
+     %v_28 = ttg.async_commit_group tokens %v_27
+     %mx_29 = arith.cmpi sgt, %1, %c1_i32 : i32
+@@ -73,7 +73,7 @@
+     %mx_38 = tt.splat %mx_29 : i1 -> tensor<16x64xi1, #blocked>
+     %mx_39 = arith.andi %mx_38, %m_34 : tensor<16x64xi1, #blocked>
+-    %v_40 = ttg.async_copy_global_to_local %v_36, %v_37 mask %mx_39 other %cst_1 : tensor<16x64x!tt.ptr<f32>, #blocked> -> <16x64xf32, #shared, #smem, mutable>
++    %v_40 = ttg.async_copy_global_to_local %v_36, %v_37 mask %mx_39 other %cst {contiguity = 4 : i32} : tensor<16x64x!tt.ptr<f32>, #blocked> -> <16x64xf32, #shared, #smem, mutable>
+     %v_41 = ttg.async_commit_group tokens %v_40
+-    %mx_42:8 = scf.for %mx_44 = %c0_i32 to %1 step %c1_i32 iter_args(%arg5 = %cst_1, %mx_45 = %cst, %mx_46 = %c1_i32, %mx_47 = %c-1_i32, %v_48 = %v_28, %v_49 = %v_41, %m_50 = %m_21, %m_51 = %m_34) -> (tensor<16x64xf32, #blocked>, tensor<16xf32, #ttg.slice<{dim = 1, parent = #blocked}>>, i32, i32, !ttg.async.token, !ttg.async.token, tensor<16x64xi1, #blocked>, tensor<16x64xi1, #blocked>)  : i32 {
++    %mx_42:8 = scf.for %mx_44 = %c0_i32 to %1 step %c1_i32 iter_args(%arg5 = %cst, %mx_45 = %cst_1, %mx_46 = %c1_i32, %mx_47 = %c-1_i32, %v_48 = %v_28, %v_49 = %v_41, %m_50 = %m_21, %m_51 = %m_34) -> (tensor<16x64xf32, #blocked>, tensor<16xf32, #ttg.slice<{dim = 1, parent = #blocked}>>, i32, i32, !ttg.async.token, !ttg.async.token, tensor<16x64xi1, #blocked>, tensor<16x64xi1, #blocked>)  : i32 {
+       %mx_52 = arith.subi %1, %c2_i32 : i32
+       %mx_53 = arith.cmpi slt, %mx_44, %mx_52 : i32
+@@ -109,5 +109,5 @@
+       %mx_78 = tt.splat %mx_53 : i1 -> tensor<16x64xi1, #blocked>
+       %mx_79 = arith.andi %mx_78, %m_74 : tensor<16x64xi1, #blocked>
+-      %v_80 = ttg.async_copy_global_to_local %v_76, %v_77 mask %mx_79 other %cst_1 : tensor<16x64x!tt.ptr<f32>, #blocked> -> <16x64xf32, #shared, #smem, mutable>
++      %v_80 = ttg.async_copy_global_to_local %v_76, %v_77 mask %mx_79 other %cst {contiguity = 4 : i32} : tensor<16x64x!tt.ptr<f32>, #blocked> -> <16x64xf32, #shared, #smem, mutable>
+       %v_81 = ttg.async_commit_group tokens %v_80
+       scf.yield %acc_60, %mx_63, %mx_66, %mx_56, %v_49, %v_81, %m_51, %m_74 : tensor<16x64xf32, #blocked>, tensor<16xf32, #ttg.slice<{dim = 1, parent = #blocked}>>, i32, i32, !ttg.async.token, !ttg.async.token, tensor<16x64xi1, #blocked>, tensor<16x64xi1, #blocked>
