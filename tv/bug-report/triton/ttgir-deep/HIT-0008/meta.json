@@ -1,0 +1,58 @@
+{
+  "case": "nested[BC=128,BR=16,C=512,NS=1,OUTER=2,R=128,W=4]",
+  "family": "nested",
+  "cfg": {
+    "R": 128,
+    "C": 512,
+    "BR": 16,
+    "BC": 128,
+    "NS": 1,
+    "OUTER": 2,
+    "W": 4
+  },
+  "opts": {
+    "num_warps": 4,
+    "num_stages": 1
+  },
+  "grid": [
+    8,
+    1,
+    1
+  ],
+  "drop": [
+    "coalesce",
+    "combine-tensor-select-and-if",
+    "fuse-nested-loops",
+    "optimize-descriptor-encoding",
+    "remove-layout-conversions-3"
+  ],
+  "culprit": [
+    "coalesce"
+  ],
+  "groups": [
+    "layout"
+  ],
+  "dist": "randn",
+  "diff": {
+    "index": 1,
+    "count": 87,
+    "total": 128,
+    "ref": -14.706182479858398,
+    "cand": -14.706178665161133,
+    "ref_bits": "0xffffffffc16b4c86",
+    "cand_bits": "0xffffffffc16b4c82",
+    "max_abs_diff": 1.52587890625e-05
+  },
+  "signature": {
+    "x_ptr": "*fp32",
+    "o_ptr": "*fp32",
+    "R": "i32",
+    "C": "i32"
+  },
+  "constexprs": {
+    "NS": 1,
+    "BR": 16,
+    "BC": 128,
+    "OUTER": 2
+  }
+}
