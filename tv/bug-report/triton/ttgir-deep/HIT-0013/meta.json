@@ -1,0 +1,63 @@
+{
+  "case": "attn[BM=64,D=64,M=512,N=512,NS=2,W=4,WS=0,dt=fp16]",
+  "family": "attn",
+  "cfg": {
+    "dt": "fp16",
+    "M": 512,
+    "N": 512,
+    "BM": 64,
+    "D": 64,
+    "NS": 2,
+    "WS": 0,
+    "W": 4
+  },
+  "opts": {
+    "num_warps": 4,
+    "num_stages": 2
+  },
+  "grid": [
+    8,
+    1,
+    1
+  ],
+  "drop": [
+    "remove-layout-conversions-2",
+    "remove-layout-conversions-3"
+  ],
+  "culprit": [
+    "remove-layout-conversions-2",
+    "remove-layout-conversions-3"
+  ],
+  "groups": [
+    "layout",
+    "layout"
+  ],
+  "dist": "randn",
+  "diff": {
+    "index": 0,
+    "count": 168,
+    "total": 512,
+    "ref": 6.188762187957764,
+    "cand": 6.188762664794922,
+    "ref_bits": "0x40c60a57",
+    "cand_bits": "0x40c60a58",
+    "max_abs_diff": 1.9073486328125e-06
+  },
+  "signature": {
+    "q_ptr": "*fp16",
+    "k_ptr": "*fp16",
+    "v_ptr": "*fp16",
+    "o_ptr": "*fp16",
+    "l_ptr": "*fp32",
+    "M": "i32",
+    "N": "i32",
+    "qk_scale": "fp32"
+  },
+  "constexprs": {
+    "s1": 1,
+    "BM": 64,
+    "D": 64,
+    "NS": 2,
+    "WS": false
+  }
+}
