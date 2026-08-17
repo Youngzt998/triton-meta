@@ -1,42 +1,210 @@
 {
- "name": "ind:triton_mm_da357cdb",
+ "name": "ind:triton_for_fused_1_a94716eb",
  "corpus": "inductor",
- "fn_name": "triton_mm_da357cdb",
+ "fn_name": "triton_for_fused_1_a94716eb",
  "grid": [
-  24,
+  96,
   1,
   1
  ],
  "num_warps": 4,
  "meta": {
-  "entry": 97,
-  "kernel": "triton_mm",
-  "sig": "loads=2 stores=1 no-reduction for-loop data-dependent-if",
-  "category": "98. matmul :: mm_transposed_b",
+  "entry": 147,
+  "kernel": "triton_for_fused_1",
+  "sig": "loads=15 stores=9 no-reduction data-dependent-if",
+  "category": "148. end2end :: e2e_adam_step",
   "size_hints": {},
   "max_hint": 65536
  },
  "args": [
   {
-   "name": "arg_A",
+   "name": "in_ptr0",
    "kind": "ptr",
-   "ty": "*fp16",
+   "ty": "*fp32",
    "value": null,
    "shape": null,
    "dtype": null
   },
   {
-   "name": "arg_B",
+   "name": "in_ptr1",
    "kind": "ptr",
-   "ty": "*fp16",
+   "ty": "*fp32",
    "value": null,
    "shape": null,
    "dtype": null
   },
   {
-   "name": "out_ptr0",
+   "name": "in_ptr2",
    "kind": "ptr",
-   "ty": "*fp16",
+   "ty": "*fp32",
+   "value": null,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "in_ptr3",
+   "kind": "ptr",
+   "ty": "*fp32",
+   "value": null,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "in_ptr4",
+   "kind": "ptr",
+   "ty": "*fp32",
+   "value": null,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "in_ptr5",
+   "kind": "ptr",
+   "ty": "*fp32",
+   "value": null,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "in_ptr6",
+   "kind": "ptr",
+   "ty": "*fp32",
+   "value": null,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "in_ptr7",
+   "kind": "ptr",
+   "ty": "*fp32",
+   "value": null,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "in_ptr8",
+   "kind": "ptr",
+   "ty": "*fp32",
+   "value": null,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "in_ptr9",
+   "kind": "ptr",
+   "ty": "*fp32",
+   "value": null,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "in_ptr10",
+   "kind": "ptr",
+   "ty": "*fp32",
+   "value": null,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "in_ptr11",
+   "kind": "ptr",
+   "ty": "*fp32",
+   "value": null,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "in_ptr12",
+   "kind": "ptr",
+   "ty": "*fp32",
+   "value": null,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "in_ptr13",
+   "kind": "ptr",
+   "ty": "*fp32",
+   "value": null,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "in_ptr14",
+   "kind": "ptr",
+   "ty": "*fp32",
+   "value": null,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "out_ptr1",
+   "kind": "ptr",
+   "ty": "*fp32",
+   "value": null,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "out_ptr2",
+   "kind": "ptr",
+   "ty": "*fp32",
+   "value": null,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "out_ptr3",
+   "kind": "ptr",
+   "ty": "*fp32",
+   "value": null,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "out_ptr5",
+   "kind": "ptr",
+   "ty": "*fp32",
+   "value": null,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "out_ptr6",
+   "kind": "ptr",
+   "ty": "*fp32",
+   "value": null,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "out_ptr7",
+   "kind": "ptr",
+   "ty": "*fp32",
+   "value": null,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "out_ptr9",
+   "kind": "ptr",
+   "ty": "*fp32",
+   "value": null,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "out_ptr10",
+   "kind": "ptr",
+   "ty": "*fp32",
+   "value": null,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "out_ptr11",
+   "kind": "ptr",
+   "ty": "*fp32",
    "value": null,
    "shape": null,
    "dtype": null
