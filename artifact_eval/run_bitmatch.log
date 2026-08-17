@@ -1,0 +1,68 @@
+/home/youngzt/bitwise-equiv/triton/artifact_eval/artifact.py:198: RuntimeWarning: cuBLASLt 13.2.2 on sm_103 (NVIDIA GB300) was not measured: the rules come from 13.1.x (exactly 13.1.1). Results should still be bit-identical to cuBLAS, but a version bump can change which kernel a shape lands on. Re-measure and add a ((10, 3), (13, 2)) entry to `arch._REGISTRY` to silence this.
+  "arch": platform().name.split()[0],
+artifact evaluation
+  device      NVIDIA GB300  (sm_103)
+  cuBLASLt    13.2.2
+  triton      3.8.0+fb   torch 2.12.0+cu130   commit 8f24688b9bf3
+  WARNING: the paper's numbers used cuBLASLt 13.1.1; this is 13.2.2. cuBLAS may pick a
+           different algorithm, which changes the bits it returns and what we must reproduce.
+
+[gemm.bitmatch] 90.0 min, 10 input draws per shape, seed 20260816
+  MISMATCH  fp8 464x96x150800 mode=split  10/10 draws differ
+  MISMATCH  fp16 16x1648x57424 mode=split  10/10 draws differ
+  MISMATCH  fp16 80x1440x223760 mode=split  10/10 draws differ
+  MISMATCH  fp8 336x144x211216 mode=split  10/10 draws differ
+  MISMATCH  fp16 32x80x46112 mode=split  10/10 draws differ
+  MISMATCH  fp16 288x768x289424 mode=split  10/10 draws differ
+  MISMATCH  fp8 288x304x233616 mode=split  10/10 draws differ
+  MISMATCH  fp16 128x1040x265616 mode=split  10/10 draws differ
+  MISMATCH  fp8 96x1648x56592 mode=split  10/10 draws differ
+  MISMATCH  fp16 224x352x279696 mode=split  10/10 draws differ
+  MISMATCH  fp16 272x112x275216 mode=split  10/10 draws differ
+  MISMATCH  fp16 496x112x237136 mode=split  10/10 draws differ
+  MISMATCH  fp16 336x528x172816 mode=split  10/10 draws differ
+  MISMATCH  fp16 16x1776x238368 mode=split  10/10 draws differ
+  MISMATCH  fp16 192x416x235216 mode=split  10/10 draws differ
+  MISMATCH  fp16 272x384x257616 mode=split  10/10 draws differ
+  MISMATCH  fp16 32x480x126480 mode=split  10/10 draws differ
+  MISMATCH  fp16 288x112x83216 mode=split  10/10 draws differ
+  MISMATCH  fp16 336x832x269968 mode=split  10/10 draws differ
+  MISMATCH  fp8 64x176x173104 mode=split  10/10 draws differ
+  MISMATCH  fp16 48x1472x134416 mode=split  10/10 draws differ
+  MISMATCH  fp16 32x1424x296720 mode=split  10/10 draws differ
+  MISMATCH  fp8 432x64x204304 mode=split  10/10 draws differ
+  MISMATCH  fp16 32x432x200272 mode=split  10/10 draws differ
+  MISMATCH  fp16 432x1024x253456 mode=split  10/10 draws differ
+  MISMATCH  fp16 464x288x94416 mode=split  10/10 draws differ
+  MISMATCH  fp16 224x480x265616 mode=split  10/10 draws differ
+  MISMATCH  fp16 112x928x266320 mode=split  10/10 draws differ
+  MISMATCH  fp8 192x224x77840 mode=split  10/10 draws differ
+  MISMATCH  fp16 80x1680x150544 mode=split  10/10 draws differ
+  MISMATCH  fp8 368x1008x294288 mode=split  10/10 draws differ
+  MISMATCH  fp16 496x288x132816 mode=split  10/10 draws differ
+  MISMATCH  fp16 48x240x177616 mode=split  10/10 draws differ
+  MISMATCH  fp16 384x224x292816 mode=split  10/10 draws differ
+  MISMATCH  fp8 112x544x278416 mode=split  10/10 draws differ
+  MISMATCH  fp16 32x496x284560 mode=split  10/10 draws differ
+  MISMATCH  fp16 416x160x245648 mode=split  10/10 draws differ
+  MISMATCH  fp16 448x96x154576 mode=split  10/10 draws differ
+  MISMATCH  fp8 64x272x172048 mode=split  10/10 draws differ
+  MISMATCH  fp8 16x1200x101808 mode=split  10/10 draws differ
+  MISMATCH  fp16 352x352x268752 mode=split  10/10 draws differ
+  MISMATCH  fp16 256x1040x244816 mode=split  10/10 draws differ
+  MISMATCH  fp16 64x928x276048 mode=split  10/10 draws differ
+  MISMATCH  fp16 80x1936x212816 mode=split  10/10 draws differ
+  MISMATCH  fp16 337x672x98312 mode=split  10/10 draws differ
+  MISMATCH  fp16 384x256x75408 mode=split  10/10 draws differ
+  MISMATCH  fp16 16x1392x65680 mode=split  10/10 draws differ
+  MISMATCH  fp16 384x896x283344 mode=split  10/10 draws differ
+  MISMATCH  fp16 48x1024x114320 mode=split  10/10 draws differ
+
+  67108 shapes x 10 draws = 671080 comparisons
+  byte-identical to cuBLAS      67059/67108
+  shapes with any differing draw 49   (logged in data/gemm.bitmatch.jsonl)
+  declined (out of scope)       0
+  A mismatch is not automatically ours: cuBLAS itself drops the k tail on some
+  shapes -- run gemm.cublas-bug, which reproduces that defect on this machine.
+
+raw records in /home/youngzt/bitwise-equiv/triton/artifact_eval/data
