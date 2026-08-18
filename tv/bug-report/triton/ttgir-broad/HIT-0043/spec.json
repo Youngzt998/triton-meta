@@ -1,0 +1,53 @@
+{
+ "name": "ind:triton__e40edb72",
+ "corpus": "inductor",
+ "fn_name": "triton__e40edb72",
+ "grid": [
+  64,
+  1,
+  1
+ ],
+ "num_warps": 4,
+ "meta": {
+  "entry": 95,
+  "kernel": "triton_",
+  "sig": "loads=3 stores=1 no-reduction for-loop data-dependent-if",
+  "category": "96. matmul :: mm_epilogue_relu",
+  "size_hints": {},
+  "max_hint": 65536
+ },
+ "args": [
+  {
+   "name": "arg_A",
+   "kind": "ptr",
+   "ty": "*fp16",
+   "value": null,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "arg_B",
+   "kind": "ptr",
+   "ty": "*fp16",
+   "value": null,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "in_ptr2",
+   "kind": "ptr",
+   "ty": "*fp16",
+   "value": null,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "out_ptr1",
+   "kind": "ptr",
+   "ty": "*fp16",
+   "value": null,
+   "shape": null,
+   "dtype": null
+  }
+ ]
+}
