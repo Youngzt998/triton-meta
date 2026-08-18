@@ -1,0 +1,127 @@
+{
+ "t": "variant",
+ "kid": "cap_5be24248d2229c36",
+ "v": {
+  "skip": [
+   "LowerLDGSTG",
+   "StorageRewrite",
+   "DecoupleTypeCast"
+  ],
+  "cfg": {
+   "tl.disable_warp_specialized": true,
+   "tl.enable_aggressive_shared_memory_merge": true
+  }
+ },
+ "status": "diff",
+ "mode": "captured",
+ "seed": 2193,
+ "draw": 0,
+ "labels": [
+  "pass-class:numerics-changing",
+  "kernel-has-gemm",
+  "kernel-has-reduce",
+  "input-mode:captured",
+  "exact-int-accum:reassociation-excluded",
+  "nan-pattern-changed",
+  "few-ulp"
+ ],
+ "nums": {
+  "ulp_max": 0,
+  "n_diff": 32768,
+  "n_total": 32768,
+  "max_abs_diff": 0.0
+ },
+ "diffs": [
+  {
+   "arg": 3,
+   "dtype": "float16",
+   "shape": [
+    1,
+    1,
+    256,
+    128
+   ],
+   "kind": "float",
+   "nan_ref": 0,
+   "nan_cand": 32768,
+   "nan_mask_differs": true,
+   "n_diff": 32768,
+   "n_total": 32768,
+   "max_abs": 0.0,
+   "max_rel": 0.0,
+   "ulp_max": 0,
+   "first": {
+    "idx": 0,
+    "ref": 1.66796875,
+    "cand": NaN
+   }
+  }
+ ],
+ "confirm": {
+  "draw": 0,
+  "mode": "captured",
+  "seed": 2193,
+  "draws_differing": [
+   0,
+   2,
+   3,
+   4,
+   5,
+   6,
+   8,
+   9,
+   10,
+   11,
+   12,
+   14,
+   15,
+   16,
+   17,
+   18
+  ],
+  "n_draws": 20,
+  "draw_modes": {
+   "0": "captured",
+   "2": "large",
+   "3": "intvalued",
+   "4": "zeros",
+   "5": "uniform",
+   "6": "normal",
+   "8": "large",
+   "9": "intvalued",
+   "10": "zeros",
+   "11": "uniform",
+   "12": "normal",
+   "14": "large",
+   "15": "intvalued",
+   "16": "zeros",
+   "17": "uniform",
+   "18": "normal"
+  },
+  "cand_self_consistent": true,
+  "diff_under_heap_shift": true,
+  "ref_self_consistent": true,
+  "int_control_draw": 3,
+  "int_control_exact": true,
+  "int_control_differs": true
+ },
+ "minimal": {
+  "skip": [
+   "StorageRewrite"
+  ],
+  "cfg": {
+   "tl.disable_warp_specialized": true
+  },
+  "order": []
+ },
+ "modes": [
+  "captured",
+  "intvalued",
+  "large",
+  "normal",
+  "uniform",
+  "zeros"
+ ],
+ "ref_chars": 11144,
+ "cand_chars": 17525
+}
