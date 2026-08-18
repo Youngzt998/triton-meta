@@ -1,0 +1,179 @@
+{
+ "name": "bch:_index_put_jit_function_3dacf625",
+ "corpus": "bench",
+ "fn_name": "_index_put_jit_function_3dacf625",
+ "grid": [
+  2,
+  2,
+  1
+ ],
+ "num_warps": 4,
+ "meta": {
+  "runner": "run_flaggems__index_put_jit_function_3dacf625",
+  "max_hint": 262144
+ },
+ "args": [
+  {
+   "name": "input_ptr",
+   "kind": "ptr",
+   "ty": "*fp16",
+   "value": null,
+   "shape": [
+    64,
+    64,
+    64
+   ],
+   "dtype": "torch.float16"
+  },
+  {
+   "name": "indices0_ptr",
+   "kind": "ptr",
+   "ty": "*i64",
+   "value": null,
+   "shape": [
+    4
+   ],
+   "dtype": "torch.int64"
+  },
+  {
+   "name": "values_ptr",
+   "kind": "ptr",
+   "ty": "*fp16",
+   "value": null,
+   "shape": [
+    4,
+    64,
+    64
+   ],
+   "dtype": "torch.float16"
+  },
+  {
+   "name": "input_shape0",
+   "kind": "int",
+   "ty": "i32",
+   "value": 64,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "input_shape1",
+   "kind": "int",
+   "ty": "i32",
+   "value": 64,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "input_shape2",
+   "kind": "int",
+   "ty": "i32",
+   "value": 64,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "indices0_shape0",
+   "kind": "int",
+   "ty": "i32",
+   "value": 4,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "input_stride0",
+   "kind": "int",
+   "ty": "i32",
+   "value": 64,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "input_stride1",
+   "kind": "int",
+   "ty": "i32",
+   "value": 4096,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "input_stride2",
+   "kind": "int",
+   "ty": "i32",
+   "value": 1,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "indices0_stride0",
+   "kind": "int",
+   "ty": "i32",
+   "value": 1,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "values_stride0",
+   "kind": "int",
+   "ty": "i32",
+   "value": 64,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "values_stride1",
+   "kind": "int",
+   "ty": "i32",
+   "value": 256,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "values_stride2",
+   "kind": "int",
+   "ty": "i32",
+   "value": 1,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "M",
+   "kind": "int",
+   "ty": "i32",
+   "value": 4,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "N",
+   "kind": "int",
+   "ty": "i32",
+   "value": 4096,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "IS_ACCUMULATE",
+   "kind": "constexpr",
+   "ty": "constexpr",
+   "value": false,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "BLOCK_SIZE0",
+   "kind": "constexpr",
+   "ty": "constexpr",
+   "value": 2,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "BLOCK_SIZE1",
+   "kind": "constexpr",
+   "ty": "constexpr",
+   "value": 2048,
+   "shape": null,
+   "dtype": null
+  }
+ ]
+}
