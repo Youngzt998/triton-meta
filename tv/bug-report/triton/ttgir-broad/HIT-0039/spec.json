@@ -1,0 +1,120 @@
+{
+ "name": "ind:triton_red_fused_native_batch_norm_backward_0_0ec65333",
+ "corpus": "inductor",
+ "fn_name": "triton_red_fused_native_batch_norm_backward_0_0ec65333",
+ "grid": [
+  1,
+  1,
+  1
+ ],
+ "num_warps": 4,
+ "meta": {
+  "entry": 62,
+  "kernel": "triton_red_fused_native_batch_norm_backward_0",
+  "sig": "loads=7 stores=3 reduction for-loop",
+  "category": "63. normalization :: norm_batchnorm_train",
+  "size_hints": {
+   "x": 16,
+   "r0_": 2048
+  },
+  "max_hint": 1152
+ },
+ "args": [
+  {
+   "name": "in_ptr0",
+   "kind": "ptr",
+   "ty": "*fp32",
+   "value": null,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "in_ptr1",
+   "kind": "ptr",
+   "ty": "*fp32",
+   "value": null,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "in_ptr2",
+   "kind": "ptr",
+   "ty": "*fp32",
+   "value": null,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "in_ptr3",
+   "kind": "ptr",
+   "ty": "*fp32",
+   "value": null,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "in_ptr4",
+   "kind": "ptr",
+   "ty": "*fp32",
+   "value": null,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "out_ptr0",
+   "kind": "ptr",
+   "ty": "*fp32",
+   "value": null,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "out_ptr2",
+   "kind": "ptr",
+   "ty": "*fp32",
+   "value": null,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "out_ptr3",
+   "kind": "ptr",
+   "ty": "*fp32",
+   "value": null,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "xnumel",
+   "kind": "int",
+   "ty": "i32",
+   "value": 16,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "r0_numel",
+   "kind": "int",
+   "ty": "i32",
+   "value": 1152,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "XBLOCK",
+   "kind": "constexpr",
+   "ty": "constexpr",
+   "value": 16,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "R0_BLOCK",
+   "kind": "constexpr",
+   "ty": "constexpr",
+   "value": 1024,
+   "shape": null,
+   "dtype": null
+  }
+ ]
+}
