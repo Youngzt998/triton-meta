@@ -1,0 +1,167 @@
+{
+  "reps_per_run": 200,
+  "total_self_inconsistent_reps": 0,
+  "verdict": "HOLDS",
+  "runs": [
+    {
+      "dist": "intvalued",
+      "seed": 1262280619,
+      "side": "reference",
+      "pattern": "alive",
+      "reps_differing": 0,
+      "distinct_outputs": 1
+    },
+    {
+      "dist": "intvalued",
+      "seed": 1262280619,
+      "side": "reference",
+      "pattern": "free",
+      "reps_differing": 0,
+      "distinct_outputs": 1
+    },
+    {
+      "dist": "intvalued",
+      "seed": 1262280619,
+      "side": "candidate",
+      "pattern": "alive",
+      "reps_differing": 0,
+      "distinct_outputs": 1
+    },
+    {
+      "dist": "intvalued",
+      "seed": 1262280619,
+      "side": "candidate",
+      "pattern": "free",
+      "reps_differing": 0,
+      "distinct_outputs": 1
+    },
+    {
+      "dist": "randn",
+      "seed": 1262280619,
+      "side": "reference",
+      "pattern": "alive",
+      "reps_differing": 0,
+      "distinct_outputs": 1
+    },
+    {
+      "dist": "randn",
+      "seed": 1262280619,
+      "side": "reference",
+      "pattern": "free",
+      "reps_differing": 0,
+      "distinct_outputs": 1
+    },
+    {
+      "dist": "randn",
+      "seed": 1262280619,
+      "side": "candidate",
+      "pattern": "alive",
+      "reps_differing": 0,
+      "distinct_outputs": 1
+    },
+    {
+      "dist": "randn",
+      "seed": 1262280619,
+      "side": "candidate",
+      "pattern": "free",
+      "reps_differing": 0,
+      "distinct_outputs": 1
+    },
+    {
+      "dist": "intvalued",
+      "seed": 4242,
+      "side": "reference",
+      "pattern": "alive",
+      "reps_differing": 0,
+      "distinct_outputs": 1
+    },
+    {
+      "dist": "intvalued",
+      "seed": 4242,
+      "side": "reference",
+      "pattern": "free",
+      "reps_differing": 0,
+      "distinct_outputs": 1
+    },
+    {
+      "dist": "intvalued",
+      "seed": 4242,
+      "side": "candidate",
+      "pattern": "alive",
+      "reps_differing": 0,
+      "distinct_outputs": 1
+    },
+    {
+      "dist": "intvalued",
+      "seed": 4242,
+      "side": "candidate",
+      "pattern": "free",
+      "reps_differing": 0,
+      "distinct_outputs": 1
+    },
+    {
+      "dist": "tiny",
+      "seed": 99,
+      "side": "reference",
+      "pattern": "alive",
+      "reps_differing": 0,
+      "distinct_outputs": 1
+    },
+    {
+      "dist": "tiny",
+      "seed": 99,
+      "side": "reference",
+      "pattern": "free",
+      "reps_differing": 0,
+      "distinct_outputs": 1
+    },
+    {
+      "dist": "tiny",
+      "seed": 99,
+      "side": "candidate",
+      "pattern": "alive",
+      "reps_differing": 0,
+      "distinct_outputs": 1
+    },
+    {
+      "dist": "tiny",
+      "seed": 99,
+      "side": "candidate",
+      "pattern": "free",
+      "reps_differing": 0,
+      "distinct_outputs": 1
+    },
+    {
+      "dist": "wide",
+      "seed": 7,
+      "side": "reference",
+      "pattern": "alive",
+      "reps_differing": 0,
+      "distinct_outputs": 1
+    },
+    {
+      "dist": "wide",
+      "seed": 7,
+      "side": "reference",
+      "pattern": "free",
+      "reps_differing": 0,
+      "distinct_outputs": 1
+    },
+    {
+      "dist": "wide",
+      "seed": 7,
+      "side": "candidate",
+      "pattern": "alive",
+      "reps_differing": 0,
+      "distinct_outputs": 1
+    },
+    {
+      "dist": "wide",
+      "seed": 7,
+      "side": "candidate",
+      "pattern": "free",
+      "reps_differing": 0,
+      "distinct_outputs": 1
+    }
+  ]
+}
