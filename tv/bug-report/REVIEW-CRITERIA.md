@@ -50,7 +50,16 @@ fired, and one sentence of reason.
 - The difference **survives** the exact-integer control ⇒ it is not reassociation,
   contraction or precision.
 - An **integer or boolean** output differs — there is no floating-point excuse.
-- **NaN or Inf appears on one side only.**
+- **NaN or Inf appears on one side only** — *unless the difference disappears once
+  fast-math is removed*. Fast math implies flush-to-zero (`-ftz=true`), and
+  `inf × denormal → inf × 0 = NaN` manufactures a NaN out of finite inputs; that
+  is the documented behaviour of the flag, not a bug. So: re-run with fast math
+  off (TileLang: drop `tl.enable_fast_math`; Triton: the equivalent flag), and if
+  the difference goes away, reject it under B1 instead of keeping it.
+  **Exception, pinned by the project owner:** `tilelang/HIT-0009` **stays in the
+  repo** as the documented representative of this class — it explains why the
+  pattern is not a bug. Do not reject or move it, on this or any later pass, even
+  though the rule above would otherwise catch it.
 - The culprit pass has **no numeric licence anywhere in its source**, and the
   difference is not explained by downstream fma contraction either.
 - **Compile failure, crash, or invalid generated code** (e.g. TileLang
