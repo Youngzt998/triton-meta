@@ -1,0 +1,64 @@
+{
+ "name": "ind:triton_per_fused_linalg_vector_norm_0_c7c12e54",
+ "corpus": "inductor",
+ "fn_name": "triton_per_fused_linalg_vector_norm_0_c7c12e54",
+ "grid": [
+  1,
+  1,
+  1
+ ],
+ "num_warps": 4,
+ "meta": {
+  "entry": 49,
+  "kernel": "triton_per_fused_linalg_vector_norm_0",
+  "sig": "loads=1 stores=1 reduction",
+  "category": "50. reduction :: red_norm",
+  "size_hints": {
+   "x": 64,
+   "r0_": 512
+  },
+  "max_hint": 300
+ },
+ "args": [
+  {
+   "name": "in_out_ptr0",
+   "kind": "ptr",
+   "ty": "*fp32",
+   "value": null,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "in_ptr0",
+   "kind": "ptr",
+   "ty": "*fp32",
+   "value": null,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "xnumel",
+   "kind": "int",
+   "ty": "i32",
+   "value": 64,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "r0_numel",
+   "kind": "int",
+   "ty": "i32",
+   "value": 300,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "XBLOCK",
+   "kind": "constexpr",
+   "ty": "constexpr",
+   "value": 64,
+   "shape": null,
+   "dtype": null
+  }
+ ]
+}
