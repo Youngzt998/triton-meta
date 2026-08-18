@@ -1,0 +1,96 @@
+{
+ "tag": "HIT-0071",
+ "spec": {
+  "name": "ind:triton_per_fused_mul_sum_0_f904167e",
+  "corpus": "inductor",
+  "fn_name": "triton_per_fused_mul_sum_0_f904167e",
+  "grid": [
+   2,
+   1,
+   1
+  ],
+  "num_warps": 4,
+  "meta": {
+   "entry": 78,
+   "kernel": "triton_per_fused_mul_sum_0",
+   "sig": "loads=3 stores=1 reduction",
+   "category": "79. normalization :: norm_rmsnorm",
+   "size_hints": {
+    "x": 1024,
+    "r0_": 32
+   },
+   "max_hint": 768
+  },
+  "args": [
+   {
+    "name": "in_ptr0",
+    "kind": "ptr",
+    "ty": "*fp32",
+    "value": null,
+    "shape": null,
+    "dtype": null
+   },
+   {
+    "name": "in_ptr1",
+    "kind": "ptr",
+    "ty": "*fp32",
+    "value": null,
+    "shape": null,
+    "dtype": null
+   },
+   {
+    "name": "in_ptr2",
+    "kind": "ptr",
+    "ty": "*fp32",
+    "value": null,
+    "shape": null,
+    "dtype": null
+   },
+   {
+    "name": "out_ptr0",
+    "kind": "ptr",
+    "ty": "*fp32",
+    "value": null,
+    "shape": null,
+    "dtype": null
+   },
+   {
+    "name": "xnumel",
+    "kind": "int",
+    "ty": "i32",
+    "value": 768,
+    "shape": null,
+    "dtype": null
+   },
+   {
+    "name": "r0_numel",
+    "kind": "int",
+    "ty": "i32",
+    "value": 32,
+    "shape": null,
+    "dtype": null
+   },
+   {
+    "name": "XBLOCK",
+    "kind": "constexpr",
+    "ty": "constexpr",
+    "value": 512,
+    "shape": null,
+    "dtype": null
+   }
+  ]
+ },
+ "ref_flags": [],
+ "added": [
+  "--triton-licm",
+  "--tritongpu-coalesce",
+  "--tritongpu-remove-layout-conversions",
+  "--canonicalize"
+ ],
+ "R": 20,
+ "seed": 71795,
+ "draw": 2,
+ "fill_seed": 72441157,
+ "mode": "randn2",
+ "target": "cuda:90"
+}
