@@ -1,0 +1,91 @@
+{
+ "t": "variant",
+ "kid": "cap_081a26caff856329",
+ "mode": "captured",
+ "seed": 25,
+ "v": {
+  "skip": [],
+  "cfg": {
+   "tl.config_index_bitwidth": 64
+  }
+ },
+ "status": "diff",
+ "labels": [
+  "pass-class:bit-preserving",
+  "input-mode:captured",
+  "exact-int-accum:reassociation-excluded",
+  "gross"
+ ],
+ "nums": {
+  "ulp_max": 2097217536,
+  "n_diff": 3,
+  "n_total": 7,
+  "max_abs_diff": 256.0
+ },
+ "diffs": [
+  {
+   "arg": 1,
+   "dtype": "float32",
+   "shape": [
+    7
+   ],
+   "kind": "float",
+   "nan_ref": 0,
+   "nan_cand": 0,
+   "nan_mask_differs": false,
+   "n_diff": 3,
+   "n_total": 7,
+   "max_abs": 256.0,
+   "max_rel": 2.0,
+   "ulp_max": 2097217536,
+   "first": {
+    "idx": 0,
+    "ref": -128.0,
+    "cand": 128.0
+   }
+  }
+ ],
+ "confirm": {
+  "cand_self_consistent": true,
+  "survives_heap_shift": true,
+  "diff_under_heap_shift": true,
+  "ref_self_consistent": true,
+  "int_control_differs": true,
+  "int_control_exact": true,
+  "int_control_diffs": [
+   {
+    "arg": 1,
+    "dtype": "float32",
+    "shape": [
+     7
+    ],
+    "kind": "float",
+    "nan_ref": 0,
+    "nan_cand": 0,
+    "nan_mask_differs": false,
+    "n_diff": 7,
+    "n_total": 7,
+    "max_abs": 256.0,
+    "max_rel": 1.0240000486373901,
+    "ulp_max": 2097217536,
+    "first": {
+     "idx": 0,
+     "ref": -3.0,
+     "cand": 253.0
+    }
+   }
+  ]
+ },
+ "minimal": {
+  "skip": [],
+  "cfg": {
+   "tl.config_index_bitwidth": 64
+  }
+ },
+ "modes": [
+  "intvalued",
+  "normal"
+ ],
+ "ref_chars": 900,
+ "cand_chars": 971
+}
