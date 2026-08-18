@@ -52,3 +52,21 @@ empty skip set, reproduces the stock CUDA source **byte for byte**.
 
 `## SMT reachability analysis` in each report is left as `TODO` on purpose —
 it needs reasoning and is written by a reviewing agent, never by the sweep.
+
+## Extra gate added after launch: undefined behaviour
+
+A determinism pre-screen **cannot** see a data race. A kernel that stores to an
+address computed from loaded index data (a scatter) has a write-write race when
+two lanes produce the same index — but one compiled binary has a fixed write
+order, so running it three times always agrees. Only a *different* compilation
+reorders the writes, and the race then looks exactly like a miscompile.
+
+So the corpus is also scanned **statically** (`tlfz/irscan.py`): any kernel with
+a store whose address depends on a load, or with an atomic read-modify-write, is
+dropped as `ub-race` before any comparison. On this corpus that removed 53 of
+717 kernels (14 scatter stores, 31 atomics, 8 float atomics).
+
+A second, generic net catches what a static scan cannot follow (aliasing): if
+**three distinct culprit pass sets** each produce a difference on the same
+kernel, that kernel is retired as `suspect-unstable` and every report that used
+it gets a `## RETRACTED` section appended.
