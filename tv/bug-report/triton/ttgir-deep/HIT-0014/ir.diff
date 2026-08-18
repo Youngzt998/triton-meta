@@ -1,0 +1,171 @@
+--- ref.ttgir
++++ cand.ttgir
+@@ -1,8 +1,4 @@
+-#blocked = #ttg.blocked<{sizePerThread = [1, 1], threadsPerWarp = [1, 32], warpsPerCTA = [2, 2], order = [1, 0]}>
++#blocked = #ttg.blocked<{sizePerThread = [1, 4], threadsPerWarp = [2, 16], warpsPerCTA = [4, 1], order = [1, 0]}>
+ #blocked1 = #ttg.blocked<{sizePerThread = [1], threadsPerWarp = [32], warpsPerCTA = [4], order = [0]}>
+-#blocked2 = #ttg.blocked<{sizePerThread = [1, 4], threadsPerWarp = [2, 16], warpsPerCTA = [4, 1], order = [1, 0]}>
+-#blocked3 = #ttg.blocked<{sizePerThread = [1, 1], threadsPerWarp = [32, 1], warpsPerCTA = [4, 1], order = [0, 1]}>
+-#blocked4 = #ttg.blocked<{sizePerThread = [1, 1], threadsPerWarp = [32, 1], warpsPerCTA = [4, 1], order = [1, 0]}>
+-#blocked5 = #ttg.blocked<{sizePerThread = [1, 1], threadsPerWarp = [1, 32], warpsPerCTA = [1, 4], order = [0, 1]}>
+ #loc = loc("/home/youngzt/fuzz/ttgir-deep/harness/kernels.py":256:1)
+ #loc1 = loc(unknown)
+@@ -19,75 +15,67 @@
+ module attributes {"ttg.num-ctas" = 1 : i32, "ttg.num-warps" = 4 : i32, ttg.target = "cuda:90", "ttg.threads-per-warp" = 32 : i32, "ttng.two-ctas" = false} {
+   tt.func public @k_loop_reduce(%x_ptr: !tt.ptr<f32> {tt.divisibility = 16 : i32} loc("x_ptr"(#loc)), %o_ptr: !tt.ptr<f32> {tt.divisibility = 16 : i32} loc("o_ptr"(#loc)), %R: i32 {tt.divisibility = 16 : i32} loc("R"(#loc)), %C: i32 {tt.divisibility = 16 : i32} loc("C"(#loc))) attributes {noinline = false} {
+-    %c16_i32 = arith.constant 16 : i32
+-    %c64_i32 = arith.constant 64 : i32
+     %cst = arith.constant dense<0.000000e+00> : tensor<16x64xf32, #blocked>
+     %cst_0 = arith.constant dense<0xFF800000> : tensor<16x64xf32, #blocked>
++    %cst_1 = arith.constant dense<0xFF800000> : tensor<16xf32, #ttg.slice<{dim = 1, parent = #blocked}>>
++    %c63_i32 = arith.constant 63 : i32
++    %c1_i32 = arith.constant 1 : i32
+     %c0_i32 = arith.constant 0 : i32
+-    %c1_i32 = arith.constant 1 : i32
+-    %c63_i32 = arith.constant 63 : i32
+-    %cst_1 = arith.constant dense<0xFF800000> : tensor<16xf32, #blocked1>
+-    %cst_2 = arith.constant dense<0.000000e+00> : tensor<16x64xf32, #blocked2>
++    %c64_i32 = arith.constant 64 : i32
++    %c16_i32 = arith.constant 16 : i32
+     %pid = tt.get_program_id x : i32
+     %rows = arith.muli %pid, %c16_i32 : i32
++    %rows_2 = tt.make_range {end = 16 : i32, start = 0 : i32} : tensor<16xi32, #ttg.slice<{dim = 1, parent = #blocked}>>
+     %rows_3 = tt.make_range {end = 16 : i32, start = 0 : i32} : tensor<16xi32, #blocked1>
+-    %rows_4 = tt.splat %rows : i32 -> tensor<16xi32, #blocked1>
+-    %rows_5 = arith.addi %rows_4, %rows_3 : tensor<16xi32, #blocked1>
++    %rows_4 = tt.splat %rows : i32 -> tensor<16xi32, #ttg.slice<{dim = 1, parent = #blocked}>>
++    %rows_5 = tt.splat %rows : i32 -> tensor<16xi32, #blocked1>
++    %rows_6 = arith.addi %rows_4, %rows_2 : tensor<16xi32, #ttg.slice<{dim = 1, parent = #blocked}>>
++    %rows_7 = arith.addi %rows_5, %rows_3 : tensor<16xi32, #blocked1>
+     %0 = arith.addi %C, %c63_i32 : i32
+     %1 = arith.divsi %0, %c64_i32 : i32
+-    %cols = tt.make_range {end = 64 : i32, start = 0 : i32} : tensor<64xi32, #blocked1>
+-    %m = ttg.convert_layout %rows_5 : tensor<16xi32, #blocked1> -> tensor<16xi32, #ttg.slice<{dim = 1, parent = #blocked3}>>
+-    %m_6 = tt.expand_dims %m {axis = 1 : i32} : tensor<16xi32, #ttg.slice<{dim = 1, parent = #blocked3}>> -> tensor<16x1xi32, #blocked3>
+-    %v = ttg.convert_layout %m_6 : tensor<16x1xi32, #blocked3> -> tensor<16x1xi32, #blocked4>
+-    %m_7 = tt.splat %R : i32 -> tensor<16x1xi32, #blocked4>
+-    %m_8 = arith.cmpi slt, %v, %m_7 : tensor<16x1xi32, #blocked4>
+-    %m_9 = tt.splat %C : i32 -> tensor<1x64xi32, #blocked>
+-    %m_10 = tt.broadcast %m_8 : tensor<16x1xi1, #blocked4> -> tensor<16x64xi1, #blocked4>
+-    %m_11 = ttg.convert_layout %m_10 : tensor<16x64xi1, #blocked4> -> tensor<16x64xi1, #blocked>
+-    %v_12 = tt.splat %C : i32 -> tensor<16x1xi32, #blocked4>
+-    %v_13 = arith.muli %v, %v_12 : tensor<16x1xi32, #blocked4>
+-    %v_14 = tt.splat %x_ptr : !tt.ptr<f32> -> tensor<16x1x!tt.ptr<f32>, #blocked4>
+-    %v_15 = tt.addptr %v_14, %v_13 : tensor<16x1x!tt.ptr<f32>, #blocked4>, tensor<16x1xi32, #blocked4>
+-    %v_16 = tt.broadcast %v_15 : tensor<16x1x!tt.ptr<f32>, #blocked4> -> tensor<16x64x!tt.ptr<f32>, #blocked4>
+-    %v_17 = ttg.convert_layout %v_16 : tensor<16x64x!tt.ptr<f32>, #blocked4> -> tensor<16x64x!tt.ptr<f32>, #blocked>
+-    %mx:2 = scf.for %arg4 = %c0_i32 to %1 step %c1_i32 iter_args(%arg5 = %cst, %arg6 = %cst_1) -> (tensor<16x64xf32, #blocked>, tensor<16xf32, #blocked1>)  : i32 {
+-      %cols_18 = arith.muli %arg4, %c64_i32 : i32
+-      %cols_19 = tt.splat %cols_18 : i32 -> tensor<64xi32, #blocked1>
+-      %cols_20 = arith.addi %cols_19, %cols : tensor<64xi32, #blocked1>
+-      %m_21 = ttg.convert_layout %cols_20 : tensor<64xi32, #blocked1> -> tensor<64xi32, #ttg.slice<{dim = 0, parent = #blocked5}>>
+-      %m_22 = tt.expand_dims %m_21 {axis = 0 : i32} : tensor<64xi32, #ttg.slice<{dim = 0, parent = #blocked5}>> -> tensor<1x64xi32, #blocked5>
+-      %v_23 = ttg.convert_layout %m_22 : tensor<1x64xi32, #blocked5> -> tensor<1x64xi32, #blocked>
+-      %m_24 = arith.cmpi slt, %v_23, %m_9 : tensor<1x64xi32, #blocked>
+-      %m_25 = tt.broadcast %m_24 : tensor<1x64xi1, #blocked> -> tensor<16x64xi1, #blocked>
+-      %m_26 = arith.andi %m_11, %m_25 : tensor<16x64xi1, #blocked>
+-      %v_27 = tt.broadcast %v_23 : tensor<1x64xi32, #blocked> -> tensor<16x64xi32, #blocked>
+-      %v_28 = tt.addptr %v_17, %v_27 : tensor<16x64x!tt.ptr<f32>, #blocked>, tensor<16x64xi32, #blocked>
+-      %v_29 = ttg.convert_layout %v_28 : tensor<16x64x!tt.ptr<f32>, #blocked> -> tensor<16x64x!tt.ptr<f32>, #blocked2>
+-      %v_30 = ttg.convert_layout %m_26 : tensor<16x64xi1, #blocked> -> tensor<16x64xi1, #blocked2>
+-      %v_31 = tt.load %v_29, %v_30, %cst_2 : tensor<16x64x!tt.ptr<f32>, #blocked2>
+-      %v_32 = ttg.convert_layout %v_31 : tensor<16x64xf32, #blocked2> -> tensor<16x64xf32, #blocked>
+-      %acc = arith.mulf %v_32, %v_32 : tensor<16x64xf32, #blocked>
+-      %acc_33 = arith.addf %arg5, %acc : tensor<16x64xf32, #blocked>
+-      %mx_34 = arith.select %m_26, %v_32, %cst_0 : tensor<16x64xi1, #blocked>, tensor<16x64xf32, #blocked>
+-      %mx_35 = "tt.reduce"(%mx_34) <{axis = 1 : i32}> ({
+-      ^bb0(%mx_38: f32 loc(callsite(#loc1 at #loc52)), %mx_39: f32 loc(callsite(#loc1 at #loc52))):
+-        %mx_40 = arith.maxnumf %mx_38, %mx_39 : f32
+-        tt.reduce.return %mx_40 : f32
++    %cols = tt.make_range {end = 64 : i32, start = 0 : i32} : tensor<64xi32, #ttg.slice<{dim = 0, parent = #blocked}>>
++    %m = tt.expand_dims %rows_6 {axis = 1 : i32} : tensor<16xi32, #ttg.slice<{dim = 1, parent = #blocked}>> -> tensor<16x1xi32, #blocked>
++    %m_8 = tt.splat %R : i32 -> tensor<16x1xi32, #blocked>
++    %m_9 = arith.cmpi slt, %m, %m_8 : tensor<16x1xi32, #blocked>
++    %m_10 = tt.splat %C : i32 -> tensor<1x64xi32, #blocked>
++    %m_11 = tt.broadcast %m_9 : tensor<16x1xi1, #blocked> -> tensor<16x64xi1, #blocked>
++    %v = tt.splat %C : i32 -> tensor<16x1xi32, #blocked>
++    %v_12 = arith.muli %m, %v : tensor<16x1xi32, #blocked>
++    %v_13 = tt.splat %x_ptr : !tt.ptr<f32> -> tensor<16x1x!tt.ptr<f32>, #blocked>
++    %v_14 = tt.addptr %v_13, %v_12 : tensor<16x1x!tt.ptr<f32>, #blocked>, tensor<16x1xi32, #blocked>
++    %v_15 = tt.broadcast %v_14 : tensor<16x1x!tt.ptr<f32>, #blocked> -> tensor<16x64x!tt.ptr<f32>, #blocked>
++    %mx:2 = scf.for %arg4 = %c0_i32 to %1 step %c1_i32 iter_args(%arg5 = %cst, %arg6 = %cst_1) -> (tensor<16x64xf32, #blocked>, tensor<16xf32, #ttg.slice<{dim = 1, parent = #blocked}>>)  : i32 {
++      %cols_16 = arith.muli %arg4, %c64_i32 : i32
++      %cols_17 = tt.splat %cols_16 : i32 -> tensor<64xi32, #ttg.slice<{dim = 0, parent = #blocked}>>
++      %cols_18 = arith.addi %cols_17, %cols : tensor<64xi32, #ttg.slice<{dim = 0, parent = #blocked}>>
++      %m_19 = tt.expand_dims %cols_18 {axis = 0 : i32} : tensor<64xi32, #ttg.slice<{dim = 0, parent = #blocked}>> -> tensor<1x64xi32, #blocked>
++      %m_20 = arith.cmpi slt, %m_19, %m_10 : tensor<1x64xi32, #blocked>
++      %m_21 = tt.broadcast %m_20 : tensor<1x64xi1, #blocked> -> tensor<16x64xi1, #blocked>
++      %m_22 = arith.andi %m_11, %m_21 : tensor<16x64xi1, #blocked>
++      %v_23 = tt.broadcast %m_19 : tensor<1x64xi32, #blocked> -> tensor<16x64xi32, #blocked>
++      %v_24 = tt.addptr %v_15, %v_23 : tensor<16x64x!tt.ptr<f32>, #blocked>, tensor<16x64xi32, #blocked>
++      %v_25 = tt.load %v_24, %m_22, %cst : tensor<16x64x!tt.ptr<f32>, #blocked>
++      %acc = arith.mulf %v_25, %v_25 : tensor<16x64xf32, #blocked>
++      %acc_26 = arith.addf %arg5, %acc : tensor<16x64xf32, #blocked>
++      %mx_27 = arith.select %m_22, %v_25, %cst_0 : tensor<16x64xi1, #blocked>, tensor<16x64xf32, #blocked>
++      %mx_28 = "tt.reduce"(%mx_27) <{axis = 1 : i32}> ({
++      ^bb0(%mx_30: f32 loc(callsite(#loc1 at #loc52)), %mx_31: f32 loc(callsite(#loc1 at #loc52))):
++        %mx_32 = arith.maxnumf %mx_30, %mx_31 : f32
++        tt.reduce.return %mx_32 : f32
+       }) : (tensor<16x64xf32, #blocked>) -> tensor<16xf32, #ttg.slice<{dim = 1, parent = #blocked}>>
+-      %mx_36 = ttg.convert_layout %mx_35 : tensor<16xf32, #ttg.slice<{dim = 1, parent = #blocked}>> -> tensor<16xf32, #blocked1>
+-      %mx_37 = arith.maxnumf %arg6, %mx_36 : tensor<16xf32, #blocked1>
+-      scf.yield %acc_33, %mx_37 : tensor<16x64xf32, #blocked>, tensor<16xf32, #blocked1>
++      %mx_29 = arith.maxnumf %arg6, %mx_28 : tensor<16xf32, #ttg.slice<{dim = 1, parent = #blocked}>>
++      scf.yield %acc_26, %mx_29 : tensor<16x64xf32, #blocked>, tensor<16xf32, #ttg.slice<{dim = 1, parent = #blocked}>>
+     } {tt.num_stages = 1 : i32}
+     %s = "tt.reduce"(%mx#0) <{axis = 1 : i32}> ({
+-    ^bb0(%s_18: f32 loc(callsite(#loc1 at #loc54)), %s_19: f32 loc(callsite(#loc1 at #loc54))):
+-      %s_20 = arith.addf %s_18, %s_19 : f32
+-      tt.reduce.return %s_20 : f32
++    ^bb0(%s_16: f32 loc(callsite(#loc1 at #loc54)), %s_17: f32 loc(callsite(#loc1 at #loc54))):
++      %s_18 = arith.addf %s_16, %s_17 : f32
++      tt.reduce.return %s_18 : f32
+     }) : (tensor<16x64xf32, #blocked>) -> tensor<16xf32, #ttg.slice<{dim = 1, parent = #blocked}>>
+-    %2 = ttg.convert_layout %s : tensor<16xf32, #ttg.slice<{dim = 1, parent = #blocked}>> -> tensor<16xf32, #blocked1>
+-    %3 = tt.splat %R : i32 -> tensor<16xi32, #blocked1>
+-    %4 = arith.cmpi slt, %rows_5, %3 : tensor<16xi32, #blocked1>
+-    %5 = tt.splat %o_ptr : !tt.ptr<f32> -> tensor<16x!tt.ptr<f32>, #blocked1>
+-    %6 = tt.addptr %5, %rows_5 : tensor<16x!tt.ptr<f32>, #blocked1>, tensor<16xi32, #blocked1>
+-    %7 = arith.addf %2, %mx#1 : tensor<16xf32, #blocked1>
+-    tt.store %6, %7, %4 : tensor<16x!tt.ptr<f32>, #blocked1>
++    %2 = tt.splat %R : i32 -> tensor<16xi32, #blocked1>
++    %3 = arith.cmpi slt, %rows_7, %2 : tensor<16xi32, #blocked1>
++    %4 = tt.splat %o_ptr : !tt.ptr<f32> -> tensor<16x!tt.ptr<f32>, #blocked1>
++    %5 = tt.addptr %4, %rows_7 : tensor<16x!tt.ptr<f32>, #blocked1>, tensor<16xi32, #blocked1>
++    %6 = arith.addf %s, %mx#1 : tensor<16xf32, #ttg.slice<{dim = 1, parent = #blocked}>>
++    %7 = ttg.convert_layout %6 : tensor<16xf32, #ttg.slice<{dim = 1, parent = #blocked}>> -> tensor<16xf32, #blocked1>
++    tt.store %5, %7, %3 : tensor<16x!tt.ptr<f32>, #blocked1>
+     tt.return
+   }
+@@ -101,7 +89,7 @@
+ #loc8 = loc("/home/youngzt/fuzz/ttgir-deep/harness/kernels.py":262:25)
+ #loc9 = loc("/home/youngzt/fuzz/ttgir-deep/harness/kernels.py":263:14)
+-#loc10 = loc("/home/youngzt/fuzz/ttgir-deep/harness/kernels.py":264:29)
+-#loc11 = loc("/home/youngzt/fuzz/ttgir-deep/harness/kernels.py":263:36)
+-#loc12 = loc("/home/youngzt/fuzz/ttgir-deep/harness/kernels.py":263:13)
++#loc10 = loc("/home/youngzt/fuzz/ttgir-deep/harness/kernels.py":263:36)
++#loc11 = loc("/home/youngzt/fuzz/ttgir-deep/harness/kernels.py":263:13)
++#loc12 = loc("/home/youngzt/fuzz/ttgir-deep/harness/kernels.py":264:29)
+ #loc13 = loc("/home/youngzt/fuzz/ttgir-deep/harness/kernels.py":264:21)
+ #loc14 = loc("/home/youngzt/fuzz/ttgir-deep/harness/kernels.py":261:5)
+@@ -116,7 +104,7 @@
+ #loc24 = loc("/home/youngzt/fuzz/triton-public/python/triton/language/standard.py":290:12)
+ #loc26 = loc("/home/youngzt/fuzz/triton-public/python/triton/language/standard.py":263:12)
+-#loc27 = loc("/home/youngzt/fuzz/ttgir-deep/harness/kernels.py":268:28)
+-#loc28 = loc("/home/youngzt/fuzz/ttgir-deep/harness/kernels.py":268:41)
+-#loc29 = loc("/home/youngzt/fuzz/ttgir-deep/harness/kernels.py":268:14)
++#loc27 = loc("/home/youngzt/fuzz/ttgir-deep/harness/kernels.py":268:41)
++#loc28 = loc("/home/youngzt/fuzz/ttgir-deep/harness/kernels.py":268:14)
++#loc29 = loc("/home/youngzt/fuzz/ttgir-deep/harness/kernels.py":268:28)
+ #loc30 = loc("/home/youngzt/fuzz/ttgir-deep/harness/kernels.py":268:5)
+ #loc35 = loc("pid"(#loc2))
+@@ -127,7 +115,7 @@
+ #loc40 = loc("cols"(#loc8))
+ #loc41 = loc("m"(#loc9))
+-#loc42 = loc("v"(#loc10))
++#loc42 = loc("m"(#loc10))
+ #loc43 = loc("m"(#loc11))
+-#loc44 = loc("m"(#loc12))
++#loc44 = loc("v"(#loc12))
+ #loc45 = loc("v"(#loc13))
+ #loc46 = loc("acc"(#loc14))
