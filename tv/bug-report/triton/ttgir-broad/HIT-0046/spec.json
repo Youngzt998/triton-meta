@@ -1,0 +1,96 @@
+{
+ "name": "ind:triton_per_fused_native_layer_norm_native_layer_norm_backward_0_92be64e3",
+ "corpus": "inductor",
+ "fn_name": "triton_per_fused_native_layer_norm_native_layer_norm_backward_0_92be64e3",
+ "grid": [
+  1,
+  1,
+  1
+ ],
+ "num_warps": 4,
+ "meta": {
+  "entry": 168,
+  "kernel": "triton_per_fused_native_layer_norm_native_layer_norm_backward_0",
+  "sig": "loads=5 stores=1 reduction",
+  "category": "169. dynamic :: dyn_reduction_bwd",
+  "size_hints": {
+   "x": 32,
+   "r0_": 256
+  },
+  "max_hint": 256
+ },
+ "args": [
+  {
+   "name": "in_ptr0",
+   "kind": "ptr",
+   "ty": "*fp32",
+   "value": null,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "in_ptr1",
+   "kind": "ptr",
+   "ty": "*fp32",
+   "value": null,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "in_ptr2",
+   "kind": "ptr",
+   "ty": "*fp32",
+   "value": null,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "in_ptr3",
+   "kind": "ptr",
+   "ty": "*fp32",
+   "value": null,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "in_ptr4",
+   "kind": "ptr",
+   "ty": "*fp32",
+   "value": null,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "out_ptr2",
+   "kind": "ptr",
+   "ty": "*fp32",
+   "value": null,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "xnumel",
+   "kind": "int",
+   "ty": "i32",
+   "value": 32,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "r0_numel",
+   "kind": "int",
+   "ty": "i32",
+   "value": 256,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "XBLOCK",
+   "kind": "constexpr",
+   "ty": "constexpr",
+   "value": 32,
+   "shape": null,
+   "dtype": null
+  }
+ ]
+}
