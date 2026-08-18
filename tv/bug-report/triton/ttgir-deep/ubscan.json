@@ -1,0 +1,95 @@
+{
+  "verdict": "CLEAN",
+  "n_cases": 818,
+  "families": {
+    "attn": {
+      "n_store": 4,
+      "scatter": [],
+      "atomics": [],
+      "line_b": {
+        "scatter_store": false,
+        "atomic_float": false,
+        "has_atomic": false,
+        "n_store": 2
+      }
+    },
+    "loop_reduce": {
+      "n_store": 1,
+      "scatter": [],
+      "atomics": [],
+      "line_b": {
+        "scatter_store": false,
+        "atomic_float": false,
+        "has_atomic": false,
+        "n_store": 1
+      }
+    },
+    "mm_epilogue": {
+      "n_store": 2,
+      "scatter": [],
+      "atomics": [],
+      "line_b": {
+        "scatter_store": false,
+        "atomic_float": false,
+        "has_atomic": false,
+        "n_store": 0
+      }
+    },
+    "mm_ptr": {
+      "n_store": 1,
+      "scatter": [],
+      "atomics": [],
+      "line_b": {
+        "scatter_store": false,
+        "atomic_float": false,
+        "has_atomic": false,
+        "n_store": 1
+      }
+    },
+    "mm_tma": {
+      "n_store": 2,
+      "scatter": [],
+      "atomics": [],
+      "line_b": {
+        "scatter_store": false,
+        "atomic_float": false,
+        "has_atomic": false,
+        "n_store": 0
+      }
+    },
+    "mm_tma_persist": {
+      "n_store": 2,
+      "scatter": [],
+      "atomics": [],
+      "line_b": {
+        "scatter_store": false,
+        "atomic_float": false,
+        "has_atomic": false,
+        "n_store": 0
+      }
+    },
+    "nested": {
+      "n_store": 1,
+      "scatter": [],
+      "atomics": [],
+      "line_b": {
+        "scatter_store": false,
+        "atomic_float": false,
+        "has_atomic": false,
+        "n_store": 1
+      }
+    },
+    "tma_copy": {
+      "n_store": 1,
+      "scatter": [],
+      "atomics": [],
+      "line_b": {
+        "scatter_store": false,
+        "atomic_float": false,
+        "has_atomic": false,
+        "n_store": 0
+      }
+    }
+  },
+  "bad": []
+}
