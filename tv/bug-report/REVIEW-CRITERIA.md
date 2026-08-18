@@ -50,8 +50,19 @@ fired, and one sentence of reason.
 - The difference **survives** the exact-integer control ⇒ it is not reassociation,
   contraction or precision.
 - An **integer or boolean** output differs — there is no floating-point excuse.
-- **NaN or Inf appears on one side only** — *unless the difference disappears once
-  fast-math is removed*. Fast math implies flush-to-zero (`-ftz=true`), and
+- **NaN or Inf appears on one side only.** There is exactly **one** exception, the
+  fast-math one below. In particular, **a licensed reassociation that crosses an
+  overflow boundary still counts — keep it.** If a reduction reorder makes an
+  intermediate partial sum overflow to `±inf` so that a later `(+inf) + (−inf)`
+  yields `NaN`, that is a **bug**, even though the reorder itself is licensed and
+  B2's exact-integer test passes. **Owner ruling, do not re-litigate:** turning a
+  finite or `±inf` result into `NaN` is a change of kind, not of precision, and
+  `NaN` poisons everything downstream. `triton/ttgir-broad/HIT-0071` is the
+  reference case. Reports whose root cause is the same reorder *without* the
+  NaN/Inf outcome remain ordinary B1/B2 rejections — the NaN/Inf outcome is what
+  makes the difference.
+
+  *Fast-math exception* — the difference disappears once fast-math is removed: Fast math implies flush-to-zero (`-ftz=true`), and
   `inf × denormal → inf × 0 = NaN` manufactures a NaN out of finite inputs; that
   is the documented behaviour of the flag, not a bug. So: re-run with fast math
   off (TileLang: drop `tl.enable_fast_math`; Triton: the equivalent flag), and if
