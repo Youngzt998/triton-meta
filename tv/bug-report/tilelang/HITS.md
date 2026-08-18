@@ -8,3 +8,4 @@ the same input.  `SMT verdict` is filled in by a reviewing agent.
 |---|---|---|---|---|---|---|---|---|
 | HIT-0001 | `hw_fa_1x1x128x256x64_c0_s2` | `ProducerConsumerWarpSpecialized` | `{}` | hopper-only | pass-class:numerics-changing, layout-reorders-reduction, kernel-has-gemm, kernel-has-reduce, input-mode:normal, exact-int-accum:reassociation-excluded, few-ulp | 2/8192 | 1 | TODO |
 | HIT-0002 | `hw_fa_1x1x128x256x64_c0_s2` | `None` | `{"tl.disable_warp_specialized": true}` | hopper-only | pass-class:numerics-changing, kernel-has-gemm, kernel-has-reduce, input-mode:normal, exact-int-accum:reassociation-excluded, few-ulp | 2/8192 | 1 | TODO |
+| HIT-0003 | `hw_fa_1x1x128x256x64_c1_s1` | `ProducerConsumerWarpSpecialized` | `{}` | hopper-only | pass-class:numerics-changing, layout-reorders-reduction, kernel-has-gemm, kernel-has-reduce, input-mode:normal, exact-int-accum:reassociation-excluded, few-ulp | 1/8192 | 1 | TODO |
