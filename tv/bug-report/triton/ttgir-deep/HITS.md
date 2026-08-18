@@ -23,3 +23,7 @@ accumulator exact, so the difference cannot be a reordered sum.
 | HIT-0012 | coalesce on nested | needs-review | generic | TODO | `coalesce` | ? | ?/? | ? | ? | ? |
 | HIT-0013 | remove-layout-conversions-2,remove-layout-conversions-3 on attn | needs-review | hopper-only | TODO | `remove-layout-conversions-2,remove-layout-conversions-3` | ? | ?/? | ? | ? | ? |
 | HIT-0014 | remove-layout-conversions-1,remove-layout-conversions-2,remove-layout-conversions-3 on loop_reduce | needs-review | generic | TODO | `remove-layout-conversions-1,remove-layout-conversions-2,remove-layout-conversions-3` | layout | 22/64 | 0.0001220703125 | equal | 3/3 |
+| HIT-0015 | interleave-tmem,loop-aware-cse-2,optimize-dot-operands-1,pipeline,plan-cta on mm_tma | needs-review | hopper-only | TODO | `interleave-tmem,loop-aware-cse-2,optimize-dot-operands-1,pipeline,plan-cta` | clean,layout,lower,sched | 700/272448 | 421.0 | equal | 2/3 |
+| HIT-0016 | optimize-dot-operands-1 on mm_tma | needs-review | hopper-only | TODO | `optimize-dot-operands-1` | layout | 7424/1048576 | 1.817990202823694e-15 | equal | 1/3 |
+| HIT-0017 | remove-layout-conversions-1,remove-layout-conversions-2 on loop_reduce | needs-review | hopper-only | TODO | `remove-layout-conversions-1,remove-layout-conversions-2` | layout | 51/128 | 0.000244140625 | equal | 3/3 |
+| HIT-0018 | optimize-dot-operands-1,schedule-loops on mm_tma | needs-review | hopper-only | TODO | `optimize-dot-operands-1,schedule-loops` | layout,sched | 1/1048576 | 0.0 | equal | 1/3 |
