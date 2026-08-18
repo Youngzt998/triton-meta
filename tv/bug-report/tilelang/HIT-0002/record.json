@@ -1,0 +1,144 @@
+{
+ "t": "variant",
+ "kid": "cap_0b881ee73fbdf83c",
+ "mode": "captured",
+ "seed": 31,
+ "v": {
+  "skip": [],
+  "cfg": {
+   "tl.disable_wgmma": true
+  }
+ },
+ "status": "diff",
+ "labels": [
+  "pass-class:bit-preserving",
+  "kernel-has-gemm",
+  "kernel-has-reduce",
+  "input-mode:captured",
+  "exact-int-accum:reassociation-excluded",
+  "gross"
+ ],
+ "nums": {
+  "ulp_max": 16384,
+  "n_diff": 22332,
+  "n_total": 65536,
+  "max_abs_diff": 0.0625
+ },
+ "diffs": [
+  {
+   "arg": 10,
+   "dtype": "bfloat16",
+   "shape": [
+    1,
+    1024,
+    32
+   ],
+   "kind": "float",
+   "nan_ref": 0,
+   "nan_cand": 0,
+   "nan_mask_differs": false,
+   "n_diff": 7,
+   "n_total": 32768,
+   "max_abs": 0.0625,
+   "max_rel": 0.012658228166401386,
+   "ulp_max": 3,
+   "first": {
+    "idx": 3922,
+    "ref": 0.00010728836059570312,
+    "cand": 0.00010633468627929688
+   }
+  },
+  {
+   "arg": 11,
+   "dtype": "float32",
+   "shape": [
+    1,
+    1024,
+    32
+   ],
+   "kind": "float",
+   "nan_ref": 0,
+   "nan_cand": 0,
+   "nan_mask_differs": false,
+   "n_diff": 22325,
+   "n_total": 32768,
+   "max_abs": 0.0001068115234375,
+   "max_rel": 0.0011876485077664256,
+   "ulp_max": 16384,
+   "first": {
+    "idx": 0,
+    "ref": -0.4835292398929596,
+    "cand": -0.4835292100906372
+   }
+  }
+ ],
+ "confirm": {
+  "cand_self_consistent": true,
+  "survives_heap_shift": true,
+  "diff_under_heap_shift": true,
+  "ref_self_consistent": true,
+  "int_control_differs": true,
+  "int_control_exact": true,
+  "int_control_diffs": [
+   {
+    "arg": 10,
+    "dtype": "bfloat16",
+    "shape": [
+     1,
+     1024,
+     32
+    ],
+    "kind": "float",
+    "nan_ref": 0,
+    "nan_cand": 0,
+    "nan_mask_differs": false,
+    "n_diff": 5,
+    "n_total": 32768,
+    "max_abs": 4.0,
+    "max_rel": 0.006535947788506746,
+    "ulp_max": 1,
+    "first": {
+     "idx": 7467,
+     "ref": -692.0,
+     "cand": -688.0
+    }
+   },
+   {
+    "arg": 11,
+    "dtype": "float32",
+    "shape": [
+     1,
+     1024,
+     32
+    ],
+    "kind": "float",
+    "nan_ref": 0,
+    "nan_cand": 0,
+    "nan_mask_differs": false,
+    "n_diff": 19959,
+    "n_total": 32768,
+    "max_abs": 96.0,
+    "max_rel": 0.0002509882615413517,
+    "ulp_max": 3072,
+    "first": {
+     "idx": 0,
+     "ref": 43.17674255371094,
+     "cand": 43.176761627197266
+    }
+   }
+  ]
+ },
+ "minimal": {
+  "skip": [],
+  "cfg": {
+   "tl.disable_wgmma": true
+  }
+ },
+ "modes": [
+  "intvalued",
+  "normal",
+  "uniform"
+ ],
+ "ref_chars": 25705,
+ "cand_chars": 31327
+}
