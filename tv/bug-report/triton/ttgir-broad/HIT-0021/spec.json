@@ -1,0 +1,45 @@
+{
+ "name": "ind:triton_mm_da357cdb",
+ "corpus": "inductor",
+ "fn_name": "triton_mm_da357cdb",
+ "grid": [
+  24,
+  1,
+  1
+ ],
+ "num_warps": 4,
+ "meta": {
+  "entry": 97,
+  "kernel": "triton_mm",
+  "sig": "loads=2 stores=1 no-reduction for-loop data-dependent-if",
+  "category": "98. matmul :: mm_transposed_b",
+  "size_hints": {},
+  "max_hint": 65536
+ },
+ "args": [
+  {
+   "name": "arg_A",
+   "kind": "ptr",
+   "ty": "*fp16",
+   "value": null,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "arg_B",
+   "kind": "ptr",
+   "ty": "*fp16",
+   "value": null,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "out_ptr0",
+   "kind": "ptr",
+   "ty": "*fp16",
+   "value": null,
+   "shape": null,
+   "dtype": null
+  }
+ ]
+}
