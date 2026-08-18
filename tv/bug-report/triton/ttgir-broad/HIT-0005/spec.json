@@ -1,0 +1,81 @@
+{
+ "name": "bch:_embedding_dense_backward_kernel_224a2a0f",
+ "corpus": "bench",
+ "fn_name": "_embedding_dense_backward_kernel_224a2a0f",
+ "grid": [
+  8,
+  1,
+  1
+ ],
+ "num_warps": 4,
+ "meta": {
+  "runner": "run_flaggems__embedding_dense_backward_kernel_224a2a0f",
+  "max_hint": 65536
+ },
+ "args": [
+  {
+   "name": "grad_output_ptr",
+   "kind": "ptr",
+   "ty": "*fp16",
+   "value": null,
+   "shape": [
+    8,
+    8
+   ],
+   "dtype": "torch.float16"
+  },
+  {
+   "name": "indices_ptr",
+   "kind": "ptr",
+   "ty": "*i64",
+   "value": null,
+   "shape": [
+    8
+   ],
+   "dtype": "torch.int64"
+  },
+  {
+   "name": "grad_weight_ptr",
+   "kind": "ptr",
+   "ty": "*fp32",
+   "value": null,
+   "shape": [
+    16,
+    8
+   ],
+   "dtype": "torch.float32"
+  },
+  {
+   "name": "num_weights",
+   "kind": "int",
+   "ty": "i32",
+   "value": 16,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "padding_idx",
+   "kind": "int",
+   "ty": "i32",
+   "value": -1,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "BLOCK_D",
+   "kind": "constexpr",
+   "ty": "constexpr",
+   "value": 128,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "EMBED_DIM",
+   "kind": "constexpr",
+   "ty": "constexpr",
+   "value": 8,
+   "shape": null,
+   "dtype": null
+  }
+ ]
+}
