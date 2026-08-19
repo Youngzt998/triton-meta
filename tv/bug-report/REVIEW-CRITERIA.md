@@ -26,6 +26,30 @@ Append one line per rejection to
 `/home/youngzt/tv/bug-report-rejected/REJECTED.md`: id, which criterion below
 fired, and one sentence of reason.
 
+### Keep a few worked examples of each rejection class in the repo
+
+The quarantine lives outside the repo, so a reader of `bug-report/` sees only
+what survived and cannot judge the filtering. Fix that by keeping a small
+sample in **`tv/bug-report/<triton|tilelang>/dropped/`**:
+
+- **about 3 UB rejections** — criteria A3 (kernel not deterministic under one
+  binary), A4 (scatter store / atomics = write-write race), A2 (out-of-bounds or
+  uninitialised read). Pick ones whose mechanism is clearest.
+- **about 3 numeric-licence rejections** — the fast-math class: differences that
+  vanish once fast math is off (TileLang `tl.enable_fast_math`; Triton
+  `TRITON_DEFAULT_FP_FUSION=0`), plus B3 fma contraction.
+
+Copy the full report and its artifacts, and put a banner at the top of each:
+**`EXAMPLE OF A REJECTED REPORT — not an open finding`**, naming the criterion
+and the one measurement that settled it. Add a short `dropped/README.md` saying
+these are illustrative samples of the ~170 rejections, that the complete set is
+in `/home/youngzt/tv/bug-report-rejected/` with `REJECTED.md` listing every
+disposition, and that these copies are frozen — later passes do not update them.
+
+Do this once, at the end-of-campaign wrap-up, choosing from the final set of
+rejections rather than the ones that happen to exist mid-run. Commit with the
+`dropped/` paths only.
+
 ### Group A — not a real difference at all (measurement artifact)
 
 | # | Reject when |
