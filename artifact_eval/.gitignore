@@ -14,3 +14,4 @@ fusion_moe/*.jsonl
 data/*.csv
 !data/summary.csv
 !data/env.csv
+*.log
