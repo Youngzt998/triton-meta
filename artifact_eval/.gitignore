@@ -14,4 +14,7 @@ fusion_moe/*.jsonl
 data/*.csv
 !data/summary.csv
 !data/env.csv
+# A step's own run log is the readable record of what it produced and ships with the results.
+# Anything else ending in .log is scratch.
 *.log
+!run_*.log
