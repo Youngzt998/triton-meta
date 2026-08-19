@@ -8,6 +8,9 @@ committed. Empty cell means the field does not apply to that row.
 and therefore the bits it returns -- depends on the architecture and the cuBLASLt
 version, so a row is only comparable to another row with the same two.
 
+A table listed here whose CSV is absent belongs to a step that has not been
+implemented yet; the columns are declared so the shape is fixed in advance.
+
 ## gemm_bitmatch.csv
 
 One row per random shape. Is the Triton GEMM byte-identical to cuBLAS on that shape, over `reps` independent input draws (even draws ordinary gaussian, odd draws with the exponents spread across the dtype range).
@@ -25,9 +28,60 @@ One row per random shape. Is the Triton GEMM byte-identical to cuBLAS on that sh
 | `declined` | str | non-empty if the shape is out of scope and no comparison was made |
 | `error` | str | non-empty if the shape failed to run |
 
+## gemm_perf_random.csv
+
+One row per random shape, drawn from the same four shape families as `gemm.bitmatch` (square, thin, deep K, decode) so the price of the constraint can be read per family rather than as one average that hides the split. Three arms per row, same inputs and same timing method.
+
+| column | type | meaning |
+|---|---|---|
+| `family` | str | shape family the draw came from: square, thin, deepk or decode |
+| `M` | int | rows of A |
+| `N` | int | columns of B |
+| `K` | int | contraction length |
+| `dtype` | str | operand dtype: fp16 or fp8 (e4m3) |
+| `cublas_ms` | float | arm 1: cuBLAS through the hot closure. Device time, median of CUDA-graph replays with L2 flushed between them |
+| `torch_ms` | float | arm 2 as it ships: torch.compile(mode='max-autotune-no-cudagraphs'), timed on whatever its autotuner actually picked |
+| `torch_pick` | str | what that autotuner picked: the extern cuBLAS call or a Triton template |
+| `torch_triton_ms` | float | arm 2 with the extern call excluded, so the number is the best Triton template torch.compile can produce rather than cuBLAS wearing a Triton hat |
+| `torch_triton_cfg` | str | the winning template configuration, BLOCK_M/BLOCK_N/BLOCK_K/num_warps/num_stages |
+| `ours_ms` | float | arm 3: our GEMM, tuned, and byte-identical to arm 1 |
+| `ours_cfg` | str | the configuration ours was tuned to |
+| `bit_ok` | int | draws of arm 3 that came back byte-identical to arm 1 |
+| `bit_total` | int | draws compared. bit_ok < bit_total makes the timings on this row meaningless, because the two arms are then not computing the same thing |
+| `price_of_constraint` | float | torch_triton_ms / ours_ms. Above 1 means the constraint cost nothing; below 1 is what it cost |
+| `ours_over_cublas` | float | cublas_ms / ours_ms, for reference. This is a different and much larger term -- it is Triton against cuBLAS, not the price of the constraint |
+| `declined` | str | non-empty if the shape is out of scope and no comparison was made |
+| `error` | str | non-empty if an arm failed to run |
+
+## gemm_perf_static.csv
+
+One row per (model, layer). The same three arms as `gemm.perf.random`, on the layer dimensions of real models instead of random draws, so the price of the constraint can be read on the GEMMs that actually run.
+
+| column | type | meaning |
+|---|---|---|
+| `model` | str | model the shape comes from |
+| `layer` | str | layer within that model, e.g. qkv_proj, gate_up_proj, lm_head |
+| `M` | int | rows of A; the token count the row was measured at |
+| `N` | int | columns of B |
+| `K` | int | contraction length |
+| `dtype` | str | operand dtype: fp16 or fp8 (e4m3) |
+| `cublas_ms` | float | arm 1: cuBLAS through the hot closure. Device time, median of CUDA-graph replays with L2 flushed between them |
+| `torch_ms` | float | arm 2 as it ships: torch.compile(mode='max-autotune-no-cudagraphs'), timed on whatever its autotuner actually picked |
+| `torch_pick` | str | what that autotuner picked: the extern cuBLAS call or a Triton template |
+| `torch_triton_ms` | float | arm 2 with the extern call excluded, so the number is the best Triton template torch.compile can produce rather than cuBLAS wearing a Triton hat |
+| `torch_triton_cfg` | str | the winning template configuration, BLOCK_M/BLOCK_N/BLOCK_K/num_warps/num_stages |
+| `ours_ms` | float | arm 3: our GEMM, tuned, and byte-identical to arm 1 |
+| `ours_cfg` | str | the configuration ours was tuned to |
+| `bit_ok` | int | draws of arm 3 that came back byte-identical to arm 1 |
+| `bit_total` | int | draws compared. bit_ok < bit_total makes the timings on this row meaningless, because the two arms are then not computing the same thing |
+| `price_of_constraint` | float | torch_triton_ms / ours_ms. Above 1 means the constraint cost nothing; below 1 is what it cost |
+| `ours_over_cublas` | float | cublas_ms / ours_ms, for reference. This is a different and much larger term -- it is Triton against cuBLAS, not the price of the constraint |
+| `declined` | str | non-empty if the shape is out of scope and no comparison was made |
+| `error` | str | non-empty if an arm failed to run |
+
 ## gemm_fusion_dense.csv
 
-One row per (model, layer, epilogue). Fusing a byte-identical epilogue into the GEMM, on dense Llama-family layers. `speedup` above 1 means fusion beats the two-kernel path a user gets today. `noround_ms` is the same kernel with one line changed -- the epilogue reading the unrounded fp32 accumulator -- so fused_ms/noround_ms isolates the cost of the rounding that IS the bit constraint.
+One row per (model, layer, epilogue). Fusing a byte-identical epilogue into the GEMM, on dense Llama-family layers. `speedup` above 1 means fusion beats the two-kernel path a user gets today.
 
 | column | type | meaning |
 |---|---|---|
@@ -43,7 +97,6 @@ One row per (model, layer, epilogue). Fusing a byte-identical epilogue into the 
 | `baseline_ms` | float | eager unfused: hot cuBLAS then one separate epilogue kernel |
 | `fused_ms` | float | ours, fused and byte-identical to the baseline |
 | `free_fused_ms` | float | the same fusion on an ordinary autotuned Triton matmul |
-| `noround_ms` | float | our kernel with the epilogue reading the unrounded fp32 accumulator |
 | `speedup` | float | baseline_ms / fused_ms; above 1 means fusion pays |
 | `bit_ok` | int | draws byte-identical to the baseline |
 | `bit_total` | int | draws compared |
@@ -69,7 +122,6 @@ The same measurement on the layer dimensions of open-weight models current in Au
 | `baseline_ms` | float | eager unfused: hot cuBLAS then one separate epilogue kernel |
 | `fused_ms` | float | ours, fused and byte-identical to the baseline |
 | `free_fused_ms` | float | the same fusion on an ordinary autotuned Triton matmul |
-| `noround_ms` | float | our kernel with the epilogue reading the unrounded fp32 accumulator |
 | `speedup` | float | baseline_ms / fused_ms; above 1 means fusion pays |
 | `bit_ok` | int | draws byte-identical to the baseline |
 | `bit_total` | int | draws compared |
@@ -77,23 +129,151 @@ The same measurement on the layer dimensions of open-weight models current in Au
 | `tma` | str | whether the fused kernel used TMA |
 | `fused_cfg` | str | launch configuration of the fused kernel |
 
-## gemm_perf.csv
+## inner_tree_bitmatch.csv
 
-One row per shape. The price of the bit constraint is unconstrained_ms/ours_ms: the best configuration in an unconstrained search against ours. cublas_ms is given only for reference -- ours/cuBLAS also contains Triton-versus-cuBLAS, which is a different and much larger term than the constraint.
+One row per (kernel, dtype, ordering). Sweep the configuration axes that change the reduction layout and group the configurations by the bytes they return. Under `unordered` the group count is the number of distinct reduction orders the layout produced; under `inner_tree` it should be 1, because the order is pinned and the layout is no longer allowed to decide it.
 
 | column | type | meaning |
 |---|---|---|
-| `M` | int | rows of A |
-| `N` | int | columns of B |
-| `K` | int | contraction length |
-| `dtype` | str | operand dtype |
-| `cublas_ms` | float | cuBLAS device time, median of CUDA-graph replays, L2 flushed |
-| `ours_ms` | float | the bit-exact Triton GEMM, same timing method |
-| `unconstrained_ms` | float | best config of an ordinary Triton GEMM, no numerics requirement |
-| `unconstrained_cfg` | str | the winning configuration, BM/BN/BK/num_warps/num_stages |
-| `configs_ran` | int | configurations that compiled and ran |
-| `configs_bit_exact` | int | of those, how many were already byte-identical to cuBLAS |
-| `space` | int | configurations in the search space |
+| `kernel` | str | kernel from the bitequiv evaluation registry, e.g. sum, dot, softmax |
+| `dtype` | str | element dtype: f16, bf16, f32 or fp8 |
+| `ordering` | str | reduction_ordering under test: unordered or inner_tree |
+| `strict_env` | int | 1 if TRITON_STRICT_REDUCTION_ORDERING was set before triton was imported |
+| `axes` | str | space-separated configuration axes swept, e.g. num_warps num_stages block_n |
+| `n_configs` | int | configurations in the sweep |
+| `n_ran` | int | of those, how many compiled and launched |
+| `n_failed` | int | configurations that failed to compile or launch |
+| `seeds` | int | random input draws each configuration was run on |
+| `n_bit_classes` | int | distinct byte outputs across the configurations that ran |
+| `largest_class` | int | size of the biggest group of configurations returning the same bytes |
+| `invariant` | int | 1 if n_bit_classes is 1, i.e. every configuration agreed |
+| `split_axes` | str | the axes whose value changes between two configurations that disagreed; empty when invariant. This is the finding, not n_bit_classes on its own |
+| `error` | str | non-empty if the row failed to produce a result |
+
+## inner_tree_layout.csv
+
+One row per (kernel, dtype, configuration group). The same kernel compiled without and with `tritongpu-optimize-reduction-layout`, answering three independent questions in order: does it still compile, do the bits change, and is it faster. A speedup on a row whose bits changed is not a result.
+
+| column | type | meaning |
+|---|---|---|
+| `kernel` | str | kernel from the bitequiv evaluation registry |
+| `dtype` | str | element dtype: f16, bf16, f32 or fp8 |
+| `ordering` | str | reduction_ordering the row was compiled with; the pass targets inner_tree |
+| `config` | str | the configuration, e.g. num_warps=4 num_stages=3 block_n=1024 |
+| `pass_name` | str | the pass under test, in triton-opt vocabulary |
+| `pass_available` | int | 1 if the build has a binding for that pass; 0 means the row is a baseline-against-baseline control and must show no change |
+| `compiles` | int | 1 if the kernel still compiles with the pass applied |
+| `seeds` | int | random input draws the two builds were compared on |
+| `bit_changed` | int | draws whose bytes differ from the baseline build. Must be 0 |
+| `baseline_ms` | float | device time without the pass, median of CUDA-graph replays |
+| `optimized_ms` | float | device time with the pass |
+| `speedup` | float | baseline_ms / optimized_ms; above 1 means the pass helped |
+| `verdict` | str | bit-safe and faster, bit-safe and neutral, BITS CHANGED, or why the row was out of scope |
+| `error` | str | non-empty if the row failed to produce a result |
+
+## checker_precision.csv
+
+One row per (checker, artifact, kernel). Compile the kernel's configuration space, let the checker group the configurations, and independently fuzz every configuration to get the empirical grouping. Two numbers matter and they point in opposite directions: over-merges is the soundness violation and must be 0; over-splits is tuning freedom the checker gave up to stay safe.
+
+| column | type | meaning |
+|---|---|---|
+| `checker` | str | checker under test, as module:function |
+| `artifact` | str | which compiled IR the checker was fed: ptx, ttgir or amdgcn |
+| `kernel` | str | kernel spec from bitequiv/evaluation/eval_kernels.py, named <kernel>_<dtype> |
+| `dtype` | str | element dtype: f16, bf16, f32 or fp8 |
+| `effort` | str | light, mid or heavy: how much of the configuration space was run and how large the input was |
+| `seeds` | int | random input draws per configuration in the fuzzer |
+| `attempted` | int | configurations in the space at this effort |
+| `ok` | int | of those, how many compiled and launched |
+| `fails` | int | configurations that failed to compile or launch |
+| `checker_n` | int | groups the checker produced |
+| `checker_max` | int | largest checker group; this is the search space it recovers |
+| `empirical_n` | int | groups the fuzzer produced |
+| `empirical_max` | int | largest empirical group; this is the recovery ceiling |
+| `over_merges` | int | pairs the checker called equal that the fuzzer separated. The soundness violation. MUST be 0 |
+| `over_splits` | int | pairs the fuzzer merged that the checker separated. Safe, but it is recovery left on the table |
+| `refines` | int | 1 if every checker group sits inside one empirical group, which is the formal soundness relation |
+| `straddle` | int | checker groups spanning more than one empirical group; 0 when refines is 1 |
+| `largest_spans` | str | which configuration axes vary inside the largest checker group. This is what the recovered freedom is made of |
+| `error` | str | non-empty if the row failed to produce a result |
+
+## checker_performance.csv
+
+One row per (checker, artifact, kernel). Benchmark every configuration, take the global fastest as the ceiling an ordinary equivalence-blind autotuner would reach, then look inside the largest checker-certified set: fastest against slowest member is the freedom the checker hands the autotuner, and best member against the ceiling is what demanding identical bits cost.
+
+| column | type | meaning |
+|---|---|---|
+| `checker` | str | checker under test, as module:function |
+| `artifact` | str | which compiled IR the checker was fed: ptx, ttgir or amdgcn |
+| `kernel` | str | kernel spec from bitequiv/evaluation/eval_kernels.py, named <kernel>_<dtype> |
+| `dtype` | str | element dtype: f16, bf16, f32 or fp8 |
+| `effort` | str | light, mid or heavy: configuration subset and input size |
+| `ok` | int | configurations that compiled, launched and were timed |
+| `fails` | int | configurations that failed |
+| `size` | str | input size the row was benchmarked at |
+| `ceiling_ms` | float | fastest configuration anywhere in the space, no numerics requirement. This is the equivalence-blind autotuner |
+| `ceiling_cfg` | str | the configuration that won it |
+| `slowest_ms` | float | slowest configuration in the space, for scale |
+| `checker_set_size` | int | members of the largest checker-certified set |
+| `checker_byte_identical` | int | 1 if every member of that set really did return the same bytes. If 0 the rest of the row is meaningless |
+| `checker_fast_ms` | float | fastest member of that set |
+| `checker_slow_ms` | float | slowest member of that set |
+| `tuning_freedom` | float | checker_slow_ms / checker_fast_ms; how much there was to gain by tuning inside the set at all |
+| `cost_of_bits` | float | checker_fast_ms / ceiling_ms; above 1 is what the bit requirement cost against the unconstrained autotuner |
+| `empirical_set_size` | int | members of the largest set the fuzzer merged; the ceiling on how big a certified set could be |
+| `empirical_fast_ms` | float | fastest member of that empirical set |
+| `empirical_slow_ms` | float | slowest member of that empirical set |
+| `error` | str | non-empty if the row failed to produce a result |
+
+## checker_regpressure.csv
+
+One row per (checker, artifact, kernel). Take the full configuration space and compile every configuration again under several `maxnreg` caps low enough to make ptxas spill. A `.maxnreg` directive leaves the PTX body identical, so the checker puts the capped and uncapped builds in the SAME group; the fuzzer then says whether they really do return the same bytes. One checker group still equal to one bit group means the verdict held across the PTX-to-SASS step.
+
+| column | type | meaning |
+|---|---|---|
+| `checker` | str | checker under test, as module:function |
+| `artifact` | str | which compiled IR the checker was fed: ptx, ttgir or amdgcn |
+| `kernel` | str | kernel spec from bitequiv/evaluation/eval_kernels.py, named <kernel>_<dtype> |
+| `dtype` | str | element dtype: f16, bf16, f32 or fp8 |
+| `caps` | str | the maxnreg caps applied, including the uncapped baseline |
+| `n_configs` | int | base configurations before the caps multiply them |
+| `attempted` | int | base configurations times caps |
+| `ok` | int | of those, how many compiled and launched |
+| `fails` | int | members that failed to compile or launch |
+| `seeds` | int | random input draws per member in the fuzzer |
+| `checker_n` | int | groups the checker produced |
+| `checker_max` | int | largest checker group |
+| `empirical_n` | int | groups the fuzzer produced |
+| `empirical_max` | int | largest empirical group |
+| `over_merges` | int | pairs the checker called equal that the fuzzer separated. MUST be 0 |
+| `refines` | int | 1 if every checker group sits inside one empirical group |
+| `n_spilled` | int | members whose ptxas report shows a non-zero spill. If this is 0 the caps were not tight enough and the step tested nothing |
+| `reg_min` | int | lowest register count across all members |
+| `reg_max` | int | highest register count across all members |
+| `spill_min` | int | lowest spill count across all members |
+| `spill_max` | int | highest spill count across all members |
+| `largest_maxnreg` | str | the caps present inside the largest checker group |
+| `largest_spilled` | int | members of the largest checker group that spilled |
+| `largest_spans` | str | configuration axes that vary inside the largest checker group |
+| `error` | str | non-empty if the row failed to produce a result |
+
+## checker_korder.csv
+
+One row per (kernel, dtype, question). Two configurations matched on every axis but one, compiled and run on the same input, compared byte for byte. The answer is a fact about the hardware and the lowering, not about the checker; a checker may merge across an axis only where the verdict here is BIT-IDENTICAL.
+
+| column | type | meaning |
+|---|---|---|
+| `kernel` | str | GEMM kernel spec from bitequiv/evaluation/eval_kernels.py |
+| `dtype` | str | element dtype: f16, bf16, f32 or fp8 |
+| `question` | str | which axis is being varied: mma_version, k_split or num_ctas |
+| `axis` | str | the configuration axis, e.g. gemm_block_m, gemm_num_splits, num_ctas |
+| `value_a` | str | value on the first arm |
+| `value_b` | str | value on the second arm |
+| `lowered_a` | str | what the first arm actually lowered to, read from its asm: v5(tcgen05.mma), v2(mma.sync), wgmma(Hopper) or FMA |
+| `lowered_b` | str | the same for the second arm. If the two are equal the row asked nothing, whatever the configuration said |
+| `verdict` | str | BIT-IDENTICAL or DIFFER |
+| `bit_free` | int | 1 if the axis turned out not to move the bits on this row, so a checker may merge across it here |
+| `note` | str | why the row was skipped, or what qualifies it |
 
 ## env.csv
 

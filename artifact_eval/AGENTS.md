@@ -27,12 +27,17 @@ python artifact_eval/artifact.py --list
 ```
 python artifact_eval/artifact.py --run gemm.bitmatch --minutes 20
 python artifact_eval/artifact.py --run gemm --minutes 20     # the whole gemm section
+python artifact_eval/artifact.py --run all --minutes 20      # every section
 python artifact_eval/artifact.py --export                     # cache/*.jsonl -> data/*.csv
 ```
 
 `--minutes` bounds the sampling steps; larger is better evidence, not a different result. Records
 stream into `cache/` as they are produced, so interrupting a run loses at most one record and
 `--export` still works on what was collected.
+
+Most steps are not implemented yet. `--list` marks each one `implemented` or `PLACEHOLDER`; a
+placeholder prints the measurement it is going to make, writes nothing and exits 0. That is not a
+failure and there is nothing to fix — report it as a gap.
 
 ## Building, if you have to
 
@@ -56,9 +61,11 @@ latter without saying so. The full recipe is in `README.md`.
 only the first `K - (K % block_k)` elements; `gemm.cublas-bug` points at a standalone reproducer
 for that defect. Check it before drawing a conclusion from a mismatch.
 
-`gemm.perf` prints three numbers. The claim rests on `unconstrained_ms / ours_ms`, the price of the
-bit constraint. `ours/cuBLAS` is printed for reference only — it also contains
-Triton-versus-cuBLAS, which is a different and much larger term.
+`gemm.perf.random` and `gemm.perf.static` print three arms. The claim rests on
+`torch_triton_ms / ours_ms`, the price of the bit constraint. `ours_over_cublas` is printed for
+reference only — it also contains Triton-versus-cuBLAS, which is a different and much larger term.
+On any row check `bit_ok` equals `bit_total` first: if our arm was not byte-identical, its time is
+not a measurement.
 
 ## If something looks wrong
 
@@ -79,6 +86,10 @@ no-op. Report it rather than recording the number.
 
 ## Please do not
 
-Do not modify `artifact.py`, `bitequiv/`, or anything under `data/`. Do not commit anything from
-`cache/` — it is regenerated, not archived. If a measurement seems wrong, report what you saw and
-the contents of `data/env.csv` rather than adjusting the script to make it look right.
+Do not modify `artifact.py`, `steps/`, `bitequiv/`, or anything under `data/`. Do not commit
+anything from `cache/` — it is regenerated, not archived. If a measurement seems wrong, report what
+you saw and the contents of `data/env.csv` rather than adjusting the script to make it look right.
+
+(That is for an agent *reproducing* the artifact. An agent *implementing* a placeholder step edits
+exactly one file, `steps/<that step>.py`, and nothing shared — see the contract in the docstring of
+`steps/_common.py`.)

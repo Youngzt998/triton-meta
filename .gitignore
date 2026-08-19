@@ -111,3 +111,8 @@ python/triton/tlx
 
 # plugins
 python/triton/plugins/
+DEV_NOTES.md
+
+# build leftovers
+build.log
+build.stale-*/
