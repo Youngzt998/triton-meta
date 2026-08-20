@@ -1,0 +1,20 @@
+{
+ "fam": "fa",
+ "p": {
+  "B": 2,
+  "H": 4,
+  "SQ": 385,
+  "SKV": 127,
+  "D": 32,
+  "bM": 64,
+  "bN": 64,
+  "th": 128,
+  "st": 1,
+  "causal": true,
+  "dt": "bfloat16",
+  "pol": "Square"
+ },
+ "pc": {
+  "tl.ptxas_register_usage_level": 10
+ }
+}

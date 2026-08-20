@@ -1,0 +1,115 @@
+{
+ "t": "variant",
+ "kid": "gen_fa_ca4121f27fc1c5",
+ "v": {
+  "skip": [
+   "FuseMBarrierArriveExpectTx"
+  ],
+  "cfg": {
+   "tl.if_stmt_binding_inline_replayable_binds": true
+  }
+ },
+ "status": "diff",
+ "mode": "boundary",
+ "seed": 1097008,
+ "draw": 8,
+ "labels": [
+  "pass-class:bit-preserving",
+  "kernel-has-gemm",
+  "kernel-has-reduce",
+  "input-mode:boundary",
+  "shared-config:ptxas-reg-level=10",
+  "nan-pattern-changed",
+  "gross"
+ ],
+ "nums": {
+  "ulp_max": 33758,
+  "n_diff": 3103,
+  "n_total": 98560,
+  "max_abs_diff": 25165824.0
+ },
+ "diffs": [
+  {
+   "arg": 3,
+   "dtype": "bfloat16",
+   "shape": [
+    2,
+    4,
+    385,
+    32
+   ],
+   "kind": "float",
+   "nan_ref": 97856,
+   "nan_cand": 94784,
+   "nan_mask_differs": true,
+   "n_diff": 3103,
+   "n_total": 98560,
+   "max_abs": 25165824.0,
+   "max_rel": 1.5,
+   "ulp_max": 33758,
+   "first": {
+    "idx": 11792,
+    "ref": NaN,
+    "cand": 65536.0
+   }
+  }
+ ],
+ "confirm": {
+  "draw": 8,
+  "mode": "boundary",
+  "seed": 1097008,
+  "draws_differing": [
+   8,
+   17
+  ],
+  "n_draws": 20,
+  "draw_modes": {
+   "8": "boundary",
+   "17": "boundary"
+  },
+  "cand_self_consistent": false,
+  "diff_under_heap_shift": true,
+  "ref_self_consistent": true,
+  "shared_fast_math": false,
+  "int_control_exact": false,
+  "int_control_differs": false
+ },
+ "minimal": {
+  "skip": [
+   "FuseMBarrierArriveExpectTx"
+  ],
+  "cfg": {
+   "tl.if_stmt_binding_inline_replayable_binds": true
+  },
+  "order": []
+ },
+ "item": {
+  "kind": "gen",
+  "spec": {
+   "fam": "fa",
+   "p": {
+    "B": 2,
+    "H": 4,
+    "SQ": 385,
+    "SKV": 127,
+    "D": 32,
+    "bM": 64,
+    "bN": 64,
+    "th": 128,
+    "st": 1,
+    "causal": true,
+    "dt": "bfloat16",
+    "pol": "Square"
+   },
+   "pc": {
+    "tl.ptxas_register_usage_level": 10
+   }
+  },
+  "kid": "gen_fa_ca4121f27fc1c5"
+ },
+ "modes": [
+  "boundary"
+ ],
+ "ref_chars": 9043,
+ "cand_chars": 9045
+}
