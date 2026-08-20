@@ -1,0 +1,99 @@
+probe_pairs.py -- the byte-exactness evidence for the extra-operand epilogues
+============================================================================
+
+Run on one GB300 (sm_103), torch 2.12.0+cu130, fp16.
+
+    CUDA_VISIBLE_DEVICES=<free gpu> PYTHONPATH=<repo> .venv/bin/python probe_pairs.py
+
+`differ` counts raw byte differences against torch eager; `differ!nan` drops the pairs where both
+sides are a NaN, whose fp16 payload nothing in this path pins. A spelling that must be exact has
+to have `differ!nan` = 0. `_approx` (Inductor's own arithmetic), `_cheap` (the NaN-dropping
+clamp) and `_fast` (the Newton divide) are carried to price the exact one against and are NOT
+claimed exact.
+
+The `--unary` numbers for an `_approx` row understate its error: the probe feeds an accumulator
+already rounded to fp16, which is the complete domain for a chain that starts by rounding, and
+not the domain the approximate chain actually sees inside the GEMM.
+
+Provenance note: this table was produced before `probe_pairs.build` was refactored to call
+`inductor_kernel.standalone`, so that arm 1 and the probe compile the same text. `swiglu` and
+`rweight` were re-run afterwards and reproduced 0 of 4,294,967,296 exactly; the rest of the table
+has not been re-run since. Re-running the whole file is about two minutes on a free device.
+
+
+== every fp16 accumulator, no extra operand: 65536 values, exhaustive ==
+  EPI_SRC key                differ   differ!nan             of     time  verdict
+  fp8cast                         0            0          65536     5.1s  EXACT
+  fp8cast_approx                126          126          65536     0.1s  differs
+      first miss: acc=0.002605438232421875 extras=[] got 0.001953125 want 0.0
+  fp8cast_cheap                2046         2046          65536     0.1s  differs
+      first miss: acc=nan extras=[] got -448.0 want nan
+  fp8q scale=2                    0            0          65536     0.1s  EXACT
+  fp8q_approx scale=2             0            0          65536     0.0s  EXACT
+  fp8q scale=0.375                0            0          65536     0.1s  EXACT
+  fp8q_approx scale=0.375          126          126          65536     0.1s  differs
+      first miss: acc=0.002605438232421875 extras=[] got 0.001953125 want 0.0
+  fp8q scale=0.1                  0            0          65536     0.1s  EXACT
+  fp8q_approx scale=0.1            0            0          65536     0.1s  EXACT
+  hardswish                       0            0          65536     0.1s  EXACT
+  hardswish_approx                0            0          65536     0.1s  EXACT
+  leaky                           0            0          65536     0.1s  EXACT
+  leaky_approx                    0            0          65536     0.1s  EXACT
+  relu2                           0            0          65536     0.1s  EXACT
+  relu2_approx                    0            0          65536     0.1s  EXACT
+  relu_sq                         0            0          65536     0.0s  EXACT
+  relu_sq_approx                  0            0          65536     0.0s  EXACT
+  sigmoid                         0            0          65536     0.2s  EXACT
+  sigmoid_approx                  2            2          65536     0.1s  differs
+      first miss: acc=0.0068359375 extras=[] got 0.50146484375 want 0.501953125
+  silu                            0            0          65536     0.1s  EXACT
+  silu_approx                     2            2          65536     0.1s  differs
+      first miss: acc=0.0068359375 extras=[] got 0.0034275054931640625 want 0.0034313201904296875
+  silu_divrn                      0            0          65536     0.1s  EXACT
+  softcap                         0            0          65536     0.1s  EXACT
+  softcap_approx               8192         8192          65536     0.1s  differs
+      first miss: acc=5.960464477539063e-08 extras=[] got 5.960464477539063e-08 want 0.0
+
+== every (accumulator, operand) pair: 4,294,967,296 pairs, exhaustive ==
+  EPI_SRC key                differ   differ!nan             of     time  verdict
+  lora scale=2                    0            0     4294967296     0.3s  EXACT
+  lora_approx scale=2       3152384      3152384     4294967296     0.3s  differs
+      first miss: acc=32768.0 extras=[-16.015625] got 65504.0 want inf
+  lora scale=1                    0            0     4294967296     0.3s  EXACT
+  lora_approx scale=1             0            0     4294967296     0.3s  EXACT
+  lora scale=0.5                  0            0     4294967296     0.3s  EXACT
+  lora_approx scale=0.5      6071978      6071978     4294967296     0.3s  differs
+      first miss: acc=5.960464477539063e-08 extras=[5.960464477539063e-08] got 1.1920928955078125e-07 want 5.960464477539063e-08
+  lora scale=0.25                 0            0     4294967296     0.3s  EXACT
+  lora_approx scale=0.25      8211796      8211796     4294967296     0.3s  differs
+      first miss: acc=1.1920928955078125e-07 extras=[5.960464477539063e-08] got 1.1920928955078125e-07 want 5.960464477539063e-08
+  lora scale=0.1                  0            0     4294967296     0.3s  EXACT
+  lora_approx scale=0.1    381618092    381618092     4294967296     0.3s  differs
+      first miss: acc=2.980232238769531e-07 extras=[5.960464477539063e-08] got 1.1920928955078125e-07 want 5.960464477539063e-08
+  lora scale=0.333333             0            0     4294967296     0.3s  EXACT
+  lora_approx scale=0.333333    388520924    388520924     4294967296     0.3s  differs
+      first miss: acc=1.1920928955078125e-07 extras=[0.00012218952178955078] got 0.00012218952178955078 want 0.00012230873107910156
+  resid                           0            0     4294967296     0.3s  EXACT
+  resid_approx                    0            0     4294967296     0.3s  EXACT
+  rweight                         0            0     4294967296     0.3s  EXACT
+  rweight_approx                  0            0     4294967296     0.3s  EXACT
+  swiglu                          0            0     4294967296     0.3s  EXACT
+  swiglu_approx           529533124    529533124     4294967296     0.3s  differs
+      first miss: acc=5.960464477539063e-08 extras=[3.595703125] got 1.7881393432617188e-07 want 2.384185791015625e-07
+  swiglu_fast                162804       162804     4294967296     0.3s  differs
+      first miss: acc=0.0 extras=[-0.0] got 0.0 want -0.0
+
+== two extra operands: all 2^32 pairs on two axes, the third pinned over 28 values ==
+  EPI_SRC key                differ   differ!nan             of     time  verdict
+  swiglu_cw pin e1:m1             0            0   120259084288    11.0s  EXACT
+  swiglu_cw pin e0:mn             0            0   120259084288     9.4s  EXACT
+  swiglu_cw_approx pin e1:m1  17902847192  17902847192   120259084288     9.8s  differs
+      first miss: acc=0.050018310546875 extras=[10.0, 5.960464477539063e-08] got 5.960464477539063e-08 want 0.0
+  swiglu_cw_approx pin e0:mn  22832677984  22832677984   120259084288    10.2s  differs
+      first miss: acc=5.960464477539063e-08 extras=[5.960464477539063e-08, inf] got inf want nan
+  swiglu_cw_fast pin e1:m1      2950682      2950682   120259084288     9.8s  differs
+      first miss: acc=0.0 extras=[-0.0, 0.0] got 0.0 want -0.0
+  swiglu_cw_fast pin e0:mn   4030853120   4030853120   120259084288     9.3s  differs
+      first miss: acc=0.0 extras=[-0.0, 0.0] got 0.0 want -0.0
+
+0 spelling(s) that must be exact are not

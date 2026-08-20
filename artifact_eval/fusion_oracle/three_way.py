@@ -25,7 +25,16 @@ why that matters. Compiling has to happen in five separate processes (dynamo res
 earlier compiled callables), so each of those writes its `output_code.py` to `cache/` and this
 process reloads the text.
 
+An epilogue may read more than the accumulator -- the base GEMM's output for a LoRA merge, the
+gate projection for a SwiGLU, a per-token routing weight for an MoE down projection. Those loads
+are kept and rewired by `inductor_kernel.patch_epilogue`, and which tensor goes in which argument
+slot is read off Inductor's own `.run(...)` line rather than guessed, because Inductor's
+parameter order is neither the traced order nor a stable one (for `resid` the extra operand comes
+before `arg_A`; for `swiglu_cw` the two extras arrive reversed).
+
     CUDA_VISIBLE_DEVICES=2 PYTHONPATH=<repo> .venv/bin/python three_way.py --cases 4096,4096,16,silu
+    ... --cases 16384,2048,32,lora,scale=0.5      # an epilogue scalar, baked into the kernel
+    ... --cases-file cases_moe.txt                # written by model_cases.py
 """
 from __future__ import annotations
 
@@ -54,9 +63,23 @@ COMPILES = (("aten_e", "ATEN", True), ("triton", "TRITON", False), ("triton_e", 
 
 
 def log(path, rec):
-    with open(path, "a") as f:
-        f.write(json.dumps(rec) + "\n")
-        f.flush()
+    """Append one record, retrying a transient write error.
+
+    Seen once mid-sweep: `OSError: [Errno 5] Input/output error` out of `flush()` on a disk with
+    19 TB free. It killed the run and cost the case in flight. The record is the only thing a long
+    sweep produces, so a blip on the way to disk must not end it.
+    """
+    line = json.dumps(rec) + "\n"
+    for attempt in range(6):
+        try:
+            with open(path, "a") as f:
+                f.write(line)
+                f.flush()
+            return
+        except OSError as e:
+            print(f"  write to {os.path.basename(path)} failed ({e}); retry {attempt + 1}/6", flush=True)
+            time.sleep(2 * (attempt + 1))
+    print(f"  GAVE UP writing to {path}", flush=True)
 
 
 # --------------------------------------------------------------------------------------------
@@ -64,7 +87,7 @@ def log(path, rec):
 # --------------------------------------------------------------------------------------------
 
 
-def do_extract(M, N, K, epi, dtype_name, which, dst):
+def do_extract(M, N, K, epi, dtype_name, which, dst, params):
     import torch
     import torch._inductor.config as ic
     from torch._inductor.utils import run_and_get_code
@@ -80,7 +103,8 @@ def do_extract(M, N, K, epi, dtype_name, which, dst):
     extra = make_epi_args(epi, M, N, dtype, seed=seed)
 
     with ic.patch(max_autotune_gemm_backends=backends, emulate_precision_casts=emul):
-        fn = torch.compile(lambda x, y, *rest: EPILOGUES[epi](x @ y, *rest), mode="max-autotune-no-cudagraphs")
+        fn = torch.compile(lambda x, y, *rest: EPILOGUES[epi](x @ y, *rest, **params),
+                           mode="max-autotune-no-cudagraphs")
         _o, codes = run_and_get_code(fn, a, w, *extra)
     torch.cuda.synchronize()
     with open(dst, "w") as f:
@@ -93,18 +117,74 @@ def do_extract(M, N, K, epi, dtype_name, which, dst):
 # --------------------------------------------------------------------------------------------
 
 
-def build_arms(M, N, K, epi, dtype_name, srcs, tune_ours):
+def _inductor_arm(which, code, kern, arms, info, IK, torch, triton, operands, out_buf, M, N):
+    """Rebuild one arm from the text Inductor emitted for it.
+
+    Raises rather than guessing when the argument binding cannot be resolved. A wrong binding
+    does not fail loudly on its own -- Triton takes a bare pointer and reads whatever is there --
+    so the caller records the failure and drops the arm.
+    """
+    tem = {k: v for k, v in kern.items() if "_tem_" in k}
+    poi = {k: v for k, v in kern.items() if "_tem_" not in k}
+    if tem and not poi:  # one fused template: the whole op is that kernel
+        name, src = next(iter(tem.items()))
+        meta = IK.launch_meta(src)
+        grid = IK.grid_of(code, name)
+        fn, path = IK.load(src, f"{which}_{name}", CACHE)
+        order = IK.bind(code, src, name, operands)
+        info[which].update(fused=True, gen_path=path, cfg=meta.get("constexpr", {}), num_warps=meta.get("num_warps"),
+                           num_stages=meta.get("num_stages"), grid=list(grid), src_name=name,
+                           enable_fp_fusion=meta.get("enable_fp_fusion", True), bind=[str(o) for o in order])
+
+        def run(a, w, extra, fn=fn, grid=grid, meta=meta, order=order):
+            c = out_buf()
+            IK.launch(fn, tuple(grid), IK.call_args(order, a, w, c, extra), meta)
+            return c
+
+        arms[which] = run
+    elif poi and not tem:  # extern mm plus one pointwise: the two-kernel path
+        name, src = next(iter(poi.items()))
+        meta = IK.launch_meta(src)
+        fn, path = IK.load(src, f"{which}_{name}", CACHE)
+        nel = M * N
+        best = {}
+        # Inductor names its pointwise arguments by role. `in_out_ptr0` means it decided to
+        # overwrite the mm output in place, which is one buffer less than a naive read-write
+        # pair, so the mapping has to follow the names rather than assume a shape.
+        names = [a.split(":")[0].strip() for a in meta["args"]]
+        inplace = any(n.startswith("in_out_ptr") for n in names)
+        order = IK.bind(code, src, name, operands)
+        info[which].update(fused=False, src_name=name, gen_path=path, arg_names=names, inplace=inplace, tune=best,
+                           enable_fp_fusion=meta.get("enable_fp_fusion", True), bind=[str(o) for o in order])
+
+        def run(a, w, extra, fn=fn, meta=meta, order=order, nel=nel, best=best, inplace=inplace):
+            xb, nw = best.get("XBLOCK", 1024), best.get("num_warps", 4)
+            mm = torch.mm(a, w)
+            c = mm if inplace else out_buf()
+            call = IK.call_args(order, a, w, c, extra, mm=mm)
+            fn[(triton.cdiv(nel, xb), )](*call, XBLOCK=xb, num_warps=nw,
+                                         enable_fp_fusion=meta.get("enable_fp_fusion", True))
+            return c
+
+        arms[which] = run
+    else:
+        info[which] = {"skip": f"{len(tem)} template + {len(poi)} pointwise kernels, not handled"}
+
+
+def build_arms(M, N, K, epi, dtype_name, srcs, tune_ours, params):
     """name -> (callable(a, w, extra) -> output tensor, info dict). Nothing here compiles torch."""
     import torch
     import triton
 
     import inductor_kernel as IK
     import ours as O
+    from cases import EPI_OPERANDS, out_dtype_for
 
     dtype = {"fp16": torch.float16, "bf16": torch.bfloat16}[dtype_name]
-    odt = O.FP8 if epi == "fp8cast" else dtype
-    epi_id = O.EPI_ID[epi]
-    needs_r = epi_id in O.EPI_NEEDS_R
+    odt = out_dtype_for(epi, dtype)
+    operands = EPI_OPERANDS.get(epi, ())
+    epi_id = O.EPI_ID.get(epi)
+    needs_r = epi_id in O.EPI_NEEDS_R if epi_id is not None else False
     arms, info = {}, {}
 
     def out_buf():
@@ -112,106 +192,126 @@ def build_arms(M, N, K, epi, dtype_name, srcs, tune_ours):
 
     # ---- the Inductor arms, straight out of output_code.py -----------------------------------
     for which in srcs:
-        code = srcs[which]
-        kern = IK.extract(code)
-        tem = {k: v for k, v in kern.items() if "_tem_" in k}
-        poi = {k: v for k, v in kern.items() if "_tem_" not in k}
-        info[which] = {"n_template": len(tem), "n_pointwise": len(poi), "kernels": list(kern)}
-        if tem and not poi:  # one fused template: the whole op is that kernel
-            name, src = next(iter(tem.items()))
-            meta = IK.launch_meta(src)
-            grid = IK.grid_of(code, name)
-            fn, path = IK.load(src, f"{which}_{name}", CACHE)
-            info[which].update(fused=True, gen_path=path, cfg=meta.get("constexpr",
-                                                                       {}), num_warps=meta.get("num_warps"),
-                               num_stages=meta.get("num_stages"), grid=list(grid), src_name=name)
-            n_extra = len(meta["args"]) - 2 - 1  # arg_A, arg_B, ... , out_ptr
+        kern = IK.extract(srcs[which])
+        info[which] = {
+            "n_template": sum("_tem_" in k for k in kern), "n_pointwise": sum("_tem_" not in k for k in kern),
+            "kernels": list(kern)
+        }
+        try:
+            _inductor_arm(which, srcs[which], kern, arms, info, IK, torch, triton, operands, out_buf, M, N)
+        except Exception as e:  # noqa: BLE001
+            # One arm that cannot be rebuilt must not cost the case its other arms.
+            info[which] = dict(info[which], error=f"{type(e).__name__}: {e}"[:300])
 
-            def run(a, w, extra, fn=fn, grid=grid, meta=meta, n_extra=n_extra):
-                c = out_buf()
-                IK.launch(fn, tuple(grid), (a, w) + tuple(extra[:n_extra]) + (c, ), meta)
-                return c
-
-            arms[which] = run
-        elif poi and not tem:  # extern mm plus one pointwise: the two-kernel path
-            name, src = next(iter(poi.items()))
-            meta = IK.launch_meta(src)
-            fn, path = IK.load(src, f"{which}_{name}", CACHE)
-            nel = M * N
-            best = {}
-            # Inductor names its pointwise arguments by role. `in_out_ptr0` means it decided to
-            # overwrite the mm output in place, which is one buffer less than a naive read-write
-            # pair, so the mapping has to follow the names rather than assume a shape.
-            names = [a.split(":")[0].strip() for a in meta["args"]]
-            inplace = any(n.startswith("in_out_ptr") for n in names)
-            info[which].update(fused=False, src_name=name, gen_path=path, arg_names=names, inplace=inplace, tune=best)
-
-            def run(a, w, extra, fn=fn, names=names, nel=nel, best=best, inplace=inplace):
-                xb, nw = best.get("XBLOCK", 1024), best.get("num_warps", 4)
-                mm = torch.mm(a, w)
-                c = mm if inplace else out_buf()
-                nxt = list(extra)
-                call = []
-                for n in names:
-                    if n.startswith("in_out_ptr"):
-                        call.append(mm)
-                    elif n == "in_ptr0":
-                        call.append(mm)
-                    elif n.startswith("in_ptr"):
-                        call.append(nxt.pop(0))
-                    elif n.startswith("out_ptr"):
-                        call.append(c)
-                    elif n == "xnumel":
-                        call.append(nel)
-                fn[(triton.cdiv(nel, xb), )](*call, XBLOCK=xb, num_warps=nw)
-                return c
-
-            arms[which] = run
-        else:
-            info[which] = {"skip": f"{len(tem)} template + {len(poi)} pointwise kernels, not handled"}
-
-    # ---- arm 1: cuBLAS then our own bit-exact epilogue kernel ---------------------------------
+    # ---- arm 1: cuBLAS then the same epilogue as one separate kernel --------------------------
+    # Built from the SAME `EPI_SRC` text arm 3 is patched with, so arm 1 and arm 3 cannot drift
+    # apart in the arithmetic, and the text `probe_pairs.py` swept over its complete domain is the
+    # one both of them run. `ours.py::_epilogue` stays for the epilogues it uniquely implements.
     ecfg = {"BLK": 2048, "num_warps": 4}
+    if epi in IK.EPI_SRC:
+        efn, ekind = IK.standalone(epi, operands, params, CACHE)
 
-    def exact2k(a, w, extra):
-        return O.launch_epi(torch.mm(a, w), odt, epi_id, extra[0] if needs_r else None, **ecfg)
+        def exact2k(a, w, extra, efn=efn, ekind=ekind):
+            return IK.launch_standalone(efn, ekind, torch.mm(a, w), extra, out_buf(), **ecfg)
 
+        info["exact2k"] = {"fused": False, "tune": ecfg, "kernel": ekind, "epilogue": IK.EPI_SRC[epi]}
+    else:
+
+        def exact2k(a, w, extra):
+            return O.launch_epi(torch.mm(a, w), odt, epi_id, extra[0] if needs_r else None, **ecfg)
+
+        info["exact2k"] = {"fused": False, "tune": ecfg, "kernel": "ours.py"}
     arms["exact2k"] = exact2k
-    info["exact2k"] = {"fused": False, "tune": ecfg}
 
     # ---- arm 3: arm 2's source with only the epilogue arithmetic replaced ---------------------
+    # `enable_fp_fusion=False` goes with it. It is a launch option rather than text, but without
+    # it the compiler contracts the epilogue's rounding away (see `inductor_kernel.NO_FP_FUSION`),
+    # so the patched text would not mean what it says. It is also the flag Inductor itself pairs
+    # with `emulate_precision_casts`, so it is what a determinism user would be given.
+    #
+    # It is NOT free of the mainloop, and the record says so rather than assuming otherwise:
+    # `mainloop_fp_fusion_delta` compiles the epilogue-stripped template both ways and diffs the
+    # PTX, and on the seven smoke cases it came back CHANGED. Until that diff is diagnosed, arm 3
+    # differs from arm 2 in one launch option as well as in the epilogue text, and
+    # `res["_fp_fusion"]` in every record is where a reader sees how much.
     if "triton" in srcs and info.get("triton", {}).get("fused"):
         code = srcs["triton"]
         name = info["triton"]["src_name"]
         src = IK.extract(code)[name]
         meta = IK.launch_meta(src)
         grid = tuple(info["triton"]["grid"])
-        n_extra = len(meta["args"]) - 3
+        order = IK.bind(code, src, name, operands)
         for label, key in (("ours", epi), ("ours_divrn", epi + "_divrn"), ("ours_helpers", epi + "_helpers"),
-                           ("ours_approx", epi + "_approx")):
+                           ("ours_cheap", epi + "_cheap"), ("ours_fast", epi + "_fast"), ("ours_approx",
+                                                                                          epi + "_approx")):
             if key not in IK.EPI_SRC:
                 continue
             try:
-                fn, path = IK.load(IK.patch_epilogue(src, key), f"{label}_{name}", CACHE)
+                fn, path = IK.load(IK.patch_epilogue(src, key, operands, params), f"{label}_{name}", CACHE)
             except Exception as e:  # noqa: BLE001
                 info[label] = {"error": f"{type(e).__name__}: {e}"[:200]}
                 continue
 
-            def run(a, w, extra, fn=fn, grid=grid, meta=meta, n_extra=n_extra):
+            def run(a, w, extra, fn=fn, grid=grid, meta=meta, order=order):
                 c = out_buf()
-                IK.launch(fn, grid, (a, w) + tuple(extra[:n_extra]) + (c, ), meta)
+                IK.launch(fn, grid, IK.call_args(order, a, w, c, extra), meta, enable_fp_fusion=IK.NO_FP_FUSION)
                 return c
 
             arms[label] = run
             info[label] = {
                 "fused": True, "from": name, "cfg": info["triton"].get("cfg"), "grid": list(grid), "num_warps":
                 info["triton"].get("num_warps"), "num_stages": info["triton"].get("num_stages"), "gen_path": path,
-                "epilogue": IK.EPI_SRC[key]
+                "enable_fp_fusion": IK.NO_FP_FUSION, "epilogue": IK.EPI_SRC[key]
             }
     return arms, info
 
 
-def tile_sweep(torch, M, N, K, epi, dtype_name, srcs, info, ref_digests, a0, w0, extra0, flush, rounds, reps):
+def mainloop_fp_fusion_delta(IK, src, order, grid, args):
+    """What `enable_fp_fusion=False` does to the GEMM, as opposed to the epilogue.
+
+    Arm 3 turns the flag off so its inserted roundings survive -- with contraction on, LLVM folds
+    them away. That is only fair if the flag leaves the GEMM alone, so this compiles the SAME
+    kernel BOTH ways -- the template with its epilogue stripped to a bare store, so the only thing
+    left is the mainloop -- and diffs the PTX.
+
+    It reports what changed rather than just that something did, because "the mainloop's text
+    moved" and "the mainloop's arithmetic moved" are very different findings and the next reader
+    should not have to re-run this to tell them apart. Comments and blank lines are dropped first;
+    what is compared is instructions.
+    """
+    bare = IK.patch_epilogue(src, "none", (), None, drop_extra_loads=True)
+    fn, _p = IK.load(bare, "fpfuse_probe", CACHE)
+    meta = IK.launch_meta(bare)
+    _ = order
+    got = []
+    for flag in (True, False):
+        k = IK.launch(fn, grid, args, meta, enable_fp_fusion=flag)
+        if k is None or "ptx" not in getattr(k, "asm", {}):
+            return {"error": "no ptx"}
+        body = [ln.strip() for ln in k.asm["ptx"].split("\n")]
+        got.append([ln for ln in body if ln and not ln.startswith("//")])
+    a, b = got
+    ops = []
+    for lines in (a, b):
+        c = {}
+        for ln in lines:
+            op = ln.split()[0].split(":")[-1]
+            if "." in op:
+                c[op] = c.get(op, 0) + 1
+        ops.append(c)
+    changed = {
+        k: [ops[0].get(k, 0), ops[1].get(k, 0)]
+        for k in set(ops[0]) | set(ops[1])
+        if ops[0].get(k, 0) != ops[1].get(k, 0)
+    }
+    diff = [[x, y] for x, y in zip(a, b) if x != y]
+    return {
+        "unchanged": a == b, "n_lines": [len(a), len(b)], "n_lines_differing": len(diff), "instruction_counts_changed":
+        changed, "first_differing": diff[:6]
+    }
+
+
+def tile_sweep(torch, M, N, K, epi, dtype_name, srcs, info, ref_digests, a0, w0, extra0, flush, rounds, reps, params):
     """Re-tune the tile for the exact epilogue -- and for the other two epilogues on the same grid.
 
     Inductor picked 128x128 / 4 warps while looking at `tl.sigmoid`. The correctly rounded divide
@@ -222,12 +322,13 @@ def tile_sweep(torch, M, N, K, epi, dtype_name, srcs, info, ref_digests, a0, w0,
     import measure
     import inductor_kernel as IK
     from artifact import digest
+    from cases import EPI_OPERANDS, out_dtype_for
 
     name = info["triton"]["src_name"]
     src = IK.extract(srcs["triton"])[name]
-    meta0 = IK.launch_meta(src)
-    n_extra = len(meta0["args"]) - 3
-    odt = a0.dtype if epi != "fp8cast" else __import__("ours").FP8
+    operands = EPI_OPERANDS.get(epi, ())
+    order = IK.bind(srcs["triton"], src, name, operands)
+    odt = out_dtype_for(epi, a0.dtype)
     space = IK.tile_space(M, N, K, src)
     # what arm 2's own kernel produces, per BLOCK_K, so a re-tuned arm-2 config can be checked
     # against it. It is not byte-identical to eager, so eager cannot be its reference.
@@ -237,7 +338,7 @@ def tile_sweep(torch, M, N, K, epi, dtype_name, srcs, info, ref_digests, a0, w0,
         f2, _p2 = IK.load(s2, f"selfref_{bk}", CACHE)
         m2 = IK.launch_meta(s2)
         c2 = torch.empty(M, N, device="cuda", dtype=odt)
-        IK.launch(f2, grid2, (a0, w0) + tuple(extra0[:n_extra]) + (c2, ), m2)
+        IK.launch(f2, grid2, IK.call_args(order, a0, w0, c2, extra0), m2)
         torch.cuda.synchronize()
         self_ref[bk] = digest(torch, c2)
         del c2
@@ -246,7 +347,8 @@ def tile_sweep(torch, M, N, K, epi, dtype_name, srcs, info, ref_digests, a0, w0,
                        ("ours_approx_tuned", epi + "_approx"), ("triton_tuned", None)):
         if key is not None and key not in IK.EPI_SRC:
             continue
-        base = src if key is None else IK.patch_epilogue(src, key)
+        base = src if key is None else IK.patch_epilogue(src, key, operands, params)
+        fuse = True if key is None else IK.NO_FP_FUSION
         fns, metas, n_bad, n_err = {}, {}, 0, 0
         for cfg in space:
             try:
@@ -254,9 +356,9 @@ def tile_sweep(torch, M, N, K, epi, dtype_name, srcs, info, ref_digests, a0, w0,
                 fn, _p = IK.load(s2, f"{label}_{'_'.join(map(str, cfg))}", CACHE)
                 meta = IK.launch_meta(s2)
 
-                def run(a, w, extra, fn=fn, grid=grid, meta=meta):
+                def run(a, w, extra, fn=fn, grid=grid, meta=meta, fuse=fuse):
                     c = torch.empty(M, N, device="cuda", dtype=odt)
-                    IK.launch(fn, grid, (a, w) + tuple(extra[:n_extra]) + (c, ), meta)
+                    IK.launch(fn, grid, IK.call_args(order, a, w, c, extra), meta, enable_fp_fusion=fuse)
                     return c
 
                 got = run(a0, w0, extra0)
@@ -285,7 +387,7 @@ def tile_sweep(torch, M, N, K, epi, dtype_name, srcs, info, ref_digests, a0, w0,
         best = min(t, key=lambda k: t[k])
         out[label] = {
             "fused": True, "from": name, "tile": list(best), "search_ms": t[best], "n_tried": len(space), "n_ok":
-            len(fns), "n_byte_different": n_bad, "n_failed": n_err, "top5":
+            len(fns), "n_byte_different": n_bad, "n_failed": n_err, "enable_fp_fusion": fuse, "top5":
             [[list(c), t[c]]
              for c in sorted(t, key=lambda k: t[k])[:5]], "epilogue": IK.EPI_SRC[key] if key else "inductor's own"
         }
@@ -324,7 +426,7 @@ def tune_pointwise(torch, triton, arms, info, which, a, w, extra, flush, rounds,
     info[which]["tuned"] = dict(best)
 
 
-def do_time(M, N, K, epi, dtype_name, srcs, reps, rounds, draws, tune_ours):
+def do_time(M, N, K, epi, dtype_name, srcs, reps, rounds, draws, tune_ours, params):
     import torch
     import triton
 
@@ -334,16 +436,22 @@ def do_time(M, N, K, epi, dtype_name, srcs, reps, rounds, draws, tune_ours):
     import inductor_kernel as IK
     import ours as O
 
-    dtype = {"fp16": torch.float16, "bf16": torch.bfloat16}[dtype_name]
+    if dtype_name != "fp16":
+        # `EPI_SRC` spells its eager boundaries as `.to(tl.float16)`. A bf16 case rounds
+        # somewhere else, so there is no arm 3 for it and measuring one would be measuring the
+        # wrong function.
+        raise RuntimeError(f"arm 3 is fp16-only; {dtype_name} has different rounding points")
+    dtype = torch.float16
     seed = M * 1000003 + N * 10007 + K
 
     def inputs(r):
         a, w = make_inputs(torch, M, N, K, "fp16", r, seed)
         if dtype is torch.bfloat16:
             a, w = a.to(dtype), w.to(dtype)
-        return a, w, make_epi_args(epi, M, N, dtype, seed=seed + r)
+        # odd draws spread the operand's exponents too, for the same reason `make_inputs` does
+        return a, w, make_epi_args(epi, M, N, dtype, seed=seed + r, wide=(r % 2 == 1))
 
-    arms, info = build_arms(M, N, K, epi, dtype_name, srcs, tune_ours)
+    arms, info = build_arms(M, N, K, epi, dtype_name, srcs, tune_ours, params)
     a0, w0, extra0 = inputs(0)
     flush = torch.empty(256 * 1024 * 1024, dtype=torch.int8, device="cuda")
     print(f"  warming: {measure.warm(torch)}", flush=True)
@@ -361,9 +469,9 @@ def do_time(M, N, K, epi, dtype_name, srcs, reps, rounds, draws, tune_ours):
 
     # would Inductor have picked a different tile if its own search had seen the exact epilogue?
     if tune_ours:
-        ref0 = digest(torch, EPILOGUES[epi](torch.mm(a0, w0), *extra0))
+        ref0 = digest(torch, EPILOGUES[epi](torch.mm(a0, w0), *extra0, **params))
         sweep = tile_sweep(torch, M, N, K, epi, dtype_name, srcs, info, [ref0, None], a0, w0, extra0, flush, rounds,
-                           reps)
+                           reps, params)
         for label, rec in sweep.items():
             run = rec.pop("_run", None)
             info[label] = rec
@@ -380,7 +488,7 @@ def do_time(M, N, K, epi, dtype_name, srcs, reps, rounds, draws, tune_ours):
             a, w, extra = inputs(r)
             try:
                 got = run(a, w, extra)
-                same = digest(torch, got) == digest(torch, EPILOGUES[epi](torch.mm(a, w), *extra))
+                same = digest(torch, got) == digest(torch, EPILOGUES[epi](torch.mm(a, w), *extra, **params))
             except Exception as e:  # noqa: BLE001
                 rec["error"] = f"{type(e).__name__}: {e}"[:300]
                 same = False
@@ -390,7 +498,7 @@ def do_time(M, N, K, epi, dtype_name, srcs, reps, rounds, draws, tune_ours):
                 n_wide += 1
                 n_ok_wide += int(same)
             if not same and worst is None and got is not None:
-                ref = EPILOGUES[epi](torch.mm(a, w), *extra)
+                ref = EPILOGUES[epi](torch.mm(a, w), *extra, **params)
                 d = got.to(torch.float32) != ref.to(torch.float32)
                 worst = {
                     "draw": r, "n_differ": int(d.sum()), "n_total": int(ref.numel()), "max_abs": float(
@@ -402,6 +510,8 @@ def do_time(M, N, K, epi, dtype_name, srcs, reps, rounds, draws, tune_ours):
         if worst:
             rec["first_mismatch"] = worst
         res[name] = rec
+    for name, rec in info.items():  # an arm that was never built still has to say why
+        res.setdefault(name, rec)
     torch.cuda.empty_cache()
 
     # time: all arms round-robin in one process, plus the two floors
@@ -413,21 +523,27 @@ def do_time(M, N, K, epi, dtype_name, srcs, reps, rounds, draws, tune_ours):
     except Exception as e:  # noqa: BLE001
         print("  hot_cublas failed:", str(e)[:120])
     if "triton" in srcs and info.get("triton", {}).get("fused"):
-        src = IK.extract(srcs["triton"])[info["triton"]["src_name"]]
+        name = info["triton"]["src_name"]
+        src = IK.extract(srcs["triton"])[name]
+        from cases import EPI_OPERANDS
+        order = IK.bind(srcs["triton"], src, name, EPI_OPERANDS.get(epi, ()))
         try:
-            fn, _p = IK.load(IK.patch_epilogue(src, "none"), "mainloop_" + info['triton']['src_name'], CACHE)
-            meta = IK.launch_meta(src)
+            # the floor is the GEMM with no epilogue AT ALL, so the extra operands' loads go too
+            bare = IK.patch_epilogue(src, "none", (), None, drop_extra_loads=True)
+            fn, _p = IK.load(bare, "mainloop_" + name, CACHE)
+            meta = IK.launch_meta(bare)
             grid = tuple(info["triton"]["grid"])
-            n_extra = len(meta["args"]) - 3
 
-            def mainloop(fn=fn, grid=grid, meta=meta, n_extra=n_extra):
+            def mainloop(fn=fn, grid=grid, meta=meta, order=order):
                 c = torch.empty(M, N, device="cuda", dtype=dtype)
-                IK.launch(fn, grid, (a0, w0) + tuple(extra0[:n_extra]) + (c, ), meta)
+                IK.launch(fn, grid, IK.call_args(order, a0, w0, c, extra0), meta)
                 return c
 
             mainloop()
             torch.cuda.synchronize()
             timed["_mainloop_no_epilogue"] = mainloop
+            args0 = IK.call_args(order, a0, w0, torch.empty(M, N, device="cuda", dtype=dtype), extra0)
+            res["_fp_fusion"] = mainloop_fp_fusion_delta(IK, src, order, grid, args0)
         except Exception as e:  # noqa: BLE001
             print("  mainloop-only failed:", str(e)[:120])
     for fn in timed.values():
@@ -443,34 +559,76 @@ def do_time(M, N, K, epi, dtype_name, srcs, reps, rounds, draws, tune_ours):
 # --------------------------------------------------------------------------------------------
 
 
+def parse_case(tok):
+    """`M,N,K,epi` plus optional `key=value` fields for the epilogue's scalars.
+
+    `4096,4096,16,silu` is the old form and still works. `16384,2048,32,lora,scale=0.5` pins
+    alpha/rank, which is a different kernel -- the constant is baked into the generated text --
+    so it also has to be part of the compile cache key.
+    """
+    from cases import params_for
+    parts = [t.strip() for t in tok.split(",")]
+    M, N, K, epi = int(parts[0]), int(parts[1]), int(parts[2]), parts[3]
+    over = {}
+    for f in parts[4:]:
+        k, v = f.split("=")
+        over[k.strip()] = float(v)
+    return M, N, K, epi, params_for(epi, over)
+
+
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("--cases", required=True, help="semicolon-separated M,N,K,epi")
+    p.add_argument("--cases", default="", help="semicolon-separated M,N,K,epi[,scale=..][,lim=..]")
+    p.add_argument("--cases-file", default="", help="a file of the same, one per line")
     p.add_argument("--dtype", default="fp16")
     p.add_argument("--draws", type=int, default=12)
     p.add_argument("--reps", type=int, default=15)
     p.add_argument("--rounds", type=int, default=4)
     p.add_argument("--timeout", type=int, default=2400)
     p.add_argument("--tune-ours", action="store_true")
+    p.add_argument("--tag", default="")  # stamped on each record, and what --skip-done keys on
+    p.add_argument("--skip-done", action="store_true")
     p.add_argument("--extract", default="")  # internal
     args = p.parse_args()
 
+    from cases import params_tag
+
     if args.extract:
-        M, N, K, epi = args.cases.split(",")
-        dst = os.path.join(CACHE, f"{M}x{N}x{K}_{epi}_{args.dtype}_{args.extract}.py")
-        do_extract(int(M), int(N), int(K), epi, args.dtype, args.extract, dst)
+        M, N, K, epi, params = parse_case(args.cases)
+        dst = os.path.join(CACHE, f"{M}x{N}x{K}_{epi}{params_tag(epi, params)}_{args.dtype}_{args.extract}.py")
+        do_extract(M, N, K, epi, args.dtype, args.extract, dst, params)
         return 0
 
+    # Resuming: a case already measured under this tag is skipped, so a run that dies part way
+    # through -- or gets reaped -- picks up where it stopped instead of redoing hours of it.
+    have = set()
+    if args.skip_done and os.path.exists(OUT):
+        with open(OUT) as f:
+            for line in f:
+                try:
+                    r = json.loads(line)
+                except Exception:  # noqa: BLE001
+                    continue
+                if r.get("tag") == args.tag:
+                    have.add((r["M"], r["N"], r["K"], r["epi"], r["dtype"], r.get("params_tag", "")))
+
     rows = []
-    for tok in args.cases.split(";"):
-        tok = tok.strip()
-        if not tok:
+    toks = [t.strip() for t in args.cases.split(";") if t.strip()]
+    if args.cases_file:
+        toks += [ln.split("#")[0].strip() for ln in open(args.cases_file) if ln.split("#")[0].strip()]
+    if not toks:
+        p.error("give --cases or --cases-file")
+    for i, tok in enumerate(toks):
+        M, N, K, epi, params = parse_case(tok)
+        ptag = params_tag(epi, params)
+        if (M, N, K, epi, args.dtype, ptag) in have:
+            print(f"\n=== [{i + 1}/{len(toks)}] {M}x{N}x{K} {epi}{ptag} {args.dtype} -- already done, skipping ===",
+                  flush=True)
             continue
-        M, N, K, epi = tok.split(",")
-        print(f"\n=== {M}x{N}x{K} {epi} {args.dtype} ===", flush=True)
+        print(f"\n=== [{i + 1}/{len(toks)}] {M}x{N}x{K} {epi}{ptag} {args.dtype} ===", flush=True)
         srcs = {}
         for which, _b, _e in COMPILES:
-            dst = os.path.join(CACHE, f"{M}x{N}x{K}_{epi}_{args.dtype}_{which}.py")
+            dst = os.path.join(CACHE, f"{M}x{N}x{K}_{epi}{ptag}_{args.dtype}_{which}.py")
             if not os.path.exists(dst):
                 cmd = [
                     sys.executable,
@@ -487,13 +645,26 @@ def main():
         if "triton" not in srcs:
             print("  no TRITON source, skipping")
             continue
-        res = do_time(int(M), int(N), int(K), epi, args.dtype, srcs, args.reps, args.rounds, args.draws, args.tune_ours)
+        try:
+            res = do_time(M, N, K, epi, args.dtype, srcs, args.reps, args.rounds, args.draws, args.tune_ours, params)
+        except Exception as e:  # noqa: BLE001
+            # One shape that runs out of memory or trips a compile bug must not take the rest of
+            # the sweep with it. Record the failure and move on.
+            print(f"  FAILED {type(e).__name__}: {str(e)[:300]}", flush=True)
+            log(
+                ATTEMPTS, {
+                    "step": "three_way", "tag": args.tag, "M": M, "N": N, "K": K, "epi": epi, "params": params, "dtype":
+                    args.dtype, "error": f"{type(e).__name__}: {str(e)[:300]}"
+                })
+            continue
         rec = {
-            "M": int(M), "N": int(N), "K": int(K), "epi": epi, "dtype": args.dtype, "when":
-            time.strftime("%Y-%m-%d %H:%M:%S"), "draws": args.draws, "reps": args.reps, "rounds": args.rounds, **res
+            "M": M, "N": N, "K": K, "epi": epi, "params": params, "params_tag": ptag, "dtype": args.dtype, "tag":
+            args.tag, "when": time.strftime("%Y-%m-%d %H:%M:%S"), "draws": args.draws, "reps": args.reps, "rounds":
+            args.rounds, **res
         }
-        for name in ("exact2k", "aten_e", "triton", "triton_e", "ours", "ours_divrn", "ours_helpers", "ours_approx",
-                     "triton_tuned", "ours_tuned", "ours_helpers_tuned", "ours_approx_tuned"):
+        for name in ("exact2k", "aten_e", "triton", "triton_e", "ours", "ours_divrn", "ours_helpers", "ours_cheap",
+                     "ours_fast", "ours_approx", "triton_tuned", "ours_tuned", "ours_helpers_tuned",
+                     "ours_approx_tuned"):
             r = res.get(name) or {}
             if "ms" in r:
                 print(

@@ -34,10 +34,15 @@ EPI_GATE = 4
 EPI_RESSCALE = 5
 EPI_SILU_FAST = 6  # silu with Triton's own sigmoid: NOT bit-exact, only for costing the exact one
 EPI_SILU_RN = 7  # silu with the correctly rounded exp and divide: bit-exact but 2x the PTX
+EPI_SIGMOID = 8
+EPI_RELU_SQ = 9
+EPI_LEAKY = 10
+EPI_HARDSWISH = 11
 
 EPI_ID = {
     "none": EPI_NONE, "silu": EPI_SILU, "fp8cast": EPI_FP8CAST, "softcap": EPI_SOFTCAP, "gate": EPI_GATE, "resscale":
-    EPI_RESSCALE, "silu_fast": EPI_SILU_FAST, "silu_rn": EPI_SILU_RN
+    EPI_RESSCALE, "silu_fast": EPI_SILU_FAST, "silu_rn": EPI_SILU_RN, "sigmoid": EPI_SIGMOID, "relu_sq": EPI_RELU_SQ,
+    "leaky": EPI_LEAKY, "hardswish": EPI_HARDSWISH
 }
 EPI_NEEDS_R = {EPI_GATE, EPI_RESSCALE}  # takes one extra [M,N] tensor
 EPI_OUT_FP8 = {EPI_FP8CAST}
@@ -76,6 +81,22 @@ def _sigmoid(x):
 
 
 @triton.jit
+def _max_nan(a, b):
+    """`max` that keeps a NaN, which is what torch's `clamp` and `threshold` do.
+
+    `tl.maximum` lowers to `max.f32`, and PTX `max.f32` returns the NON-NaN operand, so a NaN
+    accumulator would come out as the bound. Exact on every finite input and wrong on all 2046
+    fp16 NaN patterns -- caught by `probe_epi_src.py`, not by any number of random draws.
+    """
+    return tl.where((a > b) | (a != a), a, b)
+
+
+@triton.jit
+def _min_nan(a, b):
+    return tl.where((a < b) | (a != a), a, b)
+
+
+@triton.jit
 def _sigmoid_rn(x):
     """The literal transcription of torch's C++: correctly rounded exp and divide. Kept only to
     price `_sigmoid` against it -- both give the same bytes."""
@@ -102,7 +123,7 @@ def _epilogue(acc, r, EPI: tl.constexpr, HAS_R: tl.constexpr, RDT: tl.constexpr)
         y = x * s
     elif EPI == 2:  # fp8cast: (x * 0.375).clamp(-448, 448) -> e4m3
         t = (x * 0.375).to(RDT).to(tl.float32)
-        y = tl.minimum(tl.maximum(t, -448.0), 448.0)
+        y = _min_nan(_max_nan(t, -448.0), 448.0)
     elif EPI == 3:  # softcap: tanh(x * 0.0625) * 16
         t = (x * 0.0625).to(RDT).to(tl.float32)
         t = libdevice.tanh(t).to(RDT).to(tl.float32)
@@ -119,6 +140,15 @@ def _epilogue(acc, r, EPI: tl.constexpr, HAS_R: tl.constexpr, RDT: tl.constexpr)
     elif EPI == 7:  # silu with the correctly rounded exp and divide: bit-exact, and 2x the PTX
         s = _sigmoid_rn(x).to(RDT).to(tl.float32)
         y = x * s
+    elif EPI == 8:  # sigmoid(x)
+        y = _sigmoid(x)
+    elif EPI == 9:  # relu_sq: t = relu(x); t * t.  relu is `threshold(x, 0, 0)`: NaN falls
+        t = tl.where(x <= 0.0, 0.0, x).to(RDT).to(tl.float32)  # through the false arm and survives
+        y = t * t
+    elif EPI == 10:  # leaky_relu(x, 0.01)
+        y = tl.where(x > 0.0, x, x * 0.01)
+    elif EPI == 11:  # hardswish: x * min(max(x + 3, 0), 6) / 6, all of it in fp32
+        y = x * tl.minimum(tl.maximum(x + 3.0, 0.0), 6.0) / 6.0
     else:
         y = x
     if HAS_R:  # keep `r` live for the EPI values that ignore it
