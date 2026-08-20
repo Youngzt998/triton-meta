@@ -17,6 +17,8 @@ CPU only. The checker reads text; nothing here touches a GPU. Building the corpu
     CHECKER_CORPUS_WORKERS  checker process pool size   (default 16)
     CHECKER_CORPUS_CHECKER  module:function             (default the forward PTX checker)
     CHECKER_CORPUS_FRESH    1 = regrade groups already in cache/checker.corpus.jsonl
+    CHECKER_CORPUS_RECYCLE  files before the pool is replaced  (default 5000)
+    CHECKER_CORPUS_STALL    seconds of no result before the pool is called dead (default 600)
 
 They are environment variables rather than flags because `artifact.py`'s CLI is shared by every
 step; `gemm.perf.static` does the same.
@@ -28,7 +30,8 @@ import multiprocessing as mp
 import os
 import time
 from collections import Counter
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, wait
+from concurrent.futures.process import BrokenProcessPool
 
 from ._common import CACHE, writer
 
@@ -93,6 +96,7 @@ TABLES = {
 }
 
 _CK = None  # per-worker checker, set by _init_worker
+_CHUNK = 8  # files handed to a worker per task
 
 
 def _init_worker(spec):
@@ -106,6 +110,9 @@ def _checker_of(path):
     """Worker: (checker key, mma atom) for one compiled file, or None if it could not be read.
 
     Returning None rather than raising keeps one unreadable file from killing a sweep of 54,120.
+    A configuration the checker cannot get through is therefore dropped, not merged with anything,
+    and the group's row says how many were dropped -- a dropped configuration changes the class
+    counts, so it is never silent.
     """
     try:
         text = open(path).read()
@@ -115,16 +122,146 @@ def _checker_of(path):
         return None
 
 
+def _checker_chunk(paths):
+    """Worker: `_checker_of` over a slice of files, in order. What `Executor.map` does internally.
+
+    Submitting the chunks by hand rather than through `map` is what lets the parent notice a pool
+    that has stopped answering; see `_Pool._run`.
+    """
+    return [_checker_of(p) for p in paths]
+
+
+class _PoolDied(Exception):
+    """The worker pool stopped being able to grade: a worker died, or nothing came back."""
+
+
+class _Pool:
+    """A checker process pool that is REPLACED rather than repaired.
+
+    Two decisions, and the first one is why this class exists at all.
+
+    NO per-worker recycling. `ProcessPoolExecutor(max_tasks_per_child=N)` looks like the obvious
+    way to bound worker memory, and it is what hung this step. When a worker retires the pool is
+    supposed to spawn a replacement, but `_adjust_process_count` spawns one only if its
+    idle-worker semaphore is empty, and that semaphore gains a permit for every task that
+    finishes. A long run of results with no new submissions -- exactly one big group -- leaves
+    hundreds of permits, so every retiring worker is replaced by nothing. The pool drains to zero
+    with work still queued, and then no worker sentinel is left for the manager thread to watch:
+    it waits, the parent waits on a future nobody will ever complete, and there is no exception,
+    no message and no end. That is reproducible in twenty lines and does not need this checker.
+    With recycling off, a worker only ever leaves by dying, which trips its sentinel and raises
+    `BrokenProcessPool` at once.
+
+    Memory is still bounded, by throwing away the WHOLE pool every `recycle` files. New processes
+    reclaim strictly more than a new child does, and the boundary is a plain arithmetic count
+    instead of a race between three unrelated numbers. Measured on this corpus the bound is
+    insurance rather than a need: 300 flash-attention parses in one process held resident memory
+    at 0.03 GB, and the largest file in the corpus peaks at 0.32 GB and gives it back.
+
+    Every failure of a worker is turned into `_PoolDied`, which the caller reports against the
+    group being graded. Two ways a pool can fail:
+      * a worker dies -- `BrokenProcessPool`, raised within milliseconds of the death;
+      * nothing at all comes back for `stall` seconds -- the backstop for a cause nobody has
+        seen yet, so that the worst case is a message rather than silence.
+    """
+
+    def __init__(self, workers, checker, recycle, stall):
+        self.workers, self.checker = workers, checker
+        self.recycle, self.stall = recycle, stall
+        self._ex, self._served, self.generations = None, 0, 0
+
+    def _executor(self):
+        if self._ex is None:
+            ctx = mp.get_context("spawn")  # each worker imports the checker fresh
+            self._ex = ProcessPoolExecutor(max_workers=self.workers, mp_context=ctx, initializer=_init_worker,
+                                           initargs=(self.checker, ))
+            self._served = 0
+            self.generations += 1
+        return self._ex
+
+    def _stop(self, alive=True):
+        """Drop the current pool. `alive=False` means do not wait on it -- it is dead or stuck."""
+        ex, self._ex = self._ex, None
+        if ex is None:
+            return
+        if not alive:
+            for p in list(getattr(ex, "_processes", {}).values()):
+                p.kill()
+        ex.shutdown(wait=alive, cancel_futures=True)
+
+    def _run(self, paths):
+        """Grade `paths` on the current pool, in order. Raises `_PoolDied` if it cannot."""
+        ex = self._executor()
+        try:
+            futures = [ex.submit(_checker_chunk, paths[i:i + _CHUNK]) for i in range(0, len(paths), _CHUNK)]
+            pending = set(futures)
+            while pending:
+                finished, pending = wait(pending, timeout=self.stall, return_when=FIRST_COMPLETED)
+                if not finished:
+                    raise _PoolDied(f"no configuration came back for {self.stall}s with "
+                                    f"{len(pending) * _CHUNK} still queued")
+            out = []
+            for f in futures:
+                out.extend(f.result())
+            return out
+        except BrokenProcessPool as exc:
+            raise _PoolDied(f"a worker died ({exc})") from exc
+
+    def grade(self, paths):
+        """(checker key, mma atom) or None per path, in order, recycling the pool as it goes.
+
+        A slice is retried once on a brand new pool, because the commonest reason a worker dies on
+        a shared machine is that something else on it took the memory, and that passes.
+        """
+        out, i = [], 0
+        while i < len(paths):
+            room = self.recycle - self._served
+            if room <= 0:
+                self._stop()
+                room = self.recycle
+            batch = paths[i:i + room]
+            try:
+                out.extend(self._run(batch))
+            except _PoolDied as first:
+                print(f"    POOL DIED: {first}. Rebuilding it and retrying these "
+                      f"{len(batch)} configurations.", flush=True)
+                self._stop(alive=False)
+                try:
+                    out.extend(self._run(batch))
+                except _PoolDied as second:
+                    self._stop(alive=False)
+                    raise _PoolDied(f"{second}, and the same on a fresh pool") from second
+            self._served += len(batch)
+            i += len(batch)
+        return out
+
+    def close(self):
+        self._stop()
+
+
 def _groups(corpus, only):
+    """Every (kernel, dtype) group, smallest first.
+
+    Smallest first because the step appends each row the moment it has it: a reader sees the
+    cheap groups within seconds, and a kill costs whichever single group was in flight instead
+    of the twenty that would still be waiting behind flash attention. `build_checker_table.py`
+    ordered its sweep the same way and for the same reason. It is NOT what keeps the run alive
+    -- that is `_Pool` -- and the run is correct in any order.
+
+    No group is skipped. The five loop-carried scan and welford kernels that the older harness
+    skipped for a checker memory blowup grade here in a few seconds each, and if one ever did
+    exhaust a worker it would now cost that group a clear failure line rather than the run.
+    """
     out = []
     for kernel in sorted(os.listdir(corpus)):
         kdir = os.path.join(corpus, kernel)
         if not os.path.isdir(kdir) or (only and kernel not in only):
             continue
         for dtype in sorted(os.listdir(kdir)):
-            if os.path.isdir(os.path.join(kdir, dtype)):
-                out.append((kernel, dtype))
-    return out
+            ddir = os.path.join(kdir, dtype)
+            if os.path.isdir(ddir):
+                out.append((len([fn for fn in os.listdir(ddir) if fn.endswith(".json")]), kernel, dtype))
+    return [(kernel, dtype) for _, kernel, dtype in sorted(out)]
 
 
 def _read_group(ddir, cap):
@@ -153,20 +290,22 @@ def _read_group(ddir, cap):
 
 
 def _grade(kernel, dtype, ddir, pool, cap):
-    """One (kernel, dtype) row.
+    """One (kernel, dtype) row, and how many of its configurations had to be dropped.
 
     The grouping and the soundness arithmetic come from `equivalence_fuzzer`, the same standalone
     module `build_checker_table.py` called, so this produces the same numbers rather than a second
     opinion about what they mean. It is pure stdlib, hence importable without a GPU. `over_merges`
     with the two key sets swapped is the over-split count -- it is a symmetric question, "pairs one
     grouping merges that the other separates".
+
+    Raises `_PoolDied` if the worker pool could not be kept alive for this group.
     """
     from bitequiv.evaluation import equivalence_fuzzer as fz
     started = time.time()
     recs, paths, infeasible, unreadable = _read_group(ddir, cap)
 
     graded = []
-    for r, res in zip(recs, pool.map(_checker_of, paths, chunksize=8)):
+    for r, res in zip(recs, pool.grade(paths)):
         if res is None:
             unreadable += 1
             continue
@@ -179,7 +318,7 @@ def _grade(kernel, dtype, ddir, pool, cap):
     }
     if not graded:
         note = "no configurations graded" + (f"; {unreadable} unreadable" if unreadable else "")
-        return {**row, "recovery": "no-configs", "notes": note}
+        return {**row, "recovery": "no-configs", "notes": note}, unreadable
 
     idx = list(range(len(graded)))
     ck = {i: graded[i]["checker_key"] for i in idx}
@@ -225,7 +364,7 @@ def _grade(kernel, dtype, ddir, pool, cap):
         "v2v5_empirical": f"{sum(1 for g in emp_cls if len({graded[i]['mma'] for i in g}) > 1)}/{len(emp_cls)}",
         "seeds": ",".join(str(s) for s in seeds),
         "notes": "; ".join(notes),
-    }
+    }, unreadable
 
 
 def _is_mma(row):
@@ -299,11 +438,15 @@ def _resum(path):
 
     Totals are the one thing a streaming append gets wrong: grading the corpus in several sittings
     would leave one partial total per sitting, and a reader has no way to tell which is the real
-    one. Group rows are never touched -- they are appended as they are measured and are what makes
-    the run kill-safe. Only the totals are recomputed, over every group row of that key.
+    one. Group rows are never recomputed -- they are appended as they are measured and are what
+    makes the run kill-safe. Only the totals are recomputed, over every group row of that key.
+
+    Group rows are put back in name order, so which order the sweep happened to grade them in
+    never shows up in the exported table.
     """
     rows = _cached()
     groups = [r for r in rows if r.get("scope") == "group"]
+    groups.sort(key=lambda r: (r.get("kernel") or "", r.get("dtype") or "", str(_key(r))))
     out = list(groups)
     for corpus, cap, checker in dict.fromkeys(_key(r) for r in groups):
         part = [r for r in groups if _key(r) == (corpus, cap, checker)]
@@ -351,6 +494,8 @@ def run(args, env):
     cap = int(os.environ.get("CHECKER_CORPUS_CAP", 0))
     checker = os.environ.get("CHECKER_CORPUS_CHECKER", DEFAULT_CHECKER)
     workers = int(os.environ.get("CHECKER_CORPUS_WORKERS", 16))
+    recycle = max(1, int(os.environ.get("CHECKER_CORPUS_RECYCLE", 5000)))
+    stall = max(1, int(os.environ.get("CHECKER_CORPUS_STALL", 600)))
     only = {k for k in os.environ.get("CHECKER_CORPUS_KERNELS", "").split(",") if k}
     fresh = bool(os.environ.get("CHECKER_CORPUS_FRESH"))
 
@@ -365,35 +510,43 @@ def run(args, env):
     print(f"  checker  {checker}")
     print(f"  cap      {cap or 'none -- every configuration in every group'}")
     print(f"  workers  {workers}   (CPU only; this step never touches a GPU)")
+    print(f"  pool     replaced every {recycle} files; a group that goes {stall}s without a result "
+          f"is reported, not waited on")
     if done:
         print(f"  resume   {len(done)} groups already graded at this cap; CHECKER_CORPUS_FRESH=1 to redo them")
-    print("  Flash attention is the slow part, roughly 2 s per configuration against 0.05 s for\n"
-          "  everything else. A full uncapped run is tens of minutes at this worker count.\n")
+    print("  Groups are graded smallest first, so flash attention and the big GEMM sweeps -- the\n"
+          "  slow half -- come last. A full uncapped run is tens of minutes at this worker count.\n")
 
     out = writer(NAME)
-    rows = []
-    # spawn, not fork: each worker imports the checker fresh rather than inheriting a process that
-    # has already loaded it. max_tasks_per_child because a checker call leaves roughly 40 MB behind
-    # in the worker, so a long-lived pool grows without bound over 54,120 files; recycling caps
-    # peak memory at about workers * (base + tasks * 40 MB).
-    ctx = mp.get_context("spawn")
-    with ProcessPoolExecutor(max_workers=workers, mp_context=ctx, max_tasks_per_child=24, initializer=_init_worker,
-                             initargs=(checker, )) as pool:
+    rows, failed, dropped = [], [], 0
+    pool = _Pool(workers, checker, recycle, stall)
+    try:
         for kernel, dtype in groups:
             if (kernel, dtype) in done:
                 print(f"  {kernel}/{dtype}: already graded, skipping")
                 continue
-            row = _grade(kernel, dtype, os.path.join(corpus, kernel, dtype), pool, cap)
+            try:
+                row, lost = _grade(kernel, dtype, os.path.join(corpus, kernel, dtype), pool, cap)
+            except _PoolDied as exc:
+                # Nothing is written for this group, so re-running the step retries it. Carrying
+                # on is worth more than stopping: every other group is still measurable.
+                failed.append((kernel, dtype, str(exc)))
+                print(f"  {kernel}/{dtype}: NOT GRADED -- {exc}", flush=True)
+                continue
             row.update(checker=checker, corpus=corpus)
             rows.append(row)
+            dropped += lost
             out.write(json.dumps(row) + "\n")
             out.flush()
-            print(f"  {kernel}/{dtype}: configs={row['configs']} "
-                  f"checker={row.get('checker_cls', '-')} empirical={row.get('empirical_cls', '-')} "
-                  f"over_merges={row.get('over_merges', '-')} -> {row['recovery']}"
-                  f"{'  | ' + row['notes'] if row['notes'] else ''}")
+            print(
+                f"  {kernel}/{dtype}: configs={row['configs']} "
+                f"checker={row.get('checker_cls', '-')} empirical={row.get('empirical_cls', '-')} "
+                f"over_merges={row.get('over_merges', '-')} -> {row['recovery']}"
+                f"{'  | ' + row['notes'] if row['notes'] else ''}", flush=True)
+    finally:
+        pool.close()
+        out.close()
 
-    out.close()
     for row in _resum(os.path.join(CACHE, f"{NAME}.jsonl")):
         if _key(row) != (corpus, cap, checker):
             continue
@@ -401,13 +554,26 @@ def run(args, env):
               f"empirical={row['empirical_cls']} over_merges={row['over_merges']}   ({row['notes']})")
 
     unsound = [r for r in rows if r.get("over_merges")]
-    print(f"\n  {len(rows)} groups graded this run. over_merges is the gate and must be 0.")
+    print(f"\n  {len(rows)} groups graded this run in {pool.generations} worker pools. "
+          f"over_merges is the gate and must be 0.")
     if unsound:
         print("  OVER-MERGES FOUND -- the checker certified configurations the recorded bytes separate:")
         for r in unsound:
             print(f"    {r['kernel']}/{r['dtype']}: {r['over_merges']} pairs")
     else:
         print("  0 over-merges in every group graded this run.")
+
+    if dropped:
+        print(f"  {dropped} configurations were dropped because the checker could not read them. A\n"
+              "  dropped configuration is in nobody's class, so the counts above are for what was\n"
+              "  graded. The per-group notes say where they were.")
+    if failed:
+        print(f"\n  {len(failed)} GROUPS WERE NOT GRADED -- their worker pool died twice:")
+        for kernel, dtype, why in failed:
+            print(f"    {kernel}/{dtype}: {why}")
+        print("  Nothing was written for them, so re-running this step grades them and nothing else.\n"
+              "  A worker dies when the machine takes its memory away: check what else is running,\n"
+              "  then lower CHECKER_CORPUS_WORKERS.")
     if cap:
         print(f"  Graded under cap={cap}, so every class count above is for a sample of at most {cap}\n"
               f"  configurations per group and is NOT comparable to the uncapped prior result in\n"

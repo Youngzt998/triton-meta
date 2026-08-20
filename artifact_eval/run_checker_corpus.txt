@@ -1,0 +1,129 @@
+/home/youngzt/bitwise-equiv/triton/artifact_eval/artifact.py:281: RuntimeWarning: cuBLASLt 13.2.2 on sm_103 (NVIDIA GB300) was not measured: the rules come from 13.1.x (exactly 13.1.1). Results should still be bit-identical to cuBLAS, but a version bump can change which kernel a shape lands on. Re-measure and add a ((10, 3), (13, 2)) entry to `arch._REGISTRY` to silence this.
+  "arch": platform().name.split()[0],
+artifact evaluation
+  device      NVIDIA GB300  (sm_103)
+  cuBLASLt    13.2.2
+  triton      3.8.0+fb   torch 2.12.0+cu130   commit 50cf85ef37d1
+  WARNING: the paper's numbers used cuBLASLt 13.1.1; this is 13.2.2. cuBLAS may pick a
+           different algorithm, which changes the bits it returns and what we must reproduce.
+
+[checker.corpus] 93 groups in /home/youngzt/bitwise-equiv/local_evaluation/corpus
+  checker  bitequiv.ptx.forward.interp:forward_module_descriptor
+  cap      none -- every configuration in every group
+  workers  16   (CPU only; this step never touches a GPU)
+  pool     replaced every 5000 files; a group that goes 600s without a result is reported, not waited on
+  Groups are graded smallest first, so flash attention and the big GEMM sweeps -- the
+  slow half -- come last. A full uncapped run is tens of minutes at this worker count.
+
+  LC_splitk_gemm_f16/f16: configs=4 checker=4 empirical=4 over_merges=0 -> perfect
+  LC_splitsum_combine_f32/f32: configs=4 checker=4 empirical=4 over_merges=0 -> perfect
+  A_rms_norm_fwd/f32: configs=8 checker=8 empirical=3 over_merges=0 -> fail-closed
+  C_rms_norm_bwd_2reduce/f32: configs=8 checker=8 empirical=3 over_merges=0 -> fail-closed
+  D_masked_global_sum/f32: configs=8 checker=8 empirical=5 over_merges=0 -> fail-closed
+  E_triu_masked_rowsum/f32: configs=8 checker=8 empirical=5 over_merges=0 -> fail-closed
+  G_plain_sum_looped/f32: configs=8 checker=8 empirical=5 over_merges=0 -> fail-closed
+  H_mean_permute/f32: configs=8 checker=8 empirical=3 over_merges=0 -> fail-closed
+  I_bias_grad_dim0/f32: configs=8 checker=8 empirical=5 over_merges=0 -> fail-closed
+  J_epilogue_colsum_dim0/f32: configs=8 checker=8 empirical=5 over_merges=0 -> fail-closed
+  gemm_tma_store/f16: configs=18 checker=1 empirical=1 over_merges=0 -> perfect  | mma:v2=6,v5=12
+  LC_cumsum_scan_f32/f32: configs=24 checker=24 empirical=7 over_merges=0 -> fail-closed
+  LC_logsumexp_loop_f32/f32: configs=24 checker=24 empirical=24 over_merges=0 -> perfect
+  LC_prod_loop_f32/f32: configs=24 checker=24 empirical=24 over_merges=0 -> perfect
+  LC_splitsum_partial_f32/f32: configs=24 checker=24 empirical=24 over_merges=0 -> perfect
+  LC_sum_loop_bf16/bf16: configs=20 checker=20 empirical=20 over_merges=0 -> perfect
+  LC_sum_loop_f16/f16: configs=20 checker=20 empirical=20 over_merges=0 -> perfect
+  LC_sum_loop_f32/f32: configs=24 checker=24 empirical=24 over_merges=0 -> perfect
+  LC_var_welford_f32/f32: configs=24 checker=24 empirical=24 over_merges=0 -> perfect
+  col_bf16/bf16: configs=144 checker=12 empirical=7 over_merges=0 -> over-split
+  col_dot/bf16: configs=144 checker=12 empirical=7 over_merges=0 -> over-split
+  col_dot/f16: configs=144 checker=15 empirical=10 over_merges=0 -> over-split
+  col_dot/f32: configs=144 checker=24 empirical=15 over_merges=0 -> over-split
+  col_exp_sum/bf16: configs=0 checker=- empirical=- over_merges=- -> no-configs  | no configurations graded
+  col_exp_sum/f16: configs=0 checker=- empirical=- over_merges=- -> no-configs  | no configurations graded
+  col_exp_sum/f32: configs=144 checker=7 empirical=7 over_merges=0 -> perfect
+  col_max/bf16: configs=144 checker=3 empirical=1 over_merges=0 -> over-split
+  col_max/f16: configs=144 checker=3 empirical=1 over_merges=0 -> over-split
+  col_max/f32: configs=144 checker=1 empirical=1 over_merges=0 -> perfect
+  col_sum_loop/bf16: configs=144 checker=12 empirical=7 over_merges=0 -> over-split
+  col_sum_loop/f16: configs=144 checker=12 empirical=7 over_merges=0 -> over-split
+  col_sum_loop/f32: configs=144 checker=9 empirical=7 over_merges=0 -> over-split
+  cond_reduce/bf16: configs=144 checker=24 empirical=7 over_merges=0 -> over-split
+  cond_reduce/f16: configs=144 checker=24 empirical=7 over_merges=0 -> over-split
+  cond_reduce/f32: configs=144 checker=24 empirical=14 over_merges=0 -> over-split
+  dot/bf16: configs=144 checker=8 empirical=7 over_merges=0 -> over-split
+  dot/f16: configs=144 checker=19 empirical=1 over_merges=0 -> over-split
+  dot/f32: configs=144 checker=19 empirical=14 over_merges=0 -> over-split
+  layernorm/bf16: configs=144 checker=16 empirical=8 over_merges=0 -> over-split
+  layernorm/f16: configs=144 checker=19 empirical=9 over_merges=0 -> over-split
+  layernorm/f32: configs=144 checker=7 empirical=6 over_merges=0 -> over-split
+  rmsnorm/bf16: configs=144 checker=10 empirical=4 over_merges=0 -> over-split
+  rmsnorm/f16: configs=144 checker=17 empirical=8 over_merges=0 -> over-split
+  rmsnorm/f32: configs=144 checker=10 empirical=7 over_merges=0 -> over-split
+  softmax/bf16: configs=144 checker=8 empirical=4 over_merges=0 -> over-split
+  softmax/f16: configs=144 checker=8 empirical=4 over_merges=0 -> over-split
+  softmax/f32: configs=144 checker=4 empirical=3 over_merges=0 -> over-split
+  sum/bf16: configs=144 checker=8 empirical=7 over_merges=0 -> over-split
+  sum/f16: configs=144 checker=12 empirical=7 over_merges=0 -> over-split
+  sum/f32: configs=144 checker=7 empirical=7 over_merges=0 -> perfect
+  sum_2d_axis0/bf16: configs=144 checker=12 empirical=7 over_merges=0 -> over-split
+  sum_2d_axis0/f16: configs=144 checker=12 empirical=7 over_merges=0 -> over-split
+  sum_2d_axis0/f32: configs=144 checker=7 empirical=7 over_merges=0 -> perfect
+  sum_2d_col/bf16: configs=144 checker=12 empirical=7 over_merges=0 -> over-split
+  sum_2d_col/f16: configs=144 checker=12 empirical=7 over_merges=0 -> over-split
+  sum_2d_col/f32: configs=144 checker=7 empirical=7 over_merges=0 -> perfect
+  sum_2d_col_big/bf16: configs=144 checker=12 empirical=7 over_merges=0 -> over-split
+  sum_2d_col_big/f16: configs=144 checker=12 empirical=7 over_merges=0 -> over-split
+  sum_2d_col_big/f32: configs=144 checker=8 empirical=7 over_merges=0 -> over-split
+  sum_2d_deep/bf16: configs=144 checker=8 empirical=4 over_merges=0 -> over-split
+  sum_2d_deep/f16: configs=144 checker=12 empirical=4 over_merges=0 -> over-split
+  sum_2d_deep/f32: configs=144 checker=7 empirical=4 over_merges=0 -> over-split
+  sum_2d_keepdim/bf16: configs=144 checker=8 empirical=3 over_merges=0 -> over-split
+  sum_2d_keepdim/f16: configs=144 checker=12 empirical=3 over_merges=0 -> over-split
+  sum_2d_keepdim/f32: configs=144 checker=7 empirical=2 over_merges=0 -> over-split
+  sum_3d/bf16: configs=144 checker=9 empirical=3 over_merges=0 -> over-split
+  sum_3d/f16: configs=144 checker=12 empirical=3 over_merges=0 -> over-split
+  sum_3d/f32: configs=144 checker=7 empirical=2 over_merges=0 -> over-split
+  sum_3d_mid/bf16: configs=144 checker=12 empirical=4 over_merges=0 -> over-split
+  sum_3d_mid/f16: configs=144 checker=12 empirical=4 over_merges=0 -> over-split
+  sum_3d_mid/f32: configs=144 checker=7 empirical=4 over_merges=0 -> over-split
+  sum_3d_outer/bf16: configs=144 checker=12 empirical=7 over_merges=0 -> over-split
+  sum_3d_outer/f16: configs=144 checker=11 empirical=7 over_merges=0 -> over-split
+  sum_3d_outer/f32: configs=144 checker=12 empirical=7 over_merges=0 -> over-split
+  sum_4d/bf16: configs=144 checker=10 empirical=3 over_merges=0 -> over-split
+  sum_4d/f16: configs=144 checker=12 empirical=3 over_merges=0 -> over-split
+  sum_4d/f32: configs=144 checker=6 empirical=2 over_merges=0 -> over-split
+  sum_multiaxis/bf16: configs=144 checker=8 empirical=3 over_merges=0 -> over-split
+  sum_multiaxis/f16: configs=144 checker=12 empirical=3 over_merges=0 -> over-split
+  sum_multiaxis/f32: configs=144 checker=7 empirical=2 over_merges=0 -> over-split
+  gemm_bias_relu_fp_fusion/bf16: configs=192 checker=1 empirical=1 over_merges=0 -> perfect  | mma:v2=128,v5=64
+  gemm_reduce_sum/f32: configs=270 checker=60 empirical=9 over_merges=0 -> over-split  | mma:v2=198,v5=72
+  gemm_softmax/f32: configs=270 checker=60 empirical=9 over_merges=0 -> over-split  | mma:v2=198,v5=72
+  welford/f32: configs=636 checker=106 empirical=75 over_merges=0 -> over-split
+  gemm_kgroup/bf16: configs=1152 checker=138 empirical=6 over_merges=0 -> over-split  | mma:v2=768,v5=384
+  flash_attention/bf16: configs=2721 checker=2656 empirical=260 over_merges=0 -> over-split  | mma:v2=2087,v5=634
+  flash_attention/f16: configs=2720 checker=2655 empirical=266 over_merges=0 -> over-split  | mma:v2=2086,v5=634
+  flash_attention/fp8: configs=2070 checker=2070 empirical=112 over_merges=0 -> fail-closed  | mma:v2=1560,v5=510
+  flash_attention/fp8e5m2: configs=2069 checker=2069 empirical=112 over_merges=0 -> fail-closed  | mma:v2=1559,v5=510
+  gemm/bf16: configs=6422 checker=1 empirical=1 over_merges=0 -> perfect  | mma:v2=5154,v5=1268
+  gemm/f16: configs=6304 checker=1 empirical=1 over_merges=0 -> perfect  | mma:v2=5036,v5=1268
+  gemm/f32: configs=10293 checker=1729 empirical=6 over_merges=0 -> over-split  | mma:other=6271,v2=3338,v5=684
+  gemm/fp8: configs=7263 checker=2 empirical=2 over_merges=0 -> perfect  | mma:v2=5805,v5=1458
+  TOTAL reduction   configs=9384 checker=1009 empirical=614 over_merges=0   (sum over 77 groups)
+  TOTAL mma         configs=41768 checker=11447 empirical=790 over_merges=0   (sum over 14 groups)
+  TOTAL everything  configs=51152 checker=12456 empirical=1404 over_merges=0   (sum over 91 groups)
+
+  93 groups graded this run in 11 worker pools. over_merges is the gate and must be 0.
+  0 over-merges in every group graded this run.
+
+streaming records in /home/youngzt/bitwise-equiv/triton/artifact_eval/cache
+  gemm_bitmatch.csv            97611 rows
+  gemm_perf_random.csv         6995 rows
+  gemm_perf_static.csv         3905 rows
+  gemm_fusion.csv              34 rows
+  inner_tree_bitmatch.csv      104 rows
+  inner_tree_layout.csv        1728 rows
+  checker_corpus.csv           103 rows
+  FORMAT.md                    written
+  env.csv                      75 rows
+
+results in /home/youngzt/bitwise-equiv/triton/artifact_eval/data
