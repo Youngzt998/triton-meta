@@ -1,17 +1,40 @@
-"""gemm.perf.static -- the four arms of `gemm.perf.random`, on the fixed layer shapes of the
+"""gemm.perf.static -- the five arms of `gemm.perf.random`, on the fixed layer shapes of the
 open-weight models that are current in August 2026.
 
-Same four arms, same operands, same five timings, same byte checks.  The ONLY difference is
+Same five arms, same operands, same five timings, same byte checks.  The ONLY difference is
 where the shapes come from: `fusion_moe/models_2026.py` instead of a random draw.
 
-    1   cuBLAS through `hot_cublas`.  NVIDIA's heuristic picks the kernel.  THE BIT REFERENCE.
-    2a  torch.compile(mode="max-autotune-no-cudagraphs"), backends ATEN,TRITON.  Unconstrained.
-    2b  the same with `max_autotune_gemm_backends="TRITON"`.  Unconstrained.
-    3   the pre-GB300 bit-matching GEMM under a full autotuner sweep.  Must equal arm 1.
-    4   our GB300 kernels, the shipped fitted rule.  Must equal arm 1.
+    cublas               cuBLAS through `hot_cublas`.  NVIDIA's heuristic picks the kernel.
+                         THE BIT REFERENCE, and the baseline every ratio is taken against.
+    torch_auto           torch.compile(mode="max-autotune-no-cudagraphs") as its autotuner
+                         picks, with the extern included.  Unconstrained.
+    torch_triton         the same with `max_autotune_gemm_backends="TRITON"`, so it is
+                         Inductor's own Triton template.  Unconstrained.
+    bitequiv_autotuning  bit-equivalent to cuBLAS: the kernel AS IT STOOD BEFORE the sm_103
+                         rewrites, with its configuration chosen by a search.
+    gb300_accelerated    bit-equivalent to cuBLAS: the GB300-specific rewrites and the shipped
+                         fitted rule.
 
-    4 / 2b   what the bit constraint costs.
-    4 / 3    what our hand-written rewrites bought over an honest search.
+The last two are both byte-identical to cuBLAS and differ in HOW THEY GOT THERE -- one searches
+a configuration space, the other is rewrites written for this architecture plus a fitted rule.
+They therefore differ in two ways at once, the kernel and the way its configuration is chosen,
+and a comparison between them covers both.
+
+WHAT IS REPORTED, AND WHAT IS NOT
+---------------------------------
+Every arm is reported against cuBLAS and nothing else: `torch_auto / cublas`,
+`torch_triton / cublas`, `bitequiv_autotuning / cublas`, `gb300_accelerated / cublas`, each
+oriented so that above 1 means faster than cuBLAS.  Ratios BETWEEN arms are deliberately not
+printed.  They hide the levels -- one arm over another says nothing about whether either is any
+good against the reference -- and between two arms that differ in more than one way they invite
+a causal reading the measurement cannot support.  A reader with four numbers on one baseline can
+form whatever comparison they want.
+
+In particular, `gb300_accelerated` against either torch arm is NOT the price of bit-exactness.
+The two are different kernels: ours has TMA descriptors, a persistent grid and warp
+specialization, and Inductor's `mm_template` has none of them.  It is a product comparison --
+what a user gets by switching -- and the kernel difference dominates whatever the bit constraint
+costs.
 
 THE MEASUREMENT IS IMPORTED, NOT COPIED
 ---------------------------------------
@@ -86,21 +109,49 @@ Everything else is an environment variable, because `artifact.py`'s CLI is share
     PERF_STATIC_DTYPES       comma-separated, default `fp16,fp8`.
     PERF_STATIC_PAIRINGS     comma-separated subset of the five, for a validation slice.
     PERF_STATIC_ROUNDS       measurement rounds, best of.  Default 3.
-    PERF_STATIC_MAX_CONFIGS  cap on arm 3's search space.  Default 0 = no cap.  A non-zero value
+    PERF_STATIC_MAX_CONFIGS  cap on bitequiv_autotuning's search space.  Default 0 = no cap.  A non-zero value
                              is recorded on every row it touched, so a bounded run cannot be
                              read as full coverage.
-    PERF_STATIC_SEARCH_S     arm 3's per-shape search budget, in seconds.
-    PERF_STATIC_REFINE       how many of arm 3's fastest configurations are re-timed.
+    PERF_STATIC_SEARCH_S     bitequiv_autotuning's per-shape search budget, in seconds.
+    PERF_STATIC_REFINE       how many of bitequiv_autotuning's fastest configurations are re-timed.
                              Both default to whatever `gemm.perf.random` uses rather than to a
                              number of their own: a different search budget would make the two
-                             steps' 4/3 ratios incomparable.  Where the budget stopped the sweep
+                             steps' numbers incomparable.  Where the budget stopped the sweep
                              early, the row's `searched` is below its `space` and says so.
     PERF_STATIC_CUBLASLT     which cuBLAS to match.  Default 13.1.1, the same version
                              `gemm.perf.random` pins, so the two steps are comparable.
     PERF_STATIC_LIMIT        stop after this many shapes in this process.  0 = no limit.
     PERF_STATIC_LEASE_MIN    minutes before another worker may steal a stale claim.  Default 45.
+    PERF_STATIC_REDO_UNBATCHED
+                             1 = take back the shapes measured one call per graph, before the
+                             batch existed, whose own recorded floor says a batch would change
+                             them, and measure them again.  See THE LAUNCH FLOOR below.  A shape
+                             the rule would leave at one call per graph is left alone: its row
+                             already IS what the new code produces.  Idempotent, so the switch
+                             can be left on and an interrupted run resumed with the same
+                             command.
+    PERF_STATIC_REDO_CONTENDED
+                             1 = take back the shapes whose latest rows record `contended`, i.e.
+                             another process was on this GPU while they were timed, and measure
+                             them again.  Also idempotent: a shape re-taken on a quiet card
+                             stops being selected.
     PERF_STATIC_REPORT_ONLY  1 = print the table from what is on disk and exit.
     PERF_STATIC_REPORT_TXT   also write the report to this path.
+
+THE LAUNCH FLOOR
+----------------
+These are small GEMMs.  A CUDA-graph replay costs about 6.9 us on this box before any work of
+ours runs, and an expert down-projection at 16 tokens is 2 us of work, so measured one call at a
+time it read 8.7 us -- 77% of the number was the replay, both arms paid the same 6.9, and a true
+2x came out as 1.22x.  That flattens the answer toward "the arms are about the same" on exactly
+the layers this step exists to report: 74 of 74 `moe_down` cases, 68 of 70 `moe_up` and 49 of 49
+`lora` were flagged `near_floor`, against 0 of 49 `lmhead`.
+
+`gemm.perf.random`'s measurement now puts `batch_n` calls in one graph, each on its own operand
+copy so no call warms the next one's L2, and divides.  A kernel far above the floor still gets
+`batch_n = 1` and its rows did not move.  `bat` on the per-case table and `calls per graph` under
+each pairing say which rows were taken which way; a row with no `bat` predates the batch and is
+not comparable to a batched row on a small shape.
 
 CHECKPOINTING
 -------------
@@ -121,8 +172,8 @@ import statistics
 import sys
 import time
 
-from ._common import CACHE, HERE, writer
-from .gemm_perf_random import ARM_COLS, ARMS, make_flush_buffer
+from ._common import CACHE, GRAPH_FLOOR_SHARE, HERE, writer
+from .gemm_perf_random import ARM_COLS, ARM_LABEL, ARM_NAME, ARMS, make_flush_buffer
 
 NAME = "gemm.perf.static"
 ORDER = 30
@@ -253,9 +304,9 @@ def _measure_opts(args, cfgenv, worker):
     Built ON TOP of the random step's own `measurement_options` rather than beside it, so a knob
     added over there arrives here already carrying its default instead of becoming a KeyError in
     the middle of a run. Only the knobs this step names itself are overridden. `search_s` and
-    `refine` -- arm 3's per-shape search budget and how many of its fastest configurations are
+    `refine` -- bitequiv_autotuning's per-shape search budget and how many of its fastest configurations are
     re-timed -- are deliberately left at the random step's value unless PERF_STATIC_* sets them,
-    because a different search budget would make the two steps' 4/3 ratios incomparable.
+    because a different search budget would make the two steps' numbers incomparable.
     """
     from . import gemm_perf_random as R
     opts = R.measurement_options(args)
@@ -310,11 +361,43 @@ def _pause_path():
     return os.path.join(CACHE, "gemm.perf.static.PAUSE")
 
 
-def _done_keys():
-    """(M, N, K, dtype, arm) already on disk. A shape whose every arm is here is skipped."""
-    done = set()
+def _would_batch(arms):
+    """Would the batch rule put more than one call in a graph for this shape?
+
+    The same arithmetic as `pick_batch`, run on the floor and the fastest arm the shape ALREADY
+    RECORDED instead of on a fresh probe. It is only used to decide whether a row taken before
+    the batch existed is worth taking again, so an estimate is enough; the re-measurement probes
+    properly. A `near_floor` row is a subset of what this selects -- near the floor means the
+    floor is over a third of the number, and the rule batches from about a twentieth.
+    """
+    fl = next((r.get("floor_ms") for r in arms.values() if r.get("floor_ms")), None)
+    ts = [r.get("device_flush_ms") for r in arms.values() if r.get("device_flush_ms")]
+    if not fl or not ts:
+        return False
+    return math.ceil(fl / (GRAPH_FLOOR_SHARE * max(min(ts) - fl, 1e-4))) > 1
+
+
+def _done_keys(redo_unbatched=False, redo_contended=False):
+    """(M, N, K, dtype, arm) already on disk. A shape whose every arm is here is skipped.
+
+    Two switches take work back. Both are IDEMPOTENT -- what they select stops being selected
+    once the shape has been re-measured -- so either can be left on and an interrupted run
+    resumed with the same command. Both KEEP the old rows: the report reads the LAST record for
+    an arm, so a re-measurement wins and the row it replaced stays on disk to compare against.
+
+    `redo_unbatched` takes back the shapes that were measured one call per graph, before the
+    batch existed, AND whose own recorded floor says the batch would now change them. A shape
+    the rule would leave at one call per graph is left alone: its existing row IS what the new
+    code would produce, so re-measuring it would only add noise. `_would_batch` is the test.
+
+    `redo_contended` takes back the shapes whose latest rows were measured while another process
+    was on this GPU. Those are not measurements -- shared SMs, L2 and bandwidth make the kernel
+    genuinely slower and no per-process counter can subtract that back out -- so the only honest
+    move is to take them again on a quiet card.
+    """
+    last = {}
     if not os.path.exists(_jsonl_path()):
-        return done
+        return set()
     with open(_jsonl_path(), errors="replace") as f:
         for line in f:
             line = line.strip()
@@ -324,8 +407,18 @@ def _done_keys():
                 r = json.loads(line)
             except Exception:
                 continue  # a torn last line from a kill; that shape is simply redone
-            done.add((r.get("M"), r.get("N"), r.get("K"), r.get("dtype"), r.get("arm")))
-    return done
+            last[(r.get("M"), r.get("N"), r.get("K"), r.get("dtype"), r.get("arm"))] = r
+    by_shape = {}
+    for key, r in last.items():
+        by_shape.setdefault(key[:4], {})[key[4]] = r
+    drop = set()
+    for shape, arms in by_shape.items():
+        rs = arms.values()
+        if redo_unbatched and not any(r.get("batch_n") for r in rs) and _would_batch(arms):
+            drop.add(shape)
+        if redo_contended and any(r.get("contended") for r in rs):
+            drop.add(shape)
+    return {k for k in last if k[:4] not in drop}
 
 
 def _claim(idx, me, lease_s):
@@ -392,9 +485,11 @@ def _dist(vals, top=4):
     return " ".join(f"{k}:{n}" for k, n in sorted(c.items(), key=lambda kv: -kv[1])[:top])
 
 
-# num / den, as "how many times faster is the numerator arm", so above 1 means num is faster.
-RATIOS = (("4/2b", "ours", "torch_triton"), ("4/3", "ours", "pre_search"), ("3/1", "pre_search", "cublas"),
-          ("4/1", "ours", "cublas"), ("2a/1", "torch_auto", "cublas"))
+# Every arm against ONE baseline, cuBLAS, as cuBLAS time over that arm's time, so above 1 means
+# faster than cuBLAS. Ratios between two arms are deliberately not reported: see the module
+# docstring. `BASELINE` is not in the list because its own ratio is 1 by construction.
+BASELINE = "cublas"
+VS_BASELINE = ("torch_auto", "torch_triton", "pre_search", "ours")
 
 
 def _rows():
@@ -423,8 +518,15 @@ def _by_case(rows):
 
 
 def _ratios(arms, timing):
+    """{arm: cuBLAS time / that arm's time}, so above 1 means faster than cuBLAS."""
     t = {k: (arms.get(k) or {}).get(timing) for k in ARMS}
-    return {name: (t[den] / t[num]) for name, num, den in RATIOS if t.get(num) and t.get(den)}
+    if not t.get(BASELINE):
+        return {}
+    return {k: t[BASELINE] / t[k] for k in VS_BASELINE if t.get(k)}
+
+
+# One letter per arm whose byte check came up short, for the flags column.
+_BIT_FLAG = {"ours": "G", "pre_search": "B", "torch_auto": "T"}
 
 
 def _flags(arms):
@@ -434,10 +536,10 @@ def _flags(arms):
         f += "F"
     if any((arms.get(k) or {}).get("captured") == 0 for k in ARMS):
         f += "!"
-    for k in ("ours", "pre_search", "torch_auto"):
+    for k, letter in _BIT_FLAG.items():
         r = arms.get(k) or {}
         if r.get("bit_total") and int(r.get("bit_ok") or 0) < int(r["bit_total"]):
-            f += {"ours": "4", "pre_search": "3", "torch_auto": "2"}[k]
+            f += letter
     if any((arms.get(k) or {}).get("declined") for k in ARMS):
         f += "d"
     if any((arms.get(k) or {}).get("error") for k in ARMS):
@@ -469,16 +571,35 @@ def _report(lines, meta, timing="device_flush_ms"):
           f"{meta.get('fp8_skipped')} fp8 candidates dropped for K % 16")
         P(f"  dtype rule: fp16 on every case, fp8 additionally on {', '.join(FP8_PAIRINGS)}")
         if meta.get("max_configs"):
-            P(f"  WARNING: arm 3's space was BOUNDED at {meta['max_configs']} configurations in "
-              f"this run; `space` and `searched` on each row say by how much")
-    P(f"  timing column: {timing}   ratios are den/num, so above 1 means the first arm is faster")
+            P(f"  WARNING: bitequiv_autotuning's space was BOUNDED at {meta['max_configs']} configurations "
+              f"in this run; `space` and `searched` on each row say by how much")
+    P(f"  timing column: {timing}")
+    P("")
+    P("  The arms, and what a ratio here is")
+    for k in ARMS:
+        P(f"    {ARM_NAME[k]:22} {ARM_LABEL[k]}")
+    P("    Every arm is reported against cuBLAS and against nothing else, as cuBLAS time over")
+    P("    that arm's time, SO ABOVE 1 MEANS FASTER THAN CUBLAS. Ratios between two arms are not")
+    P("    printed: they hide the levels, and where two arms differ in more than one way they")
+    P("    invite a causal reading this measurement cannot support. Four numbers on one baseline")
+    P("    let a reader form whatever comparison they want.")
+    P("    bitequiv_autotuning and gb300_accelerated are BOTH byte-identical to cuBLAS and differ")
+    P("    in how they got there: a search over a configuration space, against rewrites written")
+    P("    for this architecture plus a fitted rule. They differ in two ways at once -- the")
+    P("    kernel and the way its configuration is chosen -- so a comparison covers both.")
+    P("    gb300_accelerated against a torch arm is NOT the price of bit-exactness. They are")
+    P("    different kernels: ours has TMA descriptors, a persistent grid and warp specialization")
+    P("    and Inductor's mm_template has none of them. It is a product comparison.")
 
     # ---- per case ---------------------------------------------------------------------------
     P("")
-    P("  per case")
+    P("  per case. Times are microseconds per call; `x cuBLAS` is cuBLAS over that arm, above 1")
+    P("  faster than cuBLAS. No G, B or T in flags means every draw of that arm was byte-identical.")
     P(f"    {'model':22} {'layer':30} {'pairing':8} {'dt':4} {'M':>6} {'N':>7} {'K':>6} {'mode':13} "
-      f"{'torch pick':12} {'1 cuBLAS':>9} {'2a':>9} {'2b':>9} {'3':>9} {'4':>9} "
-      f"{'4/2b':>6} {'4/3':>6} {'3/1':>6} {'4/1':>6} {'bit4':>6} {'bit3':>6} {'bit2a':>6} flags")
+      f"| microseconds per call {'cublas':>11} {'torch_auto':>10} {'torch_triton':>12} "
+      f"{'bitequiv_autotuning':>19} {'gb300_accelerated':>17} "
+      f"| x cuBLAS {'torch_auto':>10} {'torch_triton':>12} {'bitequiv_autotuning':>19} "
+      f"{'gb300_accelerated':>17} | {'batch':>5} {'floor':>7} flags")
     for key in sorted(cases, key=lambda k: (PAIRINGS.index(k[2]) if k[2] in PAIRINGS else 9, k[6], k[0], k[1])):
         model, layer, pairing, M, N, K, dt = key
         arms = cases[key]
@@ -486,71 +607,79 @@ def _report(lines, meta, timing="device_flush_ms"):
         t = {k: (arms.get(k) or {}).get(timing) for k in ARMS}
         any_row = next(iter(arms.values()), {})
 
-        def ms(x):
-            return f"{x:9.4f}" if x else f"{'-':>9}"
+        def us(x, w):
+            return f"{x*1e3:{w}.3f}" if x else f"{'-':>{w}}"
 
-        def rr(name):
-            return f"{rat[name]:6.3f}" if name in rat else f"{'-':>6}"
+        def rr(k, w):
+            return f"{rat[k]:{w}.3f}" if k in rat else f"{'-':>{w}}"
 
+        bat = next((a.get("batch_n") for a in arms.values() if a.get("batch_n")), None)
+        flr = next((a.get("floor_ms") for a in arms.values() if a.get("floor_ms")), None)
         P(f"    {str(model)[:22]:22} {str(layer)[:30]:30} {str(pairing):8} {str(dt):4} {M:6d} {N:7d} {K:6d} "
-          f"{str(any_row.get('mode') or '-')[:13]:13} {str((arms.get('torch_auto') or {}).get('pick') or '-')[:12]:12} "
-          f"{ms(t.get('cublas'))} {ms(t.get('torch_auto'))} {ms(t.get('torch_triton'))} "
-          f"{ms(t.get('pre_search'))} {ms(t.get('ours'))} "
-          f"{rr('4/2b')} {rr('4/3')} {rr('3/1')} {rr('4/1')} "
-          f"{_bits(arms, 'ours'):>6} {_bits(arms, 'pre_search'):>6} {_bits(arms, 'torch_auto'):>6} {_flags(arms)}")
+          f"{str(any_row.get('mode') or '-')[:13]:13} "
+          f"| {'':21} {us(t.get('cublas'), 11)} {us(t.get('torch_auto'), 10)} {us(t.get('torch_triton'), 12)} "
+          f"{us(t.get('pre_search'), 19)} {us(t.get('ours'), 17)} "
+          f"| {'':8} {rr('torch_auto', 10)} {rr('torch_triton', 12)} {rr('pre_search', 19)} "
+          f"{rr('ours', 17)} | {(str(bat) if bat else '-'):>5} "
+          f"{(f'{flr*1e3:7.3f}' if flr else '      -')} {_flags(arms)}")
 
     # ---- per pairing ------------------------------------------------------------------------
     def block(title, groups):
+        """One row per (group, arm), every arm on the cuBLAS baseline.
+
+        One row per group with an arm in every column was the older shape of this table and it
+        made the levels hard to see; a row per arm puts the four numbers under each other.
+        """
         P("")
         P(f"  {title}")
-        P(f"    {'group':16} {'cases':>5} {'shapes':>6} {'4/2b geo':>9} {'[p25':>6} {'med':>6} {'p75]':>6} "
-          f"{'4/3 geo':>8} {'[p25':>6} {'med':>6} {'p75]':>6} {'3/1':>6} {'4/1':>6} {'2a/1':>6} "
-          f"{'bit 4':>9} {'bit 3':>9} {'bit 2a':>9} {'flr':>4} {'unc':>4}")
+        P(f"    {'group':16} {'arm':20} {'cases':>5} {'shapes':>6} {'x cuBLAS geo':>12} {'[p25':>6} "
+          f"{'med':>6} {'p75]':>6} {'worst':>6} {'best':>6} {'us/call geo':>11} {'byte-identical':>16} "
+          f"{'near floor':>10} {'uncaptured':>10}")
         for gname in sorted(groups, key=lambda g: (PAIRINGS.index(g.split("/")[0])
                                                    if g.split("/")[0] in PAIRINGS else 9, g)):
             keys = groups[gname]
-            rat = {name: [] for name, _, _ in RATIOS}
-            bits = {"ours": [0, 0], "pre_search": [0, 0], "torch_auto": [0, 0]}
-            modes, picks, near, unc = [], [], 0, 0
+            rat = {k: [] for k in VS_BASELINE}
+            tms = {k: [] for k in ARMS}
+            bits = {k: [0, 0] for k in _BIT_FLAG}
+            modes, picks, bats = [], [], []
+            near = {k: 0 for k in ARMS}
+            unc = {k: 0 for k in ARMS}
             for key in keys:
                 arms = cases[key]
-                for name, v in _ratios(arms, timing).items():
-                    rat[name].append((v, key))
-                for k in bits:
+                for k, v in _ratios(arms, timing).items():
+                    rat[k].append((v, key))
+                for k in ARMS:
                     r = arms.get(k) or {}
-                    if r.get("bit_total"):
+                    if r.get(timing):
+                        tms[k].append(r[timing] * 1e3)
+                    near[k] += 1 if r.get("near_floor") else 0
+                    unc[k] += 1 if r.get("captured") == 0 else 0
+                    if k in bits and r.get("bit_total"):
                         bits[k][0] += int(r.get("bit_ok") or 0)
                         bits[k][1] += int(r["bit_total"])
                 modes.append(next((a.get("mode") for a in arms.values() if a.get("mode")), None))
                 picks.append((arms.get("torch_auto") or {}).get("pick"))
-                near += 1 if any((arms.get(k) or {}).get("near_floor") for k in ARMS) else 0
-                unc += 1 if any((arms.get(k) or {}).get("captured") == 0 for k in ARMS) else 0
-            v = {n: [x for x, _ in rat[n]] for n in rat}
+                bats.append(next((a.get("batch_n") for a in arms.values() if a.get("batch_n")), None))
+            nsh = len({(k[3], k[4], k[5], k[6]) for k in keys})
 
             def num(x, w=6):
                 return f"{x:{w}.3f}" if x is not None else f"{'-':>{w}}"
 
-            def bit(k):
-                o, t = bits[k]
-                return f"{o}/{t}" if t else "-"
-
-            nsh = len({(k[3], k[4], k[5], k[6]) for k in keys})
-            P(f"    {gname:16} {len(keys):5d} {nsh:6d} "
-              f"{num(_geo(v['4/2b']), 9)} {num(_pct(v['4/2b'], .25))} {num(_pct(v['4/2b'], .5))} "
-              f"{num(_pct(v['4/2b'], .75))} "
-              f"{num(_geo(v['4/3']), 8)} {num(_pct(v['4/3'], .25))} {num(_pct(v['4/3'], .5))} "
-              f"{num(_pct(v['4/3'], .75))} "
-              f"{num(_geo(v['3/1']))} {num(_geo(v['4/1']))} {num(_geo(v['2a/1']))} "
-              f"{bit('ours'):>9} {bit('pre_search'):>9} {bit('torch_auto'):>9} {near:4d} {unc:4d}")
-            for name in ("4/2b", "4/3"):
-                if rat[name]:
-                    lo = min(rat[name])
-                    hi = max(rat[name])
-                    P(f"    {'':16} {name}  worst {lo[0]:6.3f}  {lo[1][0]} {lo[1][1]} {lo[1][6]}"
-                      f"  {lo[1][3]}x{lo[1][4]}x{lo[1][5]}")
-                    P(f"    {'':16} {'':4}  best  {hi[0]:6.3f}  {hi[1][0]} {hi[1][1]} {hi[1][6]}"
-                      f"  {hi[1][3]}x{hi[1][4]}x{hi[1][5]}")
+            for k in ARMS:
+                v = [x for x, _ in rat.get(k, [])]
+                o, tot = bits[k] if k in bits else (0, 0)
+                P(f"    {gname:16} {ARM_NAME[k]:20} {len(keys):5d} {nsh:6d} "
+                  f"{num(_geo(v), 12)} {num(_pct(v, .25))} {num(_pct(v, .5))} {num(_pct(v, .75))} "
+                  f"{num(min(v) if v else None)} {num(max(v) if v else None)} "
+                  f"{num(_geo(tms[k]), 11)} {(f'{o}/{tot}' if tot else '-'):>16} "
+                  f"{near[k]:10d} {unc[k]:10d}")
+                if rat.get(k):
+                    lo, hi = min(rat[k]), max(rat[k])
+                    P(f"    {'':16} {'':20} worst {lo[0]:6.3f} {lo[1][0]} {lo[1][1]} {lo[1][6]} "
+                      f"{lo[1][3]}x{lo[1][4]}x{lo[1][5]}   best {hi[0]:6.3f} {hi[1][0]} {hi[1][1]} "
+                      f"{hi[1][6]} {hi[1][3]}x{hi[1][4]}x{hi[1][5]}")
             P(f"    {'':16} plan modes {_dist(modes)} | torch picks {_dist(picks)}")
+            P(f"    {'':16} calls per graph {_dist(bats, top=6)}")
 
     grp = {}
     for key in cases:
@@ -574,14 +703,24 @@ def _report(lines, meta, timing="device_flush_ms"):
         for k, n in sorted(bad.items(), key=lambda kv: -kv[1])[:25]:
             P(f"    {n:5d}  {k}")
     P("")
-    P("  4/2b is what the bit constraint costs against an unconstrained Triton kernel.")
-    P("  4/3  is what our hand-written rewrites bought over an honest search of the SAME kernels.")
-    P("  Check bit 4 = the total first: where arm 4 was not byte-identical to cuBLAS its time is")
-    P("  not a measurement of anything. bit N counts draws, ten per case.")
-    P("  flags  F near the launch floor (under 3x floor_ms, every ratio compressed toward 1)")
+    P("  Check `byte-identical` equals the total first: where an arm was not byte-identical to")
+    P("  cuBLAS its time is not a measurement of anything. It counts input draws, ten per case.")
+    P("  flags  F near the launch floor (under 3x floor, every ratio compressed toward 1)")
     P("         ! an arm the CUDA graph would not capture   d declined   e error")
-    P("         4/3/2 that arm was not byte-identical to cuBLAS on every draw")
-    P("  flr / unc count cases with a near-floor arm and with an uncaptured arm.")
+    P("         G gb300_accelerated, B bitequiv_autotuning, T torch_auto was not byte-identical")
+    P("           to cuBLAS on every draw")
+    P("")
+    P("  batch is `batch_n`: how many calls went into one CUDA graph, each on its own operand")
+    P("  copy, with the replay divided by that. A one-call replay costs about 6.9 us on this box")
+    P("  before any work of ours runs, which is 2% of an lm_head and 77% of a 2 us expert GEMM,")
+    P("  and every arm pays the same 6.9, so a true 2x on a small shape reads as 1.22x. The batch")
+    P("  divides that fixed cost; a kernel already far above the floor gets batch 1, unchanged.")
+    P("  `-` is a row taken before the batch existed and it is NOT comparable to a batched row on")
+    P("  a small shape. floor is floor_ms at that row's own batch, so F means the same thing at")
+    P("  every batch. It does not fall to zero: graph nodes run one after another and an empty")
+    P("  kernel still takes about 1 us, which a real caller pays too. A GEMM the size of a LoRA")
+    P("  merge stays flagged after batching, and it should -- it is not distinguishable from a")
+    P("  launch.")
     return lines
 
 
@@ -629,13 +768,14 @@ def run(args, env):
     print(f"  fp8 on {', '.join(FP8_PAIRINGS)} only; {len(skipped)} fp8 candidates dropped for K % 16")
     print(f"  records     {_jsonl_path()}")
     print(f"  pause with  touch {_pause_path()}")
-    print(f"  arm 3: space cap {opts['max_configs'] or 'none'}, {opts['search_s']}s budget, "
+    print(f"  bitequiv_autotuning: space cap {opts['max_configs'] or 'none'}, {opts['search_s']}s budget, "
           f"top {opts['refine']} re-timed; {opts['rounds']} rounds, {opts['draws']} byte-check draws")
     if cfgenv["max_configs"]:
-        print("  WARNING: arm 3's space is BOUNDED in this run; every row it touched records both "
+        print("  WARNING: bitequiv_autotuning's space is BOUNDED in this run; every row it touched records both "
               "`space` and `searched`.")
 
-    done = _done_keys()
+    done = _done_keys(redo_unbatched=bool(os.environ.get("PERF_STATIC_REDO_UNBATCHED")),
+                      redo_contended=bool(os.environ.get("PERF_STATIC_REDO_CONTENDED")))
     fh = writer("gemm.perf.static")
     flush = make_flush_buffer(torch)
     deadline = time.time() + args.minutes * 60 if args.minutes and args.minutes > 0 else None

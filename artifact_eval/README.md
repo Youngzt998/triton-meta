@@ -63,19 +63,41 @@ the first `K - (K % block_k)` elements. Mismatches concentrated on `mode=split` 
 are that defect; run `gemm.cublas-bug` before concluding otherwise. The script logs mismatches
 rather than adjudicating them, on purpose — the judgement is yours.
 
-### `gemm.perf.random` and `gemm.perf.static` — bit-exactness costs little — *placeholders*
+### `gemm.perf.random` and `gemm.perf.static` — what a bit-exact GEMM costs
 
-**Claim.** Requiring the output to match cuBLAS bit for bit costs very little performance. This is
-a different and much smaller quantity than the gap between Triton and cuBLAS, and the two are
-easy to conflate.
+**Claim.** A GEMM that must return cuBLAS's exact bytes is not slow. How much of the gap is the
+bit constraint and how much is the kernel is a separate question, and the table is laid out so
+that the two are not conflated.
 
-Three arms per shape, same inputs and same timing. Arm 1 is cuBLAS through the hot closure; it is
-both the baseline and the reference the bits are compared against. Arm 2 is torch with no numerics
-requirement, `torch.compile(mode="max-autotune-no-cudagraphs")`, reported twice — as its autotuner
-actually picks, and as its best Triton template with the extern call excluded. Arm 3 is ours,
-tuned, and byte-identical to arm 1. `gemm.perf.random` runs this on random shapes and groups the
-result by shape family; `gemm.perf.static` runs it on the fixed layer dimensions of real models.
-Run either step for the full design.
+Five arms per shape, same inputs and same timing:
+
+```
+cublas               cuBLAS through the hot closure. THE BASELINE AND THE BIT REFERENCE.
+torch_auto           torch.compile(mode="max-autotune-no-cudagraphs") as its autotuner picks,
+                     extern included. No numerics requirement.
+torch_triton         the same with the extern excluded, so Inductor's own Triton template.
+bitequiv_autotuning  bit-equivalent: the kernel BEFORE the sm_103 rewrites, its configuration
+                     chosen by a search under the bit constraint.
+gb300_accelerated    bit-equivalent: the GB300 rewrites — TMA, a persistent grid, warp
+                     specialization — at the shipped fitted rule.
+```
+
+Every reported number is **cuBLAS time over that arm's time, so above 1 means faster than
+cuBLAS**. There is deliberately no column comparing two non-baseline arms: a ratio between two of
+them hides the level both sit at, and where they differ in more than one way it invites a causal
+reading the measurement cannot support. Four numbers on one baseline let a reader take whatever
+comparison they want — and it is what made it visible that `torch_auto` and `torch_triton` are
+near-identical on every family, i.e. that excluding the extern changes almost nothing.
+
+`gb300_accelerated` against a torch arm is **not** the price of bit-exactness. An unconstrained
+autotuner's space contains the bit-exact configurations, so that ratio could not exceed 1 if the
+two were the same kernel; it does because they are not. It is a product comparison — what a user
+gets by switching. The clean pair is the two bit-equivalent arms: both carry the same constraint
+and differ in the kernel and in how its configuration is chosen.
+
+`gemm.perf.random` runs this on random shapes and groups by shape family; `gemm.perf.static` runs
+it on the fixed layer dimensions of real 2026 open-weight models. Run either step for the full
+design.
 
 These two replace an earlier `gemm.perf`, whose unconstrained arm was a Triton configuration sweep
 we had written ourselves. A ceiling built out of our own kernel is only as good as the
@@ -714,7 +736,7 @@ is silently ignored. `setup.py` also checks `REL_WITH_DEB_INFO` *before*
 
 ## How the timings are taken, and why
 
-Two decisions in the measurement are load-bearing, and both are easy to get wrong if you
+Three decisions in the measurement are load-bearing, and all of them are easy to get wrong if you
 re-implement them.
 
 **cuBLAS is timed through a hot closure.** `cublas_matmul` rebuilds the handle, all four layouts,
@@ -728,5 +750,30 @@ If you ever see a number like that, suspect the measurement, not the kernel.
 **Reported times are device time.** Timing the Python call brackets it with CUDA events on the
 stream, so every microsecond the GPU spends idle waiting on the host is counted — and the two arms
 are asymmetric there by an order of magnitude, one being a single ctypes call and the other a
-Triton launcher. On a 30-microsecond GEMM that measures the launcher. Each call is captured in a
+Triton launcher. On a 30-microsecond GEMM that measures the launcher. The call is captured in a
 CUDA graph and replays are timed with the L2 cache flushed in between.
+
+**A small kernel is timed several calls at a time.** A graph replay costs about 6.9 microseconds
+on a GB300 before any work of ours runs. That is 2% of a 289-microsecond `lm_head` and 77% of a
+2-microsecond MoE expert GEMM — and both arms pay the same 6.9, so a true 2x on the small one
+comes out as 1.22x. Those rows are not noisy, they are flattened toward 1, which reads as "the
+arms perform about the same" when nothing of the kind was measured. So `graph_ms` captures
+`batch_n` calls into one graph and divides; `pick_batch` sizes it from a probe so that the fixed
+part of the replay is about 5% of a per-call time, and a kernel already far above the floor keeps
+`batch_n = 1` — the same measurement as before, so those rows did not move. Every row records its
+`batch_n`.
+
+The batch runs on `batch_n` **distinct operand copies**, one per call. The flush happens once per
+replay rather than per call, so a batch over one operand set would leave calls 2..N reading a warm
+L2 — measured at 1.7x to 2.5x faster on a MoE expert weight, which fits in this card's 129 MiB L2.
+A copy per call means no call can leave anything behind for the next, and every call starts cold
+exactly as it does at `batch_n = 1`: the batch changes what the floor costs, not what is timed.
+Flushing inside the graph instead is not an option — evicting a 129 MiB L2 takes a memset of about
+16 microseconds, a larger floor than the 6.9 being removed, and subtracting it back off is a
+difference of two large numbers where the answer is small.
+
+What is left after batching is about 1 microsecond per call: graph nodes run one after another and
+that is what one empty kernel costs, so it is a floor a real caller pays too. `floor_ms` is that
+empty kernel measured at the row's own `batch_n`, and `near_floor` still means "under three times
+the floor". A GEMM as small as an 80x2048x8 LoRA merge stays flagged, and should — it is not
+distinguishable from a launch.

@@ -41,8 +41,14 @@ WHAT IS ALREADY MEASURED FOR YOU
 --------------------------------
     hot_cublas(L, torch, a, b, kind, out_dtype)   cuBLAS with the handle, layouts, preference and
                                                   heuristic built once; `.run()` is the bare call
-    graph_ms(torch, fn, flush, reps=25)           device time: CUDA-graph capture, median replay,
-                                                  L2 flushed between replays
+    graph_ms(torch, fn, flush, reps=25, batch=1)  device time for ONE call: `batch` of them
+                                                  captured into one CUDA graph, median replay
+                                                  with L2 flushed between replays, divided by
+                                                  `batch`. `fn` may be a list, and then the
+                                                  batch cycles through it -- one operand copy
+                                                  per call, so no call warms the next one's L2
+    pick_batch(torch, calls, flush, floor, ...)   what `batch` this shape should use. 1 when the
+                                                  kernel is already far above the replay floor
     digest(torch, tensor)                         64-bit device-side hash of the raw bytes; equal
                                                   digests means byte-identical output
     make_inputs(torch, M, N, K, kind, rep, seed)  deterministic operands; even `rep` is ordinary
@@ -64,11 +70,12 @@ import textwrap
 # Re-exported unchanged from the driver so a step has one place to import from. The alias
 # `artifact.py` registers for itself means this resolves to the same module object whether the
 # driver was run as a script or imported.
-from artifact import CACHE, DATA, HERE, ROOT, digest, graph_ms, hot_cublas, make_inputs, writer
+from artifact import (CACHE, DATA, GRAPH_BATCH_CAP, GRAPH_FLOOR_SHARE, HERE, ROOT, digest, graph_ms, hot_cublas,
+                      make_inputs, pick_batch, writer)
 
 __all__ = [
-    "CACHE", "DATA", "HERE", "ROOT", "digest", "graph_ms", "hot_cublas", "make_inputs", "writer", "SHAPE_FAMILIES",
-    "draw_shape", "draw_shape_with_family", "print_design"
+    "CACHE", "DATA", "GRAPH_BATCH_CAP", "GRAPH_FLOOR_SHARE", "HERE", "ROOT", "digest", "graph_ms", "hot_cublas",
+    "make_inputs", "pick_batch", "writer", "SHAPE_FAMILIES", "draw_shape", "draw_shape_with_family", "print_design"
 ]
 
 # The regimes `draw_shape_with_family` draws from, in the order it weights them. `gemm.perf.*`

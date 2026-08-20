@@ -34,6 +34,7 @@ import argparse
 import ctypes
 import importlib
 import json
+import math
 import os
 import subprocess
 import sys
@@ -125,25 +126,59 @@ def hot_cublas(L, torch, a, b, kind, out_dtype):
     return h
 
 
-def graph_ms(torch, fn, flush, reps=25):
-    """Device time: capture once, then time replays with L2 flushed between them.
+# How `pick_batch` sizes a graph. A replay costs about 6.9 us on this box before any work of
+# ours runs; `share` is how much of a per-call time we are willing to leave as that floor, and
+# the other two stop a very fast kernel from asking for an unbounded batch.
+GRAPH_BATCH_CAP = 64
+GRAPH_FLOOR_SHARE = 0.05
+GRAPH_BATCH_BYTES = 2 * 2**30
+
+
+def graph_ms(torch, fn, flush, reps=25, batch=1):
+    """Device time for ONE call: capture `batch` of them into a graph, time replays, divide.
 
     Timing the Python call instead would bracket it with CUDA events on the stream, so every
     microsecond the GPU idles waiting on the host is counted -- and the two arms here are wildly
     asymmetric on the host side (one ctypes call against a Triton launcher). On a 30 us GEMM that
     measures the launcher. Returns None if the call cannot be captured.
+
+    WHY `batch`. A replay costs about 6.9 us on a GB300 before any work of ours runs, so a 2 us
+    kernel captured one call at a time reads as 8.7 us: 77% of the measurement is the replay.
+    Both arms pay the same 6.9, so a true 2x reads as 1.22x -- the rows are not noisy, they are
+    flattened toward 1. `batch` calls in one graph divide that fixed cost by `batch`. What is
+    returned is per call, so `batch=1` is exactly the old measurement and a bigger batch only
+    moves the rows the floor was eating. `pick_batch` sizes it per shape.
+
+    WHY `fn` MAY BE A SEQUENCE. The flush runs once per REPLAY, not per call, so calls 2..N of a
+    batch would find call 1's operands in L2 and run warm -- measured at 1.7x to 2.5x faster on
+    a MoE expert weight, which fits in this card's 129 MiB L2. That would not be the same
+    measurement at a different batch, it would be a different measurement. Passing one operand
+    copy per call, which the batch then cycles through, means no call can leave anything behind
+    for another and every one starts as cold as it does at `batch=1`. Flushing inside the graph
+    instead is not an option: evicting a 129 MiB L2 takes a ~16 us memset, a bigger floor than
+    the 6.9 us one being removed, and subtracting it back off is a difference of two large
+    numbers where the answer is small.
     """
+    fns = list(fn) if isinstance(fn, (list, tuple)) else [fn]
+    turn = [0]
+
+    def one():
+        turn[0] += 1
+        return fns[(turn[0] - 1) % len(fns)]()
+
     s = torch.cuda.Stream()
     s.wait_stream(torch.cuda.current_stream())
     with torch.cuda.stream(s):
-        for _ in range(3):
-            fn()
+        for _ in range(3 * len(fns)):
+            one()
     torch.cuda.current_stream().wait_stream(s)
     torch.cuda.synchronize()
     g = torch.cuda.CUDAGraph()
+    turn[0] = 0
     try:
         with torch.cuda.graph(g):
-            fn()
+            for _ in range(batch):
+                one()
     except Exception:
         return None
     for _ in range(3):
@@ -157,7 +192,27 @@ def graph_ms(torch, fn, flush, reps=25):
         y.record()
     torch.cuda.synchronize()
     t = sorted(x.elapsed_time(y) for x, y in ev)
-    return t[len(t) // 2]
+    return t[len(t) // 2] / batch
+
+
+def pick_batch(torch, calls, flush, floor, bytes_per_call=0, cap=GRAPH_BATCH_CAP):
+    """How many calls to put in one graph, from a three-replay probe of each of `calls`.
+
+    Sized on the FASTEST call and used for all of them, so the arms of one shape are compared in
+    the same regime rather than each in its own. A kernel already far above the floor gets 1,
+    which is the old behaviour unchanged -- the point is to bound the change to the rows that
+    need it. `bytes_per_call` is what one call's own operand copy costs, and caps the batch so
+    the copies cannot eat the card.
+    """
+    ts = [t for t in (graph_ms(torch, f, flush, reps=3) for f in calls) if t]
+    if not ts or not floor:
+        return 1
+    work = max(min(ts) - floor, 1e-4)  # per-call time with the replay floor taken off
+    n = math.ceil(floor / (GRAPH_FLOOR_SHARE * work))
+    if bytes_per_call:
+        free = torch.cuda.mem_get_info()[0]
+        n = min(n, max(1, int(min(GRAPH_BATCH_BYTES, free // 4) // bytes_per_call)))
+    return max(1, min(cap, n))
 
 
 _W = {}
