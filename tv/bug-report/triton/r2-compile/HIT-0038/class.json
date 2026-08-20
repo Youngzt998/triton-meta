@@ -1,0 +1,108 @@
+{
+ "key": "crash-assert|assert@ViewOpToLLVM.cpp:246:!isExpensiveView(op.getSrc().getType(), op.getType())",
+ "kind": "crash-assert",
+ "rule": "F2",
+ "sig": "assert@ViewOpToLLVM.cpp:246:!isExpensiveView(op.getSrc().getType(), op.getType())",
+ "culprit": "llir",
+ "detail": "assertion",
+ "count": 2,
+ "examples": [
+  "bch:mode_kernel_b978d037"
+ ],
+ "archs": {
+  "90": 2
+ },
+ "stages": {
+  "llir": 2
+ },
+ "hit": "HIT-0038",
+ "first_seen": 5589.6,
+ "task": {
+  "job": "compile",
+  "spec_id": "bch:mode_kernel_b978d037",
+  "arch": 90,
+  "shape": {
+   "ptr_off": {
+    "sorted_inp": 0,
+    "sorted_indices": 0,
+    "out_value": 2,
+    "out_index": 0
+   },
+   "ptr_ty": {
+    "sorted_inp": "*fp16",
+    "sorted_indices": "*i64",
+    "out_value": "*fp16",
+    "out_index": "*i64"
+   },
+   "scalars": {
+    "M": 2,
+    "N": 3051
+   },
+   "consts": {
+    "BLOCK_M": 4,
+    "BLOCK_N": 512
+   },
+   "dtype_swapped": false
+  },
+  "config": {
+   "num_warps": 4,
+   "num_stages": 3,
+   "num_ctas": 8,
+   "maxnreg": null,
+   "default_dot_input_precision": "tf32",
+   "launch_cooperative_grid": false,
+   "launch_pdl": false,
+   "sanitize_overflow": true,
+   "enable_fp_fusion": false
+  },
+  "draw": {
+   "round": 57,
+   "kidx": 322,
+   "seed": 20260819
+  },
+  "tid": 106710
+ },
+ "stderr": "##R4-STAGE frontend\n##R4-STAGE ttir\n##R4-STAGE ttgir\n##R4-STAGE llir\npython: /home/youngzt/fuzz/triton-public/lib/Conversion/TritonGPUToLLVM/ViewOpToLLVM.cpp:246: virtual LogicalResult (anonymous namespace)::ReshapeOpConversion::matchAndRewrite(ReshapeOp, OpAdaptor, ConversionPatternRewriter &) const: Assertion `!isExpensiveView(op.getSrc().getType(), op.getType())' failed.\n#blocked = #ttg.blocked<{sizePerThread = [1], threadsPerWarp = [32], warpsPerCTA = [4], order = [0], CGALayout = [[1], [2], [0]]}>\n#blocked1 = #ttg.blocked<{sizePerThread = [1, 1], threadsPerWarp = [32, 1], warpsPerCTA = [4, 1], order = [1, 0], CGALayout = [[0, 0], [1, 0], [2, 0]]}>\nmodule attributes {\"ttg.num-ctas\" = 8 : i32, \"ttg.num-warps\" = 4 : i32, ttg.target = \"cuda:90\", \"ttg.threads-per-warp\" = 32 : i32, \"ttng.two-ctas\" = false} {\n  tt.func public @mode_kernel_b978d037(%arg0: !tt.ptr<f16> {tt.divisibility = 16 : i32}, %arg1: !tt.ptr<i64> {tt.divisibility = 16 : i32}, %arg2: !tt.ptr<f16>, %arg3: !tt.ptr<i64> {tt.divisibility = 16 : i32}, %arg4: i32, %arg5: i32) attributes {noinline = false} {\n    %c4_i64 = arith.constant 4 : i64\n    %cst = arith.constant dense<1> : tensor<4xi64, #blocked>\n    %c1_i32 = arith.constant 1 : i32\n    %c0_i32 = arith.constant 0 : i32\n    %0 = tt.get_program_id x : i32\n    %1 = arith.extsi %0 : i32 to i64\n    %2 = arith.muli %1, %c4_i64 : i64\n    %3 = tt.make_range {end = 4 : i32, start = 0 : i32} : tensor<4xi32, #ttg.slice<{dim = 1, parent = #blocked1}>>\n    %4 = tt.make_range {end = 4 : i32, start = 0 : i32} : tensor<4xi32, #blocked>\n    %5 = arith.extsi %4 : tensor<4xi32, #blocked> to tensor<4xi64, #blocked>\n    %6 = arith.extsi %3 : tensor<4xi32, #ttg.slice<{dim = 1, parent = #blocked1}>> to tensor<4xi64, #ttg.slice<{dim = 1, parent = #blocked1}>>\n    %7 = tt.splat %2 : i64 -> tensor<4xi64, #blocked>\n    %8 = tt.splat %2 : i64 -> tensor<4xi64, #ttg.slice<{dim = 1, parent = #blocked1}>>\n    %9 = arith.addi %7, %5 : tensor<4xi64, #blocked>\n    %10 = arith.addi %8, %6 : tensor<4xi64, #ttg.slice<{dim = 1, parent = #blocked1}>>\n    %11 = arith.extsi %arg4 : i32 to i64\n    %12 = tt.splat %11 : i64 -> tensor<4xi64, #blocked>\n    %13 = tt.splat %11 : i64 -> tensor<4xi64, #ttg.slice<{dim = 1, parent = #blocked1}>>\n    %14 = arith.cmpi slt, %10, %13 : tensor<4xi64, #ttg.slice<{dim = 1, parent = #blocked1}>>\n    %15 = arith.cmpi slt, %9, %12 : tensor<4xi64, #blocked>\n    %16 = tt.expand_dims %10 {axis = 1 : i32} : tensor<4xi64, #ttg.slice<{dim = 1, parent = #blocked1}>> -> tensor<4x1xi64, #blocked1>\n    %17 = arith.extsi %arg5 : i32 to i64\n    %18 = tt.splat %17 : i64 -> tensor<4x1xi64, #blocked1>\n    %19 = arith.muli %16, %18 : tensor<4x1xi64, #blocked1>\n    %20 = tt.expand_dims %14 {axis = 1 : i32} : tensor<4xi1, #ttg.slice<{dim = 1, parent = #blocked1}>> -> tensor<4x1xi1, #blocked1>\n    %21 = arith.cmpi sgt, %arg5, %c0_i32 : i32\n    %22 = tt.splat %21 : i1 -> tensor<4x1xi1, #blocked1>\n    %23 = arith.andi %20, %22 : tensor<4x1xi1, #blocked1>\n    %24 = tt.splat %arg0 : !tt.ptr<f16> -> tensor<4x1x!tt.ptr<f16>, #blocked1>\n    %25 = tt.addptr %24, %19 : tensor<4x1x!tt.ptr<f16>, #blocked1>, tensor<4x1xi64, #blocked1>\n    %26 = tt.load %25, %23 : tensor<4x1x!tt.ptr<f16>, #blocked1>\n    %27 = tt.splat %arg1 : !tt.ptr<i64> -> tensor<4x1x!tt.ptr<i64>, #blocked1>\n    %28 = tt.addptr %27, %19 : tensor<4x1x!tt.ptr<i64>, #blocked1>, tensor<4x1xi64, #blocked1>\n    %29 = tt.load %28, %23 : tensor<4x1x!tt.ptr<i64>, #blocked1>\n    %30 = tt.reshape %26 : tensor<4x1xf16, #blocked1> -> tensor<4xf16, #blocked>\n    %31 = tt.reshape %29 : tensor<4x1xi64, #blocked1> -> tensor<4xi64, #blocked>\n    %32:5 = scf.for %arg6 = %c1_i32 to %arg5 step %c1_i32 iter_args(%arg7 = %30, %arg8 = %cst, %arg9 = %30, %arg10 = %31, %arg11 = %cst) -> (tensor<4xf16, #blocked>, tensor<4xi64, #blocked>, tensor<4xf16, #blocked>, tensor<4xi64, #blocked>, tensor<4xi64, #blocked>)  : i32 {\n      %37 = arith.extsi %arg6 : i32 to i64\n      %38 = tt.splat %37 : i64 -> tensor<4x1xi64, #blocked1>\n      %39 = arith.addi %19, %38 : tensor<4x1xi64, #blocked1>\n      %40 = arith.cmpi slt, %arg6, %arg5 : i32\n      %41 = tt.splat %40 : i1 -> tensor<4x1xi1, #blocked1>\n      %42 = arith.andi %20, %41 : tensor<4x1xi1, #blocked1>\n      %43 = tt.addptr %24, %39 : tensor<4x1x!tt.ptr<f16>, #blocked1>, tensor<4x1xi64, #blocked1>\n      %44 = tt.load %43, %42 : tensor<4x1x!tt.ptr<f16>, #blocked1>\n      %45 = tt.reshape %44 : tensor<4x1xf16, #blocked1> -> tensor<4xf16, #blocked>\n      %46 = tt.addptr %27, %39 : tensor<4x1x!tt.ptr<i64>, #blocked1>, tensor<4x1xi64, #blocked1>\n      %47 = tt.load %46, %42 : tensor<4x1x!tt.ptr<i64>, #blocked1>\n      %48 = tt.reshape %47 : tensor<4x1xi64, #blocked1> -> tensor<4xi64, #blocked>\n      %49 = arith.cmpf oeq, %45, %arg7 : tensor<4xf16, #blocked>\n      %50 = arith.addi %arg8, %cst : tensor<4xi64, #blocked>\n      %51 = arith.select %49, %50, %cst : tensor<4xi1, #blocked>, tensor<4xi64, #blocked>\n      %52 = arith.select %49, %arg7, %45 : tensor<4xi1, #blocked>, tensor<4xf16, #blocked>\n      %53 = arith.cmpi sgt, %51, %arg11 : tensor<4xi64, #blocked>\n      %54 = arith.maxsi %51, %arg11 : tensor<4xi64, #blocked>\n      %55 = arith.select %53, %52, %arg9 : tensor<4xi1, #blocked>, tensor<4xf16, #blocked>\n      %56 = arith.select %53, %48, %arg10 : tensor<4xi1, #blocked>, tensor<4xi64, #blocked>\n      scf.yield %52, %51, %55, %56, %54 : tensor<4xf16, #blocked>, tensor<4xi64, #blocked>, tensor<4xf16, #blocked>, tensor<4xi64, #blocked>, tensor<4xi64, #blocked>\n    }\n    %33 = tt.splat %arg2 : !tt.ptr<f16> -> tensor<4x!tt.ptr<f16>, #blocked>\n    %34 = tt.addptr %33, %9 : tensor<4x!tt.ptr<f16>, #blocked>, tensor<4xi64, #blocked>\n    tt.store %34, %32#2, %15 : tensor<4x!tt.ptr<f16>, #blocked>\n    %35 = tt.splat %arg3 : !tt.ptr<i64> -> tensor<4x!tt.ptr<i64>, #blocked>\n    %36 = tt.addptr %35, %9 : tensor<4x!tt.ptr<i64>, #blocked>, tensor<4xi64, #blocked>\n    tt.store %36, %32#3, %15 : tensor<4x!tt.ptr<i64>, #blocked>\n    tt.return\n  }\n}\n\n{-#\n  external_resources: {\n    mlir_reproducer: {\n      pipeline: \"builtin.module(tritongpu-combine-tensor-select-and-if, tritongpu-allocate-warp-groups{instrumented=false}, convert-scf-to-cf{allow-pattern-rollback=true}, gluon-inline, allocate-shared-memory-nv{compute-capability=90 ptx-version=88}, triton-tensor-memory-allocation, triton-nvidia-gpu-proxy-fence-insertion{compute-capability=90}, triton-nvidia-gpu-tmem-barrier-insertion, convert-triton-gpu-to-llvm{compute-capability=90 enable-concurrency-sanitizer=false ptx-version=88}, initialize-ws-cluster-barriers{compute-capability=90 ptx-version=88}, llvm.func(canonicalize-llvm-ir), cse, convert-warp-specialize-to-llvm, convert-nv-gpu-to-llvm, canonicalize{cse-between-iterations=false    max-iterations=10 max-num-rewrites=-1 region-simplify=normal test-convergence=false top-down=true}, cse, symbol-dce, convert-nvvm-to-llvm)\",\n      disable_threading: true,\n      verify_each: true\n    }\n  }\n#-}\n<unknown>:0: error: Failures have been detected while processing an MLIR pass pipeline\n<unknown>:0: note: Pipeline failed while executing [`ConvertTritonGPUToLLVM` on 'builtin.module' operation]: reproducer generated at `std::errs, please share the reproducer above with Triton project.`\n",
+ "exc_msg": "PassManager::run failed",
+ "traceback": "Traceback (most recent call last):\n  File \"/home/youngzt/fuzz/r2-compile/fz/compile1.py\", line 109, in compile_stages\n    mod = compile_ir(mod, metadata)\n          ^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/youngzt/fuzz/triton-public/python/triton/backends/nvidia/compiler.py\", line 645, in <lambda>\n    stages[\"llir\"] = lambda src, metadata: self.make_llir(src, metadata, options, capability)\n                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/youngzt/fuzz/triton-public/python/triton/backends/nvidia/compiler.py\", line 447, in make_llir\n    pm.run(mod, 'make_llir')\nRuntimeError: PassManager::run failed\n",
+ "irverify": null,
+ "shrunk": {
+  "config": {
+   "num_warps": 4,
+   "num_stages": 3,
+   "num_ctas": 8,
+   "maxnreg": null,
+   "default_dot_input_precision": "tf32",
+   "launch_cooperative_grid": false,
+   "launch_pdl": false,
+   "sanitize_overflow": true,
+   "enable_fp_fusion": false
+  },
+  "shape": {
+   "ptr_off": {
+    "sorted_inp": 0,
+    "sorted_indices": 0,
+    "out_value": 0,
+    "out_index": 0
+   },
+   "ptr_ty": {
+    "sorted_inp": "*fp16",
+    "sorted_indices": "*i64",
+    "out_value": "*fp16",
+    "out_index": "*i64"
+   },
+   "scalars": {
+    "M": 2,
+    "N": 3051
+   },
+   "consts": {
+    "BLOCK_M": 2,
+    "BLOCK_N": 256
+   },
+   "dtype_swapped": false
+  },
+  "arch": 90,
+  "spec_id": "bch:mode_kernel_b978d037"
+ },
+ "shrink_state": "done"
+}

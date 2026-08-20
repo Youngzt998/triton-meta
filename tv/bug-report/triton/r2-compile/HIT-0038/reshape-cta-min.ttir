@@ -1,0 +1,11 @@
+// Plain TTIR: a rank-2 -> rank-1 tt.reshape and nothing else.
+module {
+  tt.func public @reshape_cta_min(%arg0: !tt.ptr<i32>) {
+    %0 = tt.make_range {end = 2 : i32, start = 0 : i32} : tensor<2xi32>
+    %1 = tt.reshape %0 : tensor<2xi32> -> tensor<2x1xi32>
+    %2 = tt.reshape %1 : tensor<2x1xi32> -> tensor<2xi32>
+    %3 = tt.splat %arg0 : !tt.ptr<i32> -> tensor<2x!tt.ptr<i32>>
+    tt.store %3, %2 : tensor<2x!tt.ptr<i32>>
+    tt.return
+  }
+}
