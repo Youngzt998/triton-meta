@@ -12,19 +12,33 @@ git rev-parse --abbrev-ref HEAD          # should be artifact-eval-submission
 nvidia-smi                                # pick a GPU nobody else is using
 ```
 
-Two things must be set on every invocation:
+Three things, and the first one is the one that catches people:
 
 ```
 export PYTHONPATH=$(git rev-parse --show-toplevel)   # bitequiv is not installed
 export CUDA_VISIBLE_DEVICES=0                        # a free one
-python artifact_eval/artifact.py --list
+PY=$PYTHONPATH/.venv/bin/python                      # torch and triton live ONLY here
+$PY artifact_eval/artifact.py --list
 ```
+
+**Use `.venv/bin/python`.** There is no `python` on `PATH` on this box and the system `python3` has
+no torch, so a bare `python artifact_eval/artifact.py` fails before it starts.
 
 Pin one GPU. A shared GPU does not change the bit results, but it makes every timing meaningless,
 and two of the steps refuse to time on a busy card rather than record a bad number.
 
 Python 3.12, PyTorch 2.12.0+cu130, Triton 3.8.0+fb. `bitequiv/ptx_reduction.py` needs
 `pyptx==0.1.1`. Nothing else has to be installed.
+
+Nothing else has to be exported either. Every step option has a default and no step needs a
+variable set in order to run; the tables in `README.md` are for making a step *shorter*.
+`checker.corpus` is the one step with an input that does not ship, and with no corpus it prints how
+to get one and exits 0 rather than failing.
+
+One thing is set for you and you cannot avoid it: importing the step modules turns on
+`TRITON_ALWAYS_COMPILE=1` for the whole process, so **every** step runs with Triton's on-disk
+kernel cache off. The two `inner_tree` steps need it or their gates are meaningless. It changes no
+measured value, only cost. `README.md`'s quick start explains it in full.
 
 ## 2. The eight steps, and what each costs
 
@@ -154,8 +168,12 @@ latter without saying so. The full recipe is in `README.md`.
 
 ## 8. Please do not
 
-Do not modify `artifact.py`, `steps/`, `bitequiv/`, or anything under `data/`. Do not commit
-anything from `cache/` — it is regenerated, not archived. Do not hand-edit a `run_*.txt`: each one
-is the captured output of its own step and the step regenerates it. If a measurement seems wrong,
-report what you saw and the contents of `data/env.csv` rather than adjusting the script to make it
-look right.
+Do not modify `artifact.py`, `steps/`, `bitequiv/`, or anything under `data/`. Do not hand-edit a
+`run_*.txt`: each one is the captured output of its own step and the step regenerates it. If a
+measurement seems wrong, report what you saw and the contents of `data/env.csv` rather than
+adjusting the script to make it look right.
+
+`cache/` is live and is not committed. The frozen copy of it that ships is `data/records/`, gzipped
+— see that directory's README. Do not overwrite `data/records/` with a `cache/` you have added your
+own smoke-test rows to; if you are testing, copy `cache/` aside first and put it back, or move it
+aside and let the run start from an empty one.

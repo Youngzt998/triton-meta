@@ -1,0 +1,279 @@
+inner_tree.bitmatch -- does pinning the reduction order actually pin the bits?
+======================================================================================================================
+
+  when                  2026-08-20 15:22:36
+  device                NVIDIA GB300  (sm_103)
+  triton                3.8.0+fb   torch 2.12.0+cu130   commit f4591284ed66
+  gpu                   CUDA_VISIBLE_DEVICES=0   (nothing here is timed, so a neighbour on the same device changes no number)
+
+  claim   with reduction_ordering=inner_tree, changing the layout knobs does not change a single
+          output byte; with unordered, on the same kernels and the same inputs, it does.
+
+  cell    a fixed (kernel, dtype, enable_fp_fusion, ordering). Inside it the layout axes are swept,
+          every point runs on the same draws, and the outputs are grouped by their exact bytes.
+          The cell is invariant when that group count is 1.
+
+  swept   num_warps num_stages -- jointly, all 6 x 6 of them, because a mode that
+          survives each axis alone and breaks on the pair is what a one-axis sweep misses
+          num_warps=1,2,4,8,16,32 num_stages=1,2,3,4,5,6
+  fixed   reduction_ordering, enable_fp_fusion, dtype. All three are genuinely bit-relevant, so
+          sweeping them would manufacture a failure that says nothing about the ordering. block_n is
+          deliberately absent for the same reason: on a chunked reduction inner_tree fixes the order
+          inside one tl.sum, not the accumulation across loop iterations.
+
+  seeds   5 draws per configuration, wide exponent range and alternating signs so the sum cancels;
+          on tame data almost any regrouping rounds to the same bits and the check passes everything
+
+  space   52 (kernel, dtype, enable_fp_fusion) triples -> 104 cells -> 3744 compile-and-launch points
+
+SELF-CHECKS
+  TRITON_ALWAYS_COMPILE            1
+  TRITON_STRICT_REDUCTION_ORDERING NOT SET   (not relied on: it does nothing for a kernel that takes
+                                   reduction_ordering as a constexpr, which is all of these, so the ordering
+                                   is passed explicitly on every build instead)
+  a layout knob changes the IR     YES  (sum_3d_outer f16 num_warps 4 vs 8)
+  the ordering changes the IR      YES  (sum_3d_outer f16 unordered vs inner_tree at num_warps=4)
+  every kernel reproduces itself   YES   (26/26 (kernel, dtype) pairs)
+
+THE CELLS
+======================================================================================================================
+
+kernel                   suite      dtype  cells  points  what it is
+--------------------------------------------------------------------
+sum_3d_outer             synthetic  f16        4     144  [B=64,M=8,N=16] sum over the OUTER axis: the most strided reduce axis in the table
+sum_3d_outer             synthetic  fp8        4     144  [B=64,M=8,N=16] sum over the OUTER axis: the most strided reduce axis in the table
+sum_2d_col               synthetic  f16        4     144  [M=256,C=32] column sum over axis 0: reduce the non-contiguous axis
+sum_2d_col               synthetic  fp8        4     144  [M=256,C=32] column sum over axis 0: reduce the non-contiguous axis
+sum_2d_col_big           synthetic  f16        4     144  [M=1024,C=32] the same at four times the reduce extent, a 32K-element tile
+sum_2d_col_big           synthetic  fp8        4     144  [M=1024,C=32] the same at four times the reduce extent, a 32K-element tile
+sum_2d_axis0             synthetic  f16        4     144  [M=128,C=32] the same at a quarter of it
+sum_2d_axis0             synthetic  fp8        4     144  [M=128,C=32] the same at a quarter of it
+col_exp_sum              synthetic  f16        4     144  [M=256,C=32] sum(exp(x)) over axis 0: exp widens the leaves to f32 whatever the input was
+col_exp_sum              synthetic  fp8        4     144  [M=256,C=32] sum(exp(x)) over axis 0: exp widens the leaves to f32 whatever the input was
+col_bf16                 synthetic  bf16       4     144  [M=256,C=32] bf16 input, f32 accumulate: the one kernel whose dtype is pinned in its own body
+col_sum_loop             synthetic  f16        4     144  [M=512,C=32] column sum as a for-loop over 128-row chunks: loop structure around the reduce
+col_sum_loop             synthetic  fp8        4     144  [M=512,C=32] column sum as a for-loop over 128-row chunks: loop structure around the reduce
+col_dot                  synthetic  f16        4     144  [M=256,C=32] sum(a*b) over axis 0: a mul-fed reduce, which the pass declines on purpose
+col_dot                  synthetic  fp8        4     144  [M=256,C=32] sum(a*b) over axis 0: a mul-fed reduce, which the pass declines on purpose
+A_rms_norm_fwd           inductor   f32        4     144  RMS-norm forward: one sum of x*x over the contiguous 256-wide feature axis, then rsqrt and affine
+C_rms_norm_bwd_2reduce   inductor   f32        4     144  RMS-norm backward: two sums where the second one's input depends on the first one's result
+D_masked_global_sum      inductor   f32        4     144  MSE-loss tail: 608 live elements zero-padded into a 1024 tile, summed down to one scalar
+E_triu_masked_rowsum     inductor   f32        4     144  masked per-row sum at the odd extent 235, padded into 256
+G_plain_sum_looped       inductor   f32        4     144  looped sum: a running accumulate across 128-wide chunks, then one tree-reduce at the end
+H_mean_permute           inductor   f32        4     144  mean over a permuted, contiguous 256-wide axis
+I_bias_grad_dim0         inductor   f32        4     144  dbias = grad.sum(dim=0), [512,256] -> [256]: the reduce axis is strided by xnumel while the kept axis is contiguous, which is the shape the pass exists for
+J_epilogue_colsum_dim0   inductor   f32        4     144  matmul-epilogue column sum, [512,64] -> [64]: the same shape with a narrow kept axis, one tile
+layernorm_bwd_dwdb       zoo        f32        4     144  LayerNorm backward weight gradient: two column sums over the 64 partial rows, [64,2048] -> two [2048] vectors
+col_max                  control    f16        4     144  [M=256,C=32] column MAX over axis 0: order-invariant as an operation, so it must come back invariant in BOTH arms -- the harness's own control
+col_max                  control    f32        4     144  [M=256,C=32] column MAX over axis 0: order-invariant as an operation, so it must come back invariant in BOTH arms -- the harness's own control
+
+Kernel bodies are imported, not retyped, so they can be diffed against their source:
+    sum_3d_outer             bitequiv/evaluation/eval_kernels.py :: _k_sum3d_outer
+    sum_2d_col               bitequiv/evaluation/eval_kernels.py :: _k_sum2d_axis0
+    sum_2d_col_big           bitequiv/evaluation/eval_kernels.py :: _k_sum2d_axis0
+    sum_2d_axis0             bitequiv/evaluation/eval_kernels.py :: _k_sum2d_axis0
+    col_exp_sum              bitequiv/evaluation/eval_kernels.py :: _k_col_exp_sum
+    col_bf16                 bitequiv/evaluation/eval_kernels.py :: _k_col_bf16
+    col_sum_loop             bitequiv/evaluation/eval_kernels.py :: _k_col_sum_loop
+    col_dot                  bitequiv/evaluation/eval_kernels.py :: _k_col_dot
+    A_rms_norm_fwd           bitequiv/evaluation/realistic_inductor_kernels.py :: A_rms_norm_fwd
+    C_rms_norm_bwd_2reduce   bitequiv/evaluation/realistic_inductor_kernels.py :: C_rms_norm_bwd_2reduce
+    D_masked_global_sum      bitequiv/evaluation/realistic_inductor_kernels.py :: D_masked_global_sum
+    E_triu_masked_rowsum     bitequiv/evaluation/realistic_inductor_kernels.py :: E_triu_masked_rowsum
+    G_plain_sum_looped       bitequiv/evaluation/realistic_inductor_kernels.py :: G_plain_sum_looped
+    H_mean_permute           bitequiv/evaluation/realistic_inductor_kernels.py :: H_mean_permute
+    I_bias_grad_dim0         bitequiv/evaluation/realistic_inductor_kernels.py :: RED_colsum_dim0
+    J_epilogue_colsum_dim0   bitequiv/evaluation/realistic_inductor_kernels.py :: RED_colsum_dim0
+    layernorm_bwd_dwdb       bitequiv/evaluation/benchmark_kernels.py :: _norm_bwd_dwdb_kernel
+    col_max                  bitequiv/evaluation/eval_kernels.py :: _k_col_max
+
+NOT MEASURED, and why:
+    B_layernorm_welford_gather realistic_inductor_kernels.py GROUP 1
+        no reduction_ordering parameter: a Welford combine is not an ordered add-reduction, so inner_tree does not apply and the pass has nothing to preserve
+    F_cumsum_scan              realistic_inductor_kernels.py GROUP 1
+        no reduction_ordering parameter: tl.associative_scan is a scan, not a tt.reduce, and the pass walks tt.reduce only
+    GROUP 2 and later          realistic_inductor_kernels.py
+        inspect-only reference corpus -- hard-coded shapes and torch._inductor runtime helpers, not runnable as they stand; that file's own docstring says so
+
+TOTAL 104 cells x 36 configurations = 3744 points
+
+
+THE PAIRS -- one line per (kernel, dtype, enable_fp_fusion), both arms side by side
+======================================================================================================================
+
+`cls` is the number of distinct byte outputs the 36 configurations produced; 1 means the layout
+knobs did not move a single byte. `ran` is how many of the 36 compiled and launched -- a cell that
+lost most of its space is not clean, it is empty. The argument is the pair: `inner_tree cls = 1` says
+something only when `unordered cls > 1` on the same kernel, the same dtype and the same inputs. Where it
+does not, the row is marked `no evidence` and is not counted. The CSV carries one row per cell, not pair.
+
+kernel                   dtype  fpf | it_cls  it_ran | un_cls  un_ran | sens | verdict (inner_tree arm)               split
+---------------------------------------------------------------------------------------------------------------------------
+A_rms_norm_fwd           f32    off |      1   36/36 |      3   36/36 |    1 | invariant                              num_warps
+A_rms_norm_fwd           f32     on |      1   36/36 |      3   36/36 |    1 | invariant                              num_warps
+C_rms_norm_bwd_2reduce   f32    off |      1   36/36 |      3   36/36 |    1 | invariant                              num_warps
+C_rms_norm_bwd_2reduce   f32     on |      1   36/36 |      3   36/36 |    1 | invariant                              num_warps
+D_masked_global_sum      f32    off |      3   36/36 |      3   36/36 |    1 | NOT INVARIANT                          num_warps
+D_masked_global_sum      f32     on |      3   36/36 |      3   36/36 |    1 | NOT INVARIANT                          num_warps
+E_triu_masked_rowsum     f32    off |      1   36/36 |      4   36/36 |    1 | invariant                              num_warps
+E_triu_masked_rowsum     f32     on |      1   36/36 |      4   36/36 |    1 | invariant                              num_warps
+G_plain_sum_looped       f32    off |      1   36/36 |      6   36/36 |    1 | invariant                              num_warps
+G_plain_sum_looped       f32     on |      1   36/36 |      6   36/36 |    1 | invariant                              num_warps
+H_mean_permute           f32    off |      1   36/36 |      3   36/36 |    1 | invariant                              num_warps
+H_mean_permute           f32     on |      1   36/36 |      3   36/36 |    1 | invariant                              num_warps
+I_bias_grad_dim0         f32    off |      1   36/36 |      6   36/36 |    1 | invariant                              num_warps
+I_bias_grad_dim0         f32     on |      1   36/36 |      6   36/36 |    1 | invariant                              num_warps
+J_epilogue_colsum_dim0   f32    off |      1   36/36 |      6   36/36 |    1 | invariant                              num_warps
+J_epilogue_colsum_dim0   f32     on |      1   36/36 |      6   36/36 |    1 | invariant                              num_warps
+col_bf16                 bf16   off |      1   36/36 |      6   36/36 |    1 | invariant                              num_warps
+col_bf16                 bf16    on |      1   36/36 |      6   36/36 |    1 | invariant                              num_warps
+col_dot                  f16    off |      1   36/36 |      6   36/36 |    1 | invariant                              num_warps
+col_dot                  f16     on |      1   36/36 |      6   36/36 |    1 | invariant                              num_warps
+col_dot                  fp8    off |      1   36/36 |      6   36/36 |    1 | invariant                              num_warps
+col_dot                  fp8     on |      1   36/36 |      6   36/36 |    1 | invariant                              num_warps
+col_exp_sum              f16    off |      1   36/36 |      6   36/36 |    1 | invariant                              num_warps
+col_exp_sum              f16     on |      1   36/36 |      6   36/36 |    1 | invariant                              num_warps
+col_exp_sum              fp8    off |      1   36/36 |      6   36/36 |    1 | invariant                              num_warps
+col_exp_sum              fp8     on |      1   36/36 |      6   36/36 |    1 | invariant                              num_warps
+col_max                  f16    off |      1   36/36 |      1   36/36 |    0 | control: invariant, as it must be      
+col_max                  f16     on |      1   36/36 |      1   36/36 |    0 | control: invariant, as it must be      
+col_max                  f32    off |      1   36/36 |      1   36/36 |    0 | control: invariant, as it must be      
+col_max                  f32     on |      1   36/36 |      1   36/36 |    0 | control: invariant, as it must be      
+col_sum_loop             f16    off |      1   36/36 |      6   36/36 |    1 | invariant                              num_warps
+col_sum_loop             f16     on |      1   36/36 |      6   36/36 |    1 | invariant                              num_warps
+col_sum_loop             fp8    off |      1   36/36 |      1   36/36 |    0 | no evidence: unordered did not differ  
+col_sum_loop             fp8     on |      1   36/36 |      1   36/36 |    0 | no evidence: unordered did not differ  
+layernorm_bwd_dwdb       f32    off |      1   36/36 |      5   36/36 |    1 | invariant                              num_warps
+layernorm_bwd_dwdb       f32     on |      1   36/36 |      5   36/36 |    1 | invariant                              num_warps
+sum_2d_axis0             f16    off |      1   36/36 |      6   36/36 |    1 | invariant                              num_warps
+sum_2d_axis0             f16     on |      1   36/36 |      6   36/36 |    1 | invariant                              num_warps
+sum_2d_axis0             fp8    off |      1   36/36 |      1   36/36 |    0 | no evidence: unordered did not differ  
+sum_2d_axis0             fp8     on |      1   36/36 |      1   36/36 |    0 | no evidence: unordered did not differ  
+sum_2d_col               f16    off |      1   36/36 |      6   36/36 |    1 | invariant                              num_warps
+sum_2d_col               f16     on |      1   36/36 |      6   36/36 |    1 | invariant                              num_warps
+sum_2d_col               fp8    off |      1   36/36 |      1   36/36 |    0 | no evidence: unordered did not differ  
+sum_2d_col               fp8     on |      1   36/36 |      1   36/36 |    0 | no evidence: unordered did not differ  
+sum_2d_col_big           f16    off |      1   36/36 |      6   36/36 |    1 | invariant                              num_warps
+sum_2d_col_big           f16     on |      1   36/36 |      6   36/36 |    1 | invariant                              num_warps
+sum_2d_col_big           fp8    off |      1   36/36 |      1   36/36 |    0 | no evidence: unordered did not differ  
+sum_2d_col_big           fp8     on |      1   36/36 |      1   36/36 |    0 | no evidence: unordered did not differ  
+sum_3d_outer             f16    off |      1   36/36 |      6   36/36 |    1 | invariant                              num_warps
+sum_3d_outer             f16     on |      1   36/36 |      6   36/36 |    1 | invariant                              num_warps
+sum_3d_outer             fp8    off |      1   36/36 |      1   36/36 |    0 | no evidence: unordered did not differ  
+sum_3d_outer             fp8     on |      1   36/36 |      1   36/36 |    0 | no evidence: unordered did not differ  
+
+
+WHICH AXIS MOVES THE BITS WHEN THE ORDER IS NOT PINNED
+======================================================================================================================
+
+Every cell that produced more than one byte pattern, with the axis responsible and a pair of
+configurations that disagreed. An `inner_tree` row here is a refutation of the claim; an `unordered`
+row here is the control working -- it is what makes the matching inner_tree row mean anything.
+
+kernel                   dtype  fpf ordering     cls        sizes  axis                       example
+-----------------------------------------------------------------------------------------------------
+A_rms_norm_fwd           f32    off unordered      3       24 6 6  num_warps                  num_warps=1 num_stages=1 vs num_warps=2 num_stages=1
+A_rms_norm_fwd           f32     on unordered      3       24 6 6  num_warps                  num_warps=1 num_stages=1 vs num_warps=2 num_stages=1
+C_rms_norm_bwd_2reduce   f32    off unordered      3       24 6 6  num_warps                  num_warps=1 num_stages=1 vs num_warps=2 num_stages=1
+C_rms_norm_bwd_2reduce   f32     on unordered      3       24 6 6  num_warps                  num_warps=1 num_stages=1 vs num_warps=2 num_stages=1
+D_masked_global_sum      f32    off inner_tree     3       24 6 6  num_warps                  num_warps=1 num_stages=1 vs num_warps=16 num_stages=1
+D_masked_global_sum      f32    off unordered      3       24 6 6  num_warps                  num_warps=1 num_stages=1 vs num_warps=16 num_stages=1
+D_masked_global_sum      f32     on inner_tree     3       24 6 6  num_warps                  num_warps=1 num_stages=1 vs num_warps=16 num_stages=1
+D_masked_global_sum      f32     on unordered      3       24 6 6  num_warps                  num_warps=1 num_stages=1 vs num_warps=16 num_stages=1
+E_triu_masked_rowsum     f32    off unordered      4     18 6 6 6  num_warps                  num_warps=1 num_stages=1 vs num_warps=2 num_stages=1
+E_triu_masked_rowsum     f32     on unordered      4     18 6 6 6  num_warps                  num_warps=1 num_stages=1 vs num_warps=2 num_stages=1
+G_plain_sum_looped       f32    off unordered      6  6 6 6 6 6 6  num_warps                  num_warps=1 num_stages=1 vs num_warps=2 num_stages=1
+G_plain_sum_looped       f32     on unordered      6  6 6 6 6 6 6  num_warps                  num_warps=1 num_stages=1 vs num_warps=2 num_stages=1
+H_mean_permute           f32    off unordered      3       24 6 6  num_warps                  num_warps=1 num_stages=1 vs num_warps=2 num_stages=1
+H_mean_permute           f32     on unordered      3       24 6 6  num_warps                  num_warps=1 num_stages=1 vs num_warps=2 num_stages=1
+I_bias_grad_dim0         f32    off unordered      6  6 6 6 6 6 6  num_warps                  num_warps=1 num_stages=1 vs num_warps=2 num_stages=1
+I_bias_grad_dim0         f32     on unordered      6  6 6 6 6 6 6  num_warps                  num_warps=1 num_stages=1 vs num_warps=2 num_stages=1
+J_epilogue_colsum_dim0   f32    off unordered      6  6 6 6 6 6 6  num_warps                  num_warps=1 num_stages=1 vs num_warps=2 num_stages=1
+J_epilogue_colsum_dim0   f32     on unordered      6  6 6 6 6 6 6  num_warps                  num_warps=1 num_stages=1 vs num_warps=2 num_stages=1
+col_bf16                 bf16   off unordered      6  6 6 6 6 6 6  num_warps                  num_warps=1 num_stages=1 vs num_warps=2 num_stages=1
+col_bf16                 bf16    on unordered      6  6 6 6 6 6 6  num_warps                  num_warps=1 num_stages=1 vs num_warps=2 num_stages=1
+col_dot                  f16    off unordered      6  6 6 6 6 6 6  num_warps                  num_warps=1 num_stages=1 vs num_warps=2 num_stages=1
+col_dot                  f16     on unordered      6  6 6 6 6 6 6  num_warps                  num_warps=1 num_stages=1 vs num_warps=2 num_stages=1
+col_dot                  fp8    off unordered      6  6 6 6 6 6 6  num_warps                  num_warps=1 num_stages=1 vs num_warps=2 num_stages=1
+col_dot                  fp8     on unordered      6  6 6 6 6 6 6  num_warps                  num_warps=1 num_stages=1 vs num_warps=2 num_stages=1
+col_exp_sum              f16    off unordered      6  6 6 6 6 6 6  num_warps                  num_warps=1 num_stages=1 vs num_warps=2 num_stages=1
+col_exp_sum              f16     on unordered      6  6 6 6 6 6 6  num_warps                  num_warps=1 num_stages=1 vs num_warps=2 num_stages=1
+col_exp_sum              fp8    off unordered      6  6 6 6 6 6 6  num_warps                  num_warps=1 num_stages=1 vs num_warps=2 num_stages=1
+col_exp_sum              fp8     on unordered      6  6 6 6 6 6 6  num_warps                  num_warps=1 num_stages=1 vs num_warps=2 num_stages=1
+col_sum_loop             f16    off unordered      6  6 6 6 6 6 6  num_warps                  num_warps=1 num_stages=1 vs num_warps=2 num_stages=1
+col_sum_loop             f16     on unordered      6  6 6 6 6 6 6  num_warps                  num_warps=1 num_stages=1 vs num_warps=2 num_stages=1
+layernorm_bwd_dwdb       f32    off unordered      5   12 6 6 6 6  num_warps                  num_warps=1 num_stages=1 vs num_warps=4 num_stages=1
+layernorm_bwd_dwdb       f32     on unordered      5   12 6 6 6 6  num_warps                  num_warps=1 num_stages=1 vs num_warps=4 num_stages=1
+sum_2d_axis0             f16    off unordered      6  6 6 6 6 6 6  num_warps                  num_warps=1 num_stages=1 vs num_warps=2 num_stages=1
+sum_2d_axis0             f16     on unordered      6  6 6 6 6 6 6  num_warps                  num_warps=1 num_stages=1 vs num_warps=2 num_stages=1
+sum_2d_col               f16    off unordered      6  6 6 6 6 6 6  num_warps                  num_warps=1 num_stages=1 vs num_warps=2 num_stages=1
+sum_2d_col               f16     on unordered      6  6 6 6 6 6 6  num_warps                  num_warps=1 num_stages=1 vs num_warps=2 num_stages=1
+sum_2d_col_big           f16    off unordered      6  6 6 6 6 6 6  num_warps                  num_warps=1 num_stages=1 vs num_warps=2 num_stages=1
+sum_2d_col_big           f16     on unordered      6  6 6 6 6 6 6  num_warps                  num_warps=1 num_stages=1 vs num_warps=2 num_stages=1
+sum_3d_outer             f16    off unordered      6  6 6 6 6 6 6  num_warps                  num_warps=1 num_stages=1 vs num_warps=2 num_stages=1
+sum_3d_outer             f16     on unordered      6  6 6 6 6 6 6  num_warps                  num_warps=1 num_stages=1 vs num_warps=2 num_stages=1
+
+
+GATE
+======================================================================================================================
+
+  cells measured                     104   (96 real, 8 control)
+  cache defeat verified on every row 1   (must be 1: two builds that must differ were watched differing)
+  inner_tree cells                   48
+  of those, with a sensitive partner 38   (the matching unordered cell returned more than one byte pattern)
+  of those, NOT invariant            2   (must be 0; this is the claim)
+  inner_tree cells with no evidence  10   (the unordered arm did not differ either, so these prove nothing
+                                     in either direction and are not counted)
+  inner_tree cells with no partner   0   (the unordered arm was not measured -- a partial run)
+  cells where fewer than 2 ran       0   (nothing to compare inside them)
+  controls not invariant             0   (must be 0: a max reduction is order-invariant by operation,
+                                     so a control that moves means the harness is broken, not the mode)
+
+  Why the fp8 pure sums are among the cells with no evidence. An fp8 e4m3 value carries a four-bit
+  significand, so the exact sum of a few hundred of them still fits inside an f32 mantissa, and then
+  every order gives the same answer -- order-invariant by arithmetic, not because the ordering switch
+  did anything. Measured off-device on this run, on the same draw the kernels use:
+      fp8   200/200 draws sum exactly in f32; sequential vs pairwise tree differed on 0/200
+      f16   0/200 draws sum exactly in f32; sequential vs pairwise tree differed on 85/200
+  So an fp8 pure-sum cell coming back with one bit class is not weak evidence, it is none. `exp()` and
+  `a*b` widen the leaves to f32 before the reduce, so `col_exp_sum` and `col_dot` keep their fp8
+  sensitivity; whether a kernel keeps it is decided per kernel from the measurement above, not per
+  dtype from this paragraph.
+
+  The cells with no evidence, in full:
+      col_sum_loop             fp8   fp_fusion=off   unordered returned 1 bit class over 36 configurations
+      col_sum_loop             fp8   fp_fusion=on    unordered returned 1 bit class over 36 configurations
+      sum_2d_axis0             fp8   fp_fusion=off   unordered returned 1 bit class over 36 configurations
+      sum_2d_axis0             fp8   fp_fusion=on    unordered returned 1 bit class over 36 configurations
+      sum_2d_col               fp8   fp_fusion=off   unordered returned 1 bit class over 36 configurations
+      sum_2d_col               fp8   fp_fusion=on    unordered returned 1 bit class over 36 configurations
+      sum_2d_col_big           fp8   fp_fusion=off   unordered returned 1 bit class over 36 configurations
+      sum_2d_col_big           fp8   fp_fusion=on    unordered returned 1 bit class over 36 configurations
+      sum_3d_outer             fp8   fp_fusion=off   unordered returned 1 bit class over 36 configurations
+      sum_3d_outer             fp8   fp_fusion=on    unordered returned 1 bit class over 36 configurations
+
+  Partly saturated outputs. A NaN or an Inf compares equal to itself, so on the saturated part
+  of these outputs no regrouping could show. These cells are still order-sensitive, so the check is
+  weakened rather than vacuous:
+      col_dot                  f16   up to 20.0% of the output is NaN or Inf
+
+
+HEADLINE
+======================================================================================================================
+
+  104 cells, of which 38 were inner_tree cells whose matching unordered cell actually differed;
+  2 of those 38 were not invariant.
+
+  The space, in full, because this is a universal claim and a count without one is worth nothing:
+      swept jointly   num_warps=1,2,4,8,16,32 num_stages=1,2,3,4,5,6
+      cell axes       reduction_ordering x enable_fp_fusion x dtype, held fixed inside a cell
+      draws per point 5, wide exponent range, alternating signs
+      configurations  3744 compiled and launched, 0 failed to build, 3744 attempted
+
+  What this does NOT say. It says that on these kernels, at these dtypes, over this num_warps x
+  num_stages grid, no inner_tree cell with a sensitive partner returned two different byte patterns.
+  It does not say the guarantee holds everywhere. Read the space above before generalising, and read
+  the 10 cells with no evidence as untested rather than as passing.
+
+  RESULT: FAIL -- see the counts above.
+

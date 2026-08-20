@@ -443,10 +443,18 @@ def _resum(path):
 
     Group rows are put back in name order, so which order the sweep happened to grade them in
     never shows up in the exported table.
+
+    A group re-graded with CHECKER_CORPUS_FRESH=1 appends a second row for the same
+    (corpus, cap, checker, kernel, dtype), so the last one wins here -- the same rule
+    data/FORMAT.md states for this table. Summing both instead would silently inflate every
+    total, which is what a reviewer re-grading one group to check it would have seen.
     """
     rows = _cached()
-    groups = [r for r in rows if r.get("scope") == "group"]
-    groups.sort(key=lambda r: (r.get("kernel") or "", r.get("dtype") or "", str(_key(r))))
+    latest = {}
+    for r in rows:
+        if r.get("scope") == "group":
+            latest[(*_key(r), r.get("kernel"), r.get("dtype"))] = r
+    groups = sorted(latest.values(), key=lambda r: (r.get("kernel") or "", r.get("dtype") or "", str(_key(r))))
     out = list(groups)
     for corpus, cap, checker in dict.fromkeys(_key(r) for r in groups):
         part = [r for r in groups if _key(r) == (corpus, cap, checker)]

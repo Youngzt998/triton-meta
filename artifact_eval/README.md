@@ -5,28 +5,57 @@ you can evaluate one at a time rather than all of them.
 
 ## Quick start
 
-`bitequiv` is not installed, so the repository root has to be on `PYTHONPATH`; and one GPU has to
-be pinned, because the timing steps assume they own the device. Run `nvidia-smi` first and pick a
-GPU nobody else is using — a shared GPU does not change the bit results, but it makes every
-timing meaningless.
+Three things, and the first one is the one that catches people.
+
+**Use the interpreter in `.venv/`.** Torch, this Triton and everything else are installed there and
+nowhere else. On the machine these numbers came from there is no `python` on `PATH` at all, and the
+system `python3` has no torch, so `python artifact_eval/artifact.py` fails before it starts. Every
+command below spells the interpreter out; `source .venv/bin/activate` first if you prefer, and then
+plain `python` works.
+
+**`bitequiv` is not installed, so the repository root has to be on `PYTHONPATH`.**
+
+**Pin one GPU.** The timing steps assume they own the device. Run `nvidia-smi` first and pick a GPU
+nobody else is using — a shared GPU does not change the bit results, but it makes every timing
+meaningless.
 
 ```
 export PYTHONPATH=$(git rev-parse --show-toplevel)
 export CUDA_VISIBLE_DEVICES=0
+PY=$PYTHONPATH/.venv/bin/python
 
-python artifact_eval/artifact.py --list                        # what can be run
-python artifact_eval/artifact.py --run gemm.bitmatch --minutes 20
-python artifact_eval/artifact.py --run gemm --minutes 20       # the whole gemm section
-python artifact_eval/artifact.py --run all --minutes 20        # every section
-python artifact_eval/artifact.py --export                      # cache/*.jsonl -> data/
+$PY artifact_eval/artifact.py --list                        # what can be run
+$PY artifact_eval/artifact.py --run gemm.bitmatch --minutes 20
+$PY artifact_eval/artifact.py --run gemm --minutes 20       # the whole gemm section
+$PY artifact_eval/artifact.py --run all --minutes 20        # every section
+$PY artifact_eval/artifact.py --export                      # cache/*.jsonl -> data/
 ```
+
+Nothing else has to be exported. Every step's own options have defaults, and no step needs a
+variable set to work — the tables further down are for making a step *shorter*, not for making it
+run. The one exception is `checker.corpus`, whose input is an 11 GB corpus that does not ship; it
+looks in a default place, and if nothing is there it prints how to get one and exits 0.
 
 `--export` needs no GPU. It rewrites every per-table CSV, then `FORMAT.md`, then `env.csv`, then
 `summary.csv` — in that order, each from the one before it, so the four cannot disagree.
 
 Records stream into `cache/` as they are produced, so interrupting a run loses at most one record
 and `--export` still works on whatever was collected. Every run also appends a line to
-`data/env.csv` recording the GPU, the cuBLASLt version, and the commit.
+`data/env.csv` recording the GPU, the cuBLASLt version, and the commit. `data/records/` holds those
+same streaming records, gzipped, as they stood when the artifact was frozen; its own README says
+how to read one and how to unpack them back into `cache/`.
+
+**Every invocation runs with Triton's on-disk kernel cache turned off**, whichever step you asked
+for. `inner_tree.bitmatch` and `inner_tree.layout` need `TRITON_ALWAYS_COMPILE=1` — without it a
+stale cache hit hands the pass-on build the pass-off binary and their tables come back a perfect,
+meaningless `1.00x, 0 bits changed` — and it has to be set before Triton is imported, so both step
+modules set it at import time and `artifact.py` imports every step module to build `--list`. It is
+therefore on for `gemm.*` too. Nothing measured moves: the flag decides whether a kernel is rebuilt,
+not what it computes. What moves is cost — no shape gets a compile free from a previous one, so a
+sweep is slower than the same sweep would be with the cache warm, and a fixed configuration-search
+budget such as `PERF_RANDOM_SEARCH_S` buys fewer configurations than it otherwise would. Every
+number in this artifact was taken under that flag, so the numbers are consistent with each other;
+they are not comparable with a run you make with it off.
 
 **All eight steps are implemented.** `--list` marks each one `implemented`; none is a placeholder
 any more.
@@ -1068,38 +1097,50 @@ prior_results.txt
                    compared against
 run_*.txt          captured output of one run, so a reviewer can read a result before spending a
                    GPU on it: run_bitmatch, run_perf_random, run_perf_static, run_fusion,
-                   run_inner_tree_layout, run_checker_corpus. Each is what its own step printed
-                   and each carries its own coverage line -- read that line first, because a
-                   partial run and a complete one look alike once averaged. Regenerate one by
-                   re-running its step; do not hand-edit it
+                   run_inner_tree_bitmatch, run_inner_tree_layout, run_checker_corpus. Each is
+                   what its own step printed and each carries its own coverage line -- read that
+                   line first, because a partial run and a complete one look alike once averaged.
+                   Regenerate one by re-running its step; do not hand-edit it
 README.md          this file
 AGENTS.md          operational notes for an AI agent driving the artifact; CLAUDE.md points here
-data/              committed. Results only, as CSV.
+data/              committed. Results.
   FORMAT.md        every column of every table, plus the rules for recomputing a table from the
                    rows; generated from the same declaration as the CSVs
   summary.csv      the headline numbers, one row per (experiment, group, metric), each carrying
                    its own `n` against `attempted` so a partial group cannot read as a whole one
   env.csv          the machine and library versions each run was taken on
-cache/             not committed. Streaming records. Regenerated, not archived.
+  records/         every raw record, gzipped, one file per table, 3.1 MB. What summary.csv and
+                   the per-table CSVs are computed FROM: the distribution behind a geometric
+                   mean, the worst single shape, which model and layer a row belongs to. Its own
+                   README lists the files and says how to unpack them back into cache/
+cache/             not committed. Streaming records, live. Same content as data/records/ while a
+                   run is in progress; the frozen copy is what ships
 ```
 
 A step owns its table. The columns are declared in the step's own module and `artifact.py` merges
 them into the one declaration that generates both the CSV header and `FORMAT.md`, so implementing a
 step — or adding a table to it — is a change to that one file and to nothing shared.
 
-Bulk data — PTX dumps, full configuration sweeps, per-draw tensors — is deliberately not
-committed. The script regenerates it; only results are kept. The large per-row CSVs are generated
-too, and `summary.csv` is what ships.
+Bulk data — PTX dumps, full configuration sweeps, per-draw tensors, the 11 GB checker corpus — is
+deliberately not committed. The script regenerates it. The large per-row CSVs are generated too;
+`summary.csv` and `env.csv` are the CSVs that ship.
 
-**The CSVs in `data/` are append logs, not tables.** A shape measured twice is in there twice, and
-a step's own report keeps only the last record per key. `data/FORMAT.md` states that rule and the
-others a reader needs to get the same numbers back out; read it before recomputing anything.
+The raw records **are** committed, gzipped, in `data/records/`, and that is a change of mind worth
+stating. They were left out while they were regenerable. They stop being regenerable when this
+machine goes away, and a paper needs what a few-KB summary cannot carry — the spread behind a
+geometric mean, the single worst shape, which model and which layer a row belongs to. 3.1 MB
+compressed is a small price for the difference between a number and the evidence for it.
+
+**The CSVs in `data/`, and the records they come from, are append logs, not tables.** A shape
+measured twice is in there twice, and a step's own report keeps only the last record per key.
+`data/FORMAT.md` states that rule and the others a reader needs to get the same numbers back out;
+read it before recomputing anything.
 
 ## Machine and versions
 
 ```
 GPU        NVIDIA GB300, compute capability 10.3 (sm_103)
-cuBLASLt   13.2.2 as loaded at run time, on all 82 invocations recorded in data/env.csv
+cuBLASLt   13.2.2 as loaded at run time, on all 83 invocations recorded in data/env.csv
            13.1.1 is what the arch profile was FITTED against, so every run prints a warning
 Triton     3.8.0+fb, this repository, branch artifact-eval-submission
 PyTorch    2.12.0+cu130
