@@ -1,0 +1,100 @@
+{
+ "key": "crash-assert|assert@MMAHelpers.h:171:block == N",
+ "kind": "crash-assert",
+ "rule": "F2",
+ "sig": "assert@MMAHelpers.h:171:block == N",
+ "culprit": "llir",
+ "detail": "assertion",
+ "count": 2,
+ "examples": [
+  "ind:triton_mm_cb5ec818"
+ ],
+ "archs": {
+  "90": 2
+ },
+ "stages": {
+  "llir": 2
+ },
+ "hit": "HIT-0063",
+ "first_seen": 39036.1,
+ "task": {
+  "job": "compile",
+  "spec_id": "ind:triton_mm_cb5ec818",
+  "arch": 90,
+  "shape": {
+   "ptr_off": {
+    "arg_A": 1,
+    "arg_B": 2,
+    "in_ptr2": 0,
+    "in_ptr3": 0,
+    "out_ptr0": 0
+   },
+   "ptr_ty": {
+    "arg_A": "*fp8e4nv",
+    "arg_B": "*fp8e4b15",
+    "in_ptr2": "*fp16",
+    "in_ptr3": "*i64",
+    "out_ptr0": "*bf16"
+   },
+   "scalars": {},
+   "consts": {},
+   "dtype_swapped": true
+  },
+  "config": {
+   "num_warps": 4,
+   "num_stages": 3,
+   "num_ctas": 2,
+   "maxnreg": 64,
+   "default_dot_input_precision": "tf32",
+   "launch_cooperative_grid": false,
+   "launch_pdl": false,
+   "sanitize_overflow": false,
+   "enable_fp_fusion": false
+  },
+  "draw": {
+   "round": 357,
+   "kidx": 427,
+   "seed": 20260819
+  },
+  "tid": 659317
+ },
+ "stderr": "##R4-STAGE frontend\n/home/youngzt/fuzz/triton-public/python/triton/language/semantic.py:1458: UserWarning: the use of fp8e4b15 is deprecated on Hopper and later architectures and can cause significant slow down. It will be removed in a future triton release\n  warnings.warn(\n##R4-STAGE ttir\n##R4-STAGE ttgir\n##R4-STAGE llir\npython: /home/youngzt/fuzz/triton-public/third_party/nvidia/lib/TritonNVIDIAGPUToLLVM/DotOpToLLVM/MMAHelpers.h:171: Value mlir::triton::NVIDIA::DotOpMmaSmemLoader::smemLoad(int, int, ConversionPatternRewriter &, Location) const: Assertion `block == 0' failed.\n#blocked = #ttg.blocked<{sizePerThread = [1, 1], threadsPerWarp = [16, 2], warpsPerCTA = [1, 4], order = [0, 1], CGALayout = [[1, 0]]}>\n#blocked1 = #ttg.blocked<{sizePerThread = [1, 8], threadsPerWarp = [2, 16], warpsPerCTA = [4, 1], order = [1, 0], CGALayout = [[0, 1]]}>\n#blocked2 = #ttg.blocked<{sizePerThread = [1, 1], threadsPerWarp = [1, 32], warpsPerCTA = [4, 1], order = [1, 0], CGALayout = [[0, 0]]}>\n#mma = #ttg.nvidia_mma<{versionMajor = 3, versionMinor = 0, warpsPerCTA = [4, 1], CGALayout = [[0, 1]], instrShape = [16, 128, 16]}>\n#shared = #ttg.swizzled_shared<{vec = 8, perPhase = 4, maxPhase = 2, order = [1, 0], CGALayout = [[0, 0]]}>\n#shared1 = #ttg.nvmma_shared<{swizzlingByteWidth = 32, transposed = true, elementBitWidth = 16, CGALayout = [[1, 0]]}>\n#smem = #ttg.shared_memory\nmodule attributes {ttg.maxnreg = 64 : i32, \"ttg.num-ctas\" = 2 : i32, \"ttg.num-warps\" = 4 : i32, ttg.target = \"cuda:90\", \"ttg.threads-per-warp\" = 32 : i32, \"ttng.two-ctas\" = false} {\n  tt.func public @triton_mm_cb5ec818(%arg0: !tt.ptr<f8E4M3FN>, %arg1: !tt.ptr<i8>, %arg2: !tt.ptr<f16> {tt.divisibility = 16 : i32}, %arg3: !tt.ptr<i64> {tt.divisibility = 16 : i32}, %arg4: !tt.ptr<bf16> {tt.divisibility = 16 : i32}) attributes {noinline = false} {\n    %cst = arith.constant dense<0.000000e+00> : tensor<128x256xf32, #mma>\n    %c2_i32 = arith.constant 2 : i32\n    %c1_i32 = arith.constant 1 : i32\n    %cst_0 = arith.constant dense<256> : tensor<1x256xi32, #blocked>\n    %cst_1 = arith.constant dense<256> : tensor<1x256xi32, #blocked1>\n    %cst_2 = arith.constant dense<256> : tensor<128x1xi32, #blocked2>\n    %cst_3 = arith.constant dense<256> : tensor<128x1xi32, #blocked1>\n    %c32_i32 = arith.constant 32 : i32\n    %cst_4 = arith.constant dense<256> : tensor<256xi32, #ttg.slice<{dim = 0, parent = #blocked}>>\n    %cst_5 = arith.constant dense<256> : tensor<128xi32, #ttg.slice<{dim = 1, parent = #blocked2}>>\n    %c8_i32 = arith.constant 8 : i32\n    %c128_i32 = arith.constant 128 : i32\n    %c0_i32 = arith.constant 0 : i32\n    %c256_i32 = arith.constant 256 : i32\n    %0 = tt.get_program_id x : i32\n    %1 = arith.divsi %0, %c8_i32 : i32\n    %2 = arith.muli %1, %c8_i32 : i32\n    %3 = arith.subi %c2_i32, %2 : i32\n    %4 = arith.minsi %3, %c8_i32 : i32\n    %5 = arith.remsi %0, %4 : i32\n    %6 = arith.addi %2, %5 : i32\n    %7 = arith.remsi %0, %c8_i32 : i32\n    %8 = arith.divsi %7, %4 : i32\n    %9 = arith.cmpi sge, %6, %c0_i32 : i32\n    llvm.intr.assume %9 : i1\n    %10 = arith.cmpi sge, %8, %c0_i32 : i32\n    llvm.intr.assume %10 : i1\n    %11 = arith.muli %6, %c128_i32 : i32\n    %12 = tt.make_range {end = 128 : i32, start = 0 : i32} : tensor<128xi32, #ttg.slice<{dim = 1, parent = #blocked1}>>\n    %13 = tt.make_range {end = 128 : i32, start = 0 : i32} : tensor<128xi32, #ttg.slice<{dim = 1, parent = #blocked2}>>\n    %14 = tt.splat %11 : i32 -> tensor<128xi32, #ttg.slice<{dim = 1, parent = #blocked1}>>\n    %15 = tt.splat %11 : i32 -> tensor<128xi32, #ttg.slice<{dim = 1, parent = #blocked2}>>\n    %16 = arith.addi %14, %12 : tensor<128xi32, #ttg.slice<{dim = 1, parent = #blocked1}>>\n    %17 = arith.addi %15, %13 : tensor<128xi32, #ttg.slice<{dim = 1, parent = #blocked2}>>\n    %18 = arith.muli %8, %c256_i32 : i32\n    %19 = tt.make_range {end = 256 : i32, start = 0 : i32} : tensor<256xi32, #ttg.slice<{dim = 0, parent = #blocked1}>>\n    %20 = tt.make_range {end = 256 : i32, start = 0 : i32} : tensor<256xi32, #ttg.slice<{dim = 0, parent = #blocked}>>\n    %21 = tt.splat %18 : i32 -> tensor<256xi32, #ttg.slice<{dim = 0, parent = #blocked1}>>\n    %22 = tt.splat %18 : i32 -> tensor<256xi32, #ttg.slice<{dim = 0, parent = #blocked}>>\n    %23 = arith.addi %21, %19 : tensor<256xi32, #ttg.slice<{dim = 0, parent = #blocked1}>>\n    %24 = arith.addi %22, %20 : tensor<256xi32, #ttg.slice<{dim = 0, parent = #blocked}>>\n    %25 = arith.remsi %17, %cst_5 {tt.contiguity = dense<128> : tensor<1xi32>, tt.divisibility = dense<128> : tensor<1xi32>} : tensor<128xi32, #ttg.slice<{dim = 1, parent = #blocked2}>>\n    %26 = arith.remsi %24, %cst_4 {tt.contiguity = dense<256> : tensor<1xi32>, tt.divisibility = dense<256> : tensor<1xi32>} : tensor<256xi32, #ttg.slice<{dim = 0, parent = #blocked}>>\n    %27 = tt.make_range {end = 32 : i32, start = 0 : i32} : tensor<32xi32, #ttg.slice<{dim = 1, parent = #blocked}>>\n    %28 = tt.make_range {end = 32 : i32, start = 0 : i32} : tensor<32xi32, #ttg.slice<{dim = 0, parent = #blocked2}>>\n    %29 = tt.expand_dims %28 {axis = 0 : i32} : tensor<32xi32, #ttg.slice<{dim = 0, parent = #blocked2}>> -> tensor<1x32xi32, #blocked2>\n    %30 = tt.expand_dims %27 {axis = 1 : i32} : tensor<32xi32, #ttg.slice<{dim = 1, parent = #blocked}>> -> tensor<32x1xi32, #blocked>\n    %31 = tt.expand_dims %25 {axis = 1 : i32} : tensor<128xi32, #ttg.slice<{dim = 1, parent = #blocked2}>> -> tensor<128x1xi32, #blocked2>\n    %32 = arith.muli %31, %cst_2 : tensor<128x1xi32, #blocked2>\n    %33 = tt.broadcast %32 : tensor<128x1xi32, #blocked2> -> tensor<128x32xi32, #blocked2>\n    %34 = tt.splat %arg0 : !tt.ptr<f8E4M3FN> -> tensor<128x32x!tt.ptr<f8E4M3FN>, #blocked2>\n    %35 = tt.expand_dims %26 {axis = 0 : i32} : tensor<256xi32, #ttg.slice<{dim = 0, parent = #blocked}>> -> tensor<1x256xi32, #blocked>\n    %36 = arith.muli %35, %cst_0 : tensor<1x256xi32, #blocked>\n    %37 = tt.broadcast %36 : tensor<1x256xi32, #blocked> -> tensor<32x256xi32, #blocked>\n    %38 = tt.splat %arg1 : !tt.ptr<i8> -> tensor<32x256x!tt.ptr<i8>, #blocked>\n    %39 = scf.for %arg5 = %c0_i32 to %c8_i32 step %c1_i32 iter_args(%arg6 = %cst) -> (tensor<128x256xf32, #mma>)  : i32 {\n      %62 = arith.muli %arg5, %c32_i32 : i32\n      %63 = tt.splat %62 : i32 -> tensor<1x32xi32, #blocked2>\n      %64 = arith.addi %29, %63 : tensor<1x32xi32, #blocked2>\n      %65 = tt.splat %62 : i32 -> tensor<32x1xi32, #blocked>\n      %66 = arith.addi %30, %65 : tensor<32x1xi32, #blocked>\n      %67 = tt.broadcast %64 : tensor<1x32xi32, #blocked2> -> tensor<128x32xi32, #blocked2>\n      %68 = arith.addi %67, %33 : tensor<128x32xi32, #blocked2>\n      %69 = tt.addptr %34, %68 : tensor<128x32x!tt.ptr<f8E4M3FN>, #blocked2>, tensor<128x32xi32, #blocked2>\n      %70 = tt.load %69 : tensor<128x32x!tt.ptr<f8E4M3FN>, #blocked2>\n      %71 = ttg.local_alloc %70 : (tensor<128x32xf8E4M3FN, #blocked2>) -> !ttg.memdesc<128x32xf8E4M3FN, #shared, #smem>\n      %72 = ttg.local_load %71 : !ttg.memdesc<128x32xf8E4M3FN, #shared, #smem> -> tensor<128x32xf8E4M3FN, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 2}>>\n      %73 = tt.broadcast %66 : tensor<32x1xi32, #blocked> -> tensor<32x256xi32, #blocked>\n      %74 = arith.addi %73, %37 : tensor<32x256xi32, #blocked>\n      %75 = tt.addptr %38, %74 : tensor<32x256x!tt.ptr<i8>, #blocked>, tensor<32x256xi32, #blocked>\n      %76 = tt.load %75 : tensor<32x256x!tt.ptr<i8>, #blocked>\n      %77 = tt.fp_to_fp %72 : tensor<128x32xf8E4M3FN, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 2}>> -> tensor<128x32xf16, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 2}>>\n      %78 = tt.elementwise_inline_asm \"{                                      \\0A.reg .b32 a<2>, b<2>;                  \\0Aprmt.b32 a0, 0, $2, 0x5746;            \\0Aand.b32 b0, a0, 0x7f007f00;            \\0Aand.b32 b1, a0, 0x00ff00ff;            \\0Aand.b32 a1, a0, 0x00800080;            \\0Ashr.b32  b0, b0, 1;                    \\0Aadd.u32 b1, b1, a1;                    \\0Alop3.b32 $0, b0, 0x80008000, a0, 0xf8; \\0Ashl.b32 $1, b1, 7;                     \\0A}                                      \\0A\" {constraints = \"=r,=r,r\", packed_element = 4 : i32, pure = true} %76 : tensor<32x256xi8, #blocked> -> tensor<32x256xf16, #blocked>\n      %79 = ttg.local_alloc %78 : (tensor<32x256xf16, #blocked>) -> !ttg.memdesc<32x256xf16, #shared1, #smem>\n      ttng.fence_async_shared {bCluster = false}\n      %80 = ttng.warp_group_dot %77, %79, %arg6 {isAsync = true} : tensor<128x32xf16, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 2}>> * !ttg.memdesc<32x256xf16, #shared1, #smem> -> tensor<128x256xf32, #mma>\n      %81:2 = ttng.warp_group_dot_wait %80, %79 {pendings = 0 : i32} : tensor<128x256xf32, #mma>, !ttg.memdesc<32x256xf16, #shared1, #smem>\n      scf.yield %81#0 : tensor<128x256xf32, #mma>\n    }\n    %40 = tt.expand_dims %16 {axis = 1 : i32} : tensor<128xi32, #ttg.slice<{dim = 1, parent = #blocked1}>> -> tensor<128x1xi32, #blocked1>\n    %41 = tt.expand_dims %23 {axis = 0 : i32} : tensor<256xi32, #ttg.slice<{dim = 0, parent = #blocked1}>> -> tensor<1x256xi32, #blocked1>\n    %42 = arith.cmpi slt, %40, %cst_3 : tensor<128x1xi32, #blocked1>\n    %43 = arith.cmpi slt, %41, %cst_1 : tensor<1x256xi32, #blocked1>\n    %44 = tt.broadcast %42 : tensor<128x1xi1, #blocked1> -> tensor<128x256xi1, #blocked1>\n    %45 = tt.broadcast %43 : tensor<1x256xi1, #blocked1> -> tensor<128x256xi1, #blocked1>\n    %46 = arith.andi %44, %45 : tensor<128x256xi1, #blocked1>\n    %47 = arith.muli %40, %cst_3 : tensor<128x1xi32, #blocked1>\n    %48 = tt.broadcast %41 : tensor<1x256xi32, #blocked1> -> tensor<128x256xi32, #blocked1>\n    %49 = tt.broadcast %47 : tensor<128x1xi32, #blocked1> -> tensor<128x256xi32, #blocked1>\n    %50 = arith.addi %48, %49 : tensor<128x256xi32, #blocked1>\n    %51 = tt.load %arg2 : !tt.ptr<f16>\n    %52 = tt.load %arg3 : !tt.ptr<i64>\n    %53 = arith.sitofp %52 : i64 to f16\n    %54 = arith.mulf %51, %53 : f16\n    %55 = arith.extf %54 : f16 to f32\n    %56 = tt.splat %55 : f32 -> tensor<128x256xf32, #mma>\n    %57 = arith.mulf %39, %56 : tensor<128x256xf32, #mma>\n    %58 = tt.splat %arg4 : !tt.ptr<bf16> -> tensor<128x256x!tt.ptr<bf16>, #blocked1>\n    %59 = tt.addptr %58, %50 : tensor<128x256x!tt.ptr<bf16>, #blocked1>, tensor<128x256xi32, #blocked1>\n    %60 = arith.truncf %57 : tensor<128x256xf32, #mma> to tensor<128x256xbf16, #mma>\n    %61 = ttg.convert_layout %60 : tensor<128x256xbf16, #mma> -> tensor<128x256xbf16, #blocked1>\n    tt.store %59, %61, %46 : tensor<128x256x!tt.ptr<bf16>, #blocked1>\n    tt.return\n  }\n}\n\n{-#\n  external_resources: {\n    mlir_reproducer: {\n      pipeline: \"builtin.module(tritongpu-combine-tensor-select-and-if, tritongpu-allocate-warp-groups{instrumented=false}, convert-scf-to-cf{allow-pattern-rollback=true}, gluon-inline, allocate-shared-memory-nv{compute-capability=90 ptx-version=88}, triton-tensor-memory-allocation, triton-nvidia-gpu-proxy-fence-insertion{compute-capability=90}, triton-nvidia-gpu-tmem-barrier-insertion, convert-triton-gpu-to-llvm{compute-capability=90 enable-concurrency-sanitizer=false ptx-version=88}, initialize-ws-cluster-barriers{compute-capability=90 ptx-version=88}, llvm.func(canonicalize-llvm-ir), cse, convert-warp-specialize-to-llvm, convert-nv-gpu-to-llvm, canonicalize{cse-between-iterations=false    max-iterations=10 max-num-rewrites=-1 region-simplify=normal test-convergence=false top-down=true}, cse, symbol-dce, convert-nvvm-to-llvm)\",\n      disable_threading: true,\n      verify_each: true\n    }\n  }\n#-}\n<unknown>:0: error: Failures have been detected while processing an MLIR pass pipeline\n<unknown>:0: note: Pipeline failed while executing [`ConvertTritonGPUToLLVM` on 'builtin.module' operation]: reproducer generated at `std::errs, please share the reproducer above with Triton project.`\n",
+ "exc_msg": "PassManager::run failed",
+ "traceback": "Traceback (most recent call last):\n  File \"/home/youngzt/fuzz/r2-compile/fz/compile1.py\", line 109, in compile_stages\n    mod = compile_ir(mod, metadata)\n          ^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/youngzt/fuzz/triton-public/python/triton/backends/nvidia/compiler.py\", line 645, in <lambda>\n    stages[\"llir\"] = lambda src, metadata: self.make_llir(src, metadata, options, capability)\n                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/youngzt/fuzz/triton-public/python/triton/backends/nvidia/compiler.py\", line 447, in make_llir\n    pm.run(mod, 'make_llir')\nRuntimeError: PassManager::run failed\n",
+ "irverify": null,
+ "shrunk": {
+  "config": {
+   "num_warps": 4,
+   "num_stages": 3,
+   "num_ctas": 2,
+   "maxnreg": null,
+   "default_dot_input_precision": "tf32",
+   "launch_cooperative_grid": false,
+   "launch_pdl": false,
+   "sanitize_overflow": true,
+   "enable_fp_fusion": false
+  },
+  "shape": {
+   "ptr_off": {
+    "arg_A": 0,
+    "arg_B": 0,
+    "in_ptr2": 0,
+    "in_ptr3": 0,
+    "out_ptr0": 0
+   },
+   "ptr_ty": {
+    "arg_A": "*fp8e4nv",
+    "arg_B": "*fp8e4b15",
+    "in_ptr2": "*fp16",
+    "in_ptr3": "*i64",
+    "out_ptr0": "*bf16"
+   },
+   "scalars": {},
+   "consts": {},
+   "dtype_swapped": true
+  },
+  "arch": 90,
+  "spec_id": "ind:triton_mm_cb5ec818"
+ },
+ "shrink_state": "done"
+}
