@@ -199,13 +199,26 @@ Inside `ALGO_ID` 74 (sm_103 only, the only profile it is measured on), one more:
   What it would take, read off `sm90_tile_scheduler_stream_k.hpp` and `tile_scheduler_params.h`
   (the SM100 scheduler defers all the split and reduction maths to the SM90 one): the combine
   order is the easy half — deterministic, ascending k, left-associated, fp32, no atomically
-  reordered sums. The partition is the hard half. It is a **per-output-tile list of chunks**,
-  which no plan field can carry, and computing it needs six host inputs cuBLAS chooses and does
-  not expose in the config (`sm_count`, `max_active_clusters`, `splits`, `max_swizzle_size`,
-  `raster_order`, `decomposition_mode`). A twin would also have to reproduce the split between
-  the last peer's chunk, which stays in the MMA accumulator, and the others, which come back
-  through a global fp32 workspace. That is a new plan mode and a new kernel, so it is a task of
-  its own rather than a table row.
+  reordered sums. The partition is a **per-output-tile list of chunks**, which no plan field can
+  carry, so it is a new plan mode and a new kernel either way, and a task of its own rather than
+  a table row.
+
+  It is closer than unknowable, though, and the open part is now small enough to name. Almost
+  every host input the schedule needs is fixed by the source for an `N == 1` shape rather than
+  chosen by cuBLAS: the cluster is 1 (the kernel name says `1sm`); `get_log_swizzle_size` keys off
+  `min(tiles_m, tiles_n)` and so returns 0 whatever `max_swizzle_size` is; the default-Heuristic
+  `get_rasterization_order` gives AlongN whenever `tiles_n <= tiles_m`, which makes
+  `calculate_groups` read `problem_blocks_n` and pins the group count at 1; separate reduction is
+  `return false` dead code; and `ctas_per_wave` is the plain `sm_count`, because the stream-K
+  `get_grid_shape` passes `truncate_by_problem_size = false` rather than the truncating form.
+
+  A twin built on that reproduces cuBLAS **byte-for-byte on 12 shapes over every narrow input
+  draw, and misses 4 elements out of about 250,000 on the wide-exponent draws**, each one ulp on
+  a single output row. Those 4 are the whole remaining gap, and they are not the chunk
+  boundaries: many different boundary perturbations "fix" any one of them, and most of those
+  violate the scheduler's own 8-k-tile minimum, which is what a 1-ulp coincidence looks like
+  rather than a correction. The N tile is ruled out too — BN 16, 32, 64 and 128 all give the same
+  4. Until it is 0 the decline stands, because 4 wrong elements is wrong bits.
 
 fp8 reaches none of the four CUDA-core families and declines there. fp8 also needs `BM >= 64`,
 or Triton stops using the native fp8 tensor-core path and rounds differently from cuBLAS.
