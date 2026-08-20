@@ -344,3 +344,101 @@ host-memory class already represented by HIT-0022, HIT-0023 and HIT-0032.
   field, and no report in the repo carries the label.** A reviewer must run the
   control by hand (`op: onesish` against the line's own worker) until a driver
   restart picks the code up.
+
+---
+
+## Pass 6 (2026-08-19) — HIT-0052, HIT-0053
+
+Not written up at the time; recorded here for completeness from
+`/home/youngzt/tv/bug-report-rejected/REJECTED.md`.
+
+| pass | ids | kept | rejected |
+|---|---|---|---|
+| 6 | HIT-0052 … HIT-0053 | 0 | 2 (1 resource-limit, 1 B4 of HIT-0002) |
+
+---
+
+## Pass 7 (2026-08-20) — HIT-0054 … HIT-0060
+
+| pass | ids | kept | rejected |
+|---|---|---|---|
+| 7 | HIT-0054 … HIT-0060 | 1 | 6 (3 resource-limit, 2 B4, 1 A1) |
+
+HIT-0060 arrived after the batch was frozen and was taken anyway, because the
+brief asks that every new ptxas crash be split against both kept ptxas classes,
+and doing that turned out to be the highest-value item in the batch.
+
+**Kept — HIT-0055, a new class: `tl.dot` builds its implicit zero accumulator
+with the wrong type.** `Semantic.dot` (`python/triton/language/semantic.py`)
+picks the zero constant at line 1511 and the result element type at line 1512,
+and the two can disagree. Line 1511 only ever makes an `f16` or an `f32` zero;
+line 1512 copies whatever `out_dtype` the caller passed; line 1520 splats one
+into the other. Ask for `out_dtype=tl.int32` or `tl.float64` with float operands
+and you get `"tt.splat"(%433) : (f32) -> tensor<64x64xi32>` and a bare
+`RuntimeError: error encountered during parsing` with no source location. The
+`bf16` branch three lines above already does the right thing (a `ValueError`
+naming the dtype), so the fix is a one-liner. **The defect needs no fp8 and no
+dtype swap**: a hand-written 90-line file, committed as
+`HIT-0055/dot_out_dtype_min.py`, shows plain `fp16 × fp16` with
+`out_dtype=tl.int32` failing on sm_80, sm_89 and sm_90, with `float32`,
+`float16` and `int8 × int8 → int32` passing as controls. `Semantic.dot_scaled`
+at `semantic.py:1625-1627` has the same shape and no guard either (read, not
+run). This is the third defect in this line that is neither `PlanCTA`, nor fp8,
+nor ptxas, after HIT-0048 and HIT-0038.
+
+**HIT-0047's trigger is now pinned, and its reproducer is 17× smaller.**
+HIT-0060 is a B4 duplicate of HIT-0047 — under `gdb` the two die at the **same
+address with the same twelve frames** (`0xa910d0`, callers `0x943bfd, 0xb6622f,
+0xa41ee7, …`) and answer every switch identically. But its PTX is **171 lines**
+against HIT-0047's 2868, and that made the trigger easy to find: **both crashing
+files read PTX registers that are never written** — 13 in the small one, 33 in
+HIT-0047's, and **zero** in HIT-0050's. Inserting one `mov.b16 %rsN, 0;` per
+undefined register makes both assemble cleanly (rc 139 → rc 0). So the ptxas
+defect is "segfault instead of diagnosing a read of an undefined register", at
+`-O2`/`-O3`, sm_89 only. The zero-undefined-reads count on HIT-0050's file is a
+second, independent reason the two ptxas classes are not the same bug. The
+171-line `.ptx` and the whole analysis were appended to HIT-0047 and committed.
+Worth chasing separately on the Triton side: the undefined registers are the
+`undef`/`poison` upper half of an `f16x2` pair in the f16 reduction lowering
+(`mov.b32 %r23, {%rs2, %rs3};` where `%rs3` is never written), and emitting a
+zero there would sidestep the NVIDIA bug without waiting for NVIDIA.
+
+**Rejected — three more ptxas register-pressure reports** (HIT-0054, HIT-0057,
+HIT-0058), all `Insufficient registers (64)` at `num_warps = 32` with
+`maxnreg = null`: 1024 threads per CTA fixes the budget at 65536/1024 = 64 and
+the kernels need 90, 90 and 154. Ninth, tenth and eleventh members of the class
+pass 2 first rejected; the same judgement call, still flagged. R4 gave them
+three ids because its signature keeps the kernel name and both numbers — the
+under-merge pass 2 already described, now three reports worse.
+
+**Rejected — HIT-0059, B4 of HIT-0007.** `'tt.atomic_rmw' op failed to verify
+that ptr type matches value type`. Same `convert_custom_float8` upcast branch;
+the route in is `atom_red_typechecking_impl` (`semantic.py:1293`) doing
+`val = self.cast(val, ptr.type.scalar.element_ty)` with `element_ty = bf16` and
+getting `f16` back. Fourth symptom of that one defect after `tt.store`,
+`arith.mulf` and `arith.addf`; occurrence count appended to HIT-0007 (64 → 67).
+
+**Rejected — HIT-0056, A1: `exit 124` is a timeout, not a failure.** The class
+signature reads `pass tritongpu-coalesce (#1 of make_ttgir) exit 124`, and
+`fz/worker.py:83-95` returns 124 when `triton-opt` exceeds `OPT_TIMEOUT = 90 s`
+(`fz/worker.py:39`). The compile itself is fine — the shipped `repro.py` reaches
+`cubin` and prints `NO FAILURE` in 392 s. Timing the blamed pass by hand on the
+captured `make_ttgir` input (30,145 lines of TTIR, because `K = 19` and
+`SWEEPS = 3` unroll 513 Jacobi rotation bodies) gives
+**274.90 s, rc 0, output verifies**. Same class as HIT-0037.
+
+**Notes for pass 8.**
+* 🔴 **Read the exit code in an `IRVerifyFailure` signature before analysing.**
+  `exit 124` is always `OPT_TIMEOUT`; `exit -11`/`139` is a signal; anything
+  else is a real pass failure. HIT-0056 cost 12 minutes of compiling to
+  establish something the number already said.
+* **The undefined-register scan is cheap and now proven useful.** For any
+  `crash-ptxas` / `crash-python@cubin`, capture the PTX with the
+  `TRITON_PTXAS_PATH` wrapper (three for three now), then count registers that
+  are read but never written, then try defining them. That one number separates
+  HIT-0047 (33 / 13) from HIT-0050 (0) without gdb.
+* **The `num_ctas > 1` theme did not grow this pass** — it stays at eight
+  defects. Nothing in HIT-0054…HIT-0060 varied `num_ctas` above 1.
+* **fp8 is now five kept defects and, with HIT-0059, four separate symptoms of
+  HIT-0007 alone.** Pass 2's suggestion to tell R4 to stop counting the fp8
+  families is overdue.
