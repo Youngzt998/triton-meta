@@ -576,6 +576,11 @@ def _triton_plain_k_per_dot(a, b, out_dtype, k_per_dot, res, scale=1.0, BM=128, 
         c = _triton_plain_k_per_dot_sm103(a, b, out_dtype, k_per_dot, res, scale)
         if c is not None:
             return c
+    # One group is loaded per iteration and masked down to its real length, so the load tile has
+    # to be at least as wide as a group. It was fixed at 16, which is fine for the CUTLASS 2.x
+    # families (k per dot 8 and 16) but too narrow for ALGO 74's 32 -- and a 16-wide fp8 dot does
+    # not compile at all, since the tensor core needs k >= 32 there. Bit-neutral, as above.
+    BK = max(BK, k_per_dot)
     b = _kcontig(b)
     M, K = a.shape
     N = b.shape[1]

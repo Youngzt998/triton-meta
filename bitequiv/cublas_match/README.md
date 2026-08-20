@@ -93,13 +93,22 @@ decline rather than answer wrong.
 
 ## The kernel families
 
-Two run on the tensor core and are reconstructed with `tl.dot`:
+Three run on the tensor core and are reconstructed with `tl.dot`:
 
-* **`ALGO_ID` 66** — cuBLAS's own `nvjet` kernels, the default on Blackwell and the only family
-  fp8 ever reaches. One fp32 accumulator, `block_k`-grained split-K.
+* **`ALGO_ID` 66** — cuBLAS's own `nvjet` kernels, the default on Blackwell. One fp32
+  accumulator, `block_k`-grained split-K.
 * **`ALGO_ID` 12, 21, 23, 24** — CUTLASS, the fallback when a contiguous dimension is not
   8-element aligned. They differ only in the alignment they require (16 / 4 / 2 bytes). The
   accumulator is updated once per MMA rather than once per `block_k` step.
+* **`ALGO_ID` 74** — `cutlass3x_sm100_tensorop_*`, CUTLASS 3.x, and a family of its own rather
+  than a fifth member of the one above: its accumulator is never closed. fp8 only. It is what
+  cuBLAS picks for most fp8 shapes whose N is even but not a multiple of 16 — a slice every
+  earlier fp8 sweep here rounded away, which is why the family went unnoticed rather than being
+  new. Its one subtlety is where the MMA groups start: `align4` is below TMA's 16-byte minimum,
+  so CUTLASS builds this kernel on the cp.async collective, whose mainloop shifts the k axis to
+  put the residue at the origin — groups run `[0, K % 32)` then 32 apart. `SPLITK_NUM` is 1 or
+  -2; -2 is not a split count but cuBLAS's mark for the stream-K tile scheduler, and it declines
+  (see below).
 
 The other four run on the CUDA cores (SIMT), one fp32 accumulator per output element and no
 tensor core at all. `tl.dot` cannot reproduce them — it loses by 1 ulp even at K = 2, and no
@@ -147,6 +156,15 @@ Known unsupported (raise `CublasUnsupportedShape`), all inside `ALGO_ID` 13:
   the config but changes the order — it picks the lane width from occupancy, which the config
   does not carry, so two shapes with identical nine-field configs run different orders.
 * either gemv family with M > 1 **and** N > 1 (never observed; it would not be a gemv).
+
+Inside `ALGO_ID` 74 (sm_103 only, the only profile it is measured on), one more:
+
+* **`SPLITK_NUM` -2**, the stream-K tile scheduler — about a quarter of the ALGO 74 population.
+  Stream-K walks one flat concatenation of every stream-K tile's k range and cuts it into equal
+  units, so the cut lands at a different k in each output tile, some tiles are not split at all,
+  and per-unit snapping shifts the boundaries again. Every plan mode here applies one chunk to
+  every output element, so this is a structural decline rather than an unmeasured one, and it is
+  measured to be needed: 16 of 1,218 stream-K shapes match the unsplit reconstruction.
 
 fp8 reaches none of the four CUDA-core families and declines there. fp8 also needs `BM >= 64`,
 or Triton stops using the native fp8 tensor-core path and rounds differently from cuBLAS.

@@ -31,8 +31,33 @@ PROFILE = ArchProfile(
     #      already in `stages_recipe` (64 and 128) on shapes where block_k changes the grouping:
     #      16/16 and 13/13 byte-identical over 8 seeds each, and the other two block_k values lose. So
     #      adding 21 keeps the (family, STAGES_ID) key pure. Only its STAGES_ID 25 is new.
+    #   74 `cutlass3x_sm100_tensorop_...` -- CUTLASS 3.x, and a family of its own: it is not the
+    #      CUTLASS of 12/21/23/24 and its accumulator is flat, not closed once per MMA. fp8 only,
+    #      and it is what cuBLAS picks over nvjet across most of the fp8 shapes whose N is even but
+    #      not a multiple of 16. That slice was invisible until now because every fp8 sweep this
+    #      package was built on rounded all three dims to a multiple of 16 first, so 74 is not a
+    #      new kernel, only a newly reachable one. It is not a rare corner either: over 6,000
+    #      random shapes drawn from the slice cuBLAS actually accepts (K % 16 == 0, N even, M
+    #      free), 74 took 76% of them and nvjet the rest, the same either way for an fp16 or a
+    #      bf16 output.
+    #
+    #      Read with the k probe, not inferred: one accumulator, never closed, with the k blocks
+    #      walked in ascending order. The MMA groups do not start at 0 though -- see
+    #      `_plan_cutlass3x`, which quotes the CUTLASS line that shifts them by `K % 32`.
+    #
+    #      Byte-verified in two parts. A flat-from-zero twin, which is the same computation
+    #      wherever K % 32 == 0: 1,797 shapes and 16,173 comparisons over cuBLASLt 13.1.1 and
+    #      13.2.2, 0 differed. Then the shifted twin over both sides of that boundary, same two
+    #      libraries: 846/846 at K % 32 == 0 and 720/720 at K % 32 == 16, where the flat one gets
+    #      only 587/720 and just 30 of 80 shapes. Nine draws per shape, three of them spanning the
+    #      whole e4m3 exponent range.
+    #
+    #      What the bytes do NOT settle: a `K % 128` residue is byte-identical to the `K % 32` one
+    #      on all 160 records tried, including the 82 whose grouping really differs, so only the
+    #      source separates them. And the SPLITK_NUM -2 decline is measured to be needed, not
+    #      assumed -- 16 of 1,218 shapes match there.
     algo_family=((11, "gemmsn"), (12, "cutlass"), (13, "gemv"), (14, "gemv"), (16, "gemmsn"), (21, "cutlass"),
-                 (23, "cutlass"), (24, "cutlass"), (66, "nvjet")),
+                 (23, "cutlass"), (24, "cutlass"), (66, "nvjet"), (74, "cutlass3x")),
     # The CUTLASS side of this table is now the COMPLETE set of stages ids the sm_100 algos
     # advertise. `cublasLtMatmulAlgoCapGetAttribute(CUBLASLT_ALGO_CAP_STAGES_IDS)` over every
     # algo id `cublasLtMatmulAlgoGetIds` returns gives, for the cutlass families, exactly
@@ -60,43 +85,38 @@ PROFILE = ArchProfile(
     #   11 and 17 were never picked at all -- 0 hits in any of the 58 M queries, though algos 21
     #      and 23 do advertise them. Both entries rest on the enum-name rule alone: UNVERIFIED.
     stages_recipe=(
-        (("cutlass",
-          0), (32,
-               8)), (("cutlass", 7),
-                     (32,
-                      16)),  # 32x1
-        (("cutlass", 8),
-         (32, 16)),  # 32x2
-        (("cutlass", 9),
-         (32, 16)),  # 32x3
-        (("cutlass", 10),
-         (32, 16)),  # 32x4
-        (("cutlass", 11),
-         (32, 16)),  # 32x5
-        (("cutlass", 12),
-         (32, 16)),  # 32x6
-        (("cutlass", 13),
-         (64, 16)),  # 64x1
-        (("cutlass", 14),
-         (64, 16)),  # 64x2
-        (("cutlass", 15),
-         (64, 16)),  # 64x3
-        (("cutlass", 16),
-         (64, 16)),  # 64x4
-        (("cutlass", 17),
-         (64, 16)),  # 64x5
-        (("cutlass", 18),
-         (64, 16)),  # 64x6
-        (("cutlass", 19),
-         (128, 16)),  # 128x1
-        (("cutlass", 20),
-         (128, 16)),  # 128x2
+        (("cutlass", 0), (32, 8)),
+        (("cutlass", 7), (32, 16)),  # 32x1
+        (("cutlass", 8), (32, 16)),  # 32x2
+        (("cutlass", 9), (32, 16)),  # 32x3
+        (("cutlass", 10), (32, 16)),  # 32x4
+        (("cutlass", 11), (32, 16)),  # 32x5
+        (("cutlass", 12), (32, 16)),  # 32x6
+        (("cutlass", 13), (64, 16)),  # 64x1
+        (("cutlass", 14), (64, 16)),  # 64x2
+        (("cutlass", 15), (64, 16)),  # 64x3
+        (("cutlass", 16), (64, 16)),  # 64x4
+        (("cutlass", 17), (64, 16)),  # 64x5
+        (("cutlass", 18), (64, 16)),  # 64x6
+        (("cutlass", 19), (128, 16)),  # 128x1
+        (("cutlass", 20), (128, 16)),  # 128x2
         # ALGO_ID 21 (`cutlass::Kernel2`) only; no other ALGO_ID was ever seen with this STAGES_ID.
         # k per dot: 16 byte-matches 15/15 shapes, 8 only 9/15. block_k: measured on 34 shapes
         # picked so that 32, 64 and 128 really do group the k-loop differently -- 32 byte-matches
         # 34/34, 64 21/34, 128 15/34, over 8 seeds each.
-        (("cutlass", 25), (32, 16)), (("nvjet", 35), (64, None)),  # fp16/bf16; block_k doubles as the split-K grain
+        (("cutlass", 25), (32, 16)),
+        (("nvjet", 35), (64, None)),  # fp16/bf16; block_k doubles as the split-K grain
         (("nvjet", 36), (128, None)),  # fp8
+        # ALGO_ID 74. STAGES_ID 36 is the only one it advertises and the only one ever returned.
+        # Both numbers are read off the launched kernel name,
+        # `cutlass3x_sm100_tensorop_s64x64x32gemm_..._64x64x128_..._1sm_...`: 128 is the
+        # threadblock k step and 32 is the MMA's k. The 128x128 tile spells the same 32.
+        #
+        # Only the MMA's k is read: the plan uses it to place the group boundaries at
+        # `K % 32`, 32 apart. The threadblock step is recorded because that is what was measured
+        # and because the key is what fails closed on a future STAGES_ID, but nothing reads it --
+        # this family closes no accumulator at a block boundary.
+        (("cutlass3x", 36), (128, 32)),
     ),
     splitk_grains=(8, 64),
     # 1 is CUBLASLT_REDUCTION_SCHEME_INPLACE. It was once declined as "atomic, so not

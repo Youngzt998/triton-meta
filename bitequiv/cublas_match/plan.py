@@ -91,8 +91,12 @@ def _plan_tensor_core(prof, family, M, N, K, kind, config):
             return None, "chunk out of range"
         return (plan(mode="split_blocks", k_chunk=chunk, block_k=block_k) if two_level else plan(
             mode="split", k_chunk=chunk)), "ok"
-    if kind == "fp8":  # cuBLAS refuses fp8 unless every dim is a multiple of 16, so it never
-        return None, "unsupported fp8 on a CUTLASS kernel"  # leaves nvjet; if it did, unmeasured
+    # Never observed: fp8 lands on nvjet or on the CUTLASS 3.x family (ALGO_ID 74), not on these.
+    # The comment here used to say cuBLAS refuses fp8 unless every dimension is a multiple of 16,
+    # which is not what it does -- measured, it wants K % 16 == 0 with N even and M free. The
+    # decline stands on its own: these keys are unmeasured for fp8.
+    if kind == "fp8":
+        return None, "unsupported fp8 on a CUTLASS kernel"
     if nsplit <= 1:
         return plan(mode="k_per_dot", k_per_dot=k_per_dot, leading_group_k=K % block_k), "ok"
     cmode = dict(prof.reduction_to_cmode).get(reduction)
@@ -106,6 +110,61 @@ def _plan_tensor_core(prof, family, M, N, K, kind, config):
     if not grain <= chunk <= K:
         return None, "chunk out of range"
     return plan(mode="splitk_groups", k_chunk=chunk, k_per_dot=k_per_dot, block_k=block_k, merge_scheme=cmode), "ok"
+
+
+def _plan_cutlass3x(prof, family, M, N, K, kind, config):
+    """ALGO_ID 74, `cutlass3x_sm100_tensorop_*`: CUTLASS 3.x, which is not the CUTLASS of 12/21/23/24.
+
+    One fp32 accumulator per output tile, walked over the whole K in ascending order, with the
+    accumulator NOT closed along the way -- so `mode="k_per_dot"` here is not the CUTLASS 2.x
+    "round once per MMA" recipe it is for 12/21/23/24.  It is used only for where the MMA groups
+    START.  Measured with the k probe: no accumulator boundary at any multiple of the MMA's k,
+    every threadblock block sharing one accumulator, and the k blocks walked in ascending order.
+
+    Where they start is the whole subtlety, and it is `K % k_per_dot` rather than 0.  A kernel
+    named `align4` cannot use TMA -- 4 bytes is below TMA's 16-byte minimum -- so CUTLASS builds
+    it on the cp.async collective instead, and that mainloop shifts the entire k axis so the
+    residue sits at the origin:
+
+        cutlass/include/cutlass/gemm/collective/sm100_mma_cpasync_warpspecialized.hpp:426-434
+            auto k_residue = K - size<1>(gB_in) * size<2>(gA_in);
+            // Shift tensor so residue_k is at origin (Can't read any k_coord < residue_k)
+            Tensor gA = domain_offset(make_coord(0, k_residue, 0), gA_in);
+
+    The groups are therefore [0, K % 32), [K % 32, K % 32 + 32), ... , [K - 32, K): a partial
+    group at the FRONT and every later one full and ending exactly at K.  That coincides with a
+    flat-from-zero twin exactly when K % 32 == 0, and is shifted when it is not -- which is
+    precisely where the flat twin was measured to lose.  Bytes confirm the difference the flat
+    reading gets wrong; they do NOT separate a `K % 32` residue from a `K % 128` one, because
+    those two agree on everything past the leading group.  The source is what settles that.
+
+    One thing declines.  `SPLITK_NUM` is 1 or -2 and nothing else here.  -2 is not a split count:
+    it is how cuBLAS marks the stream-K tile scheduler, and the kernel it then launches carries a
+    `_stream_k` suffix the `SPLITK_NUM` 1 kernel does not.  Stream-K walks one flat concatenation
+    of every stream-K tile's k range and cuts it into equal units, so the cut lands at a different
+    k in each output tile, some tiles are not split at all, and the per-unit snapping shifts the
+    boundaries again (`sm90_tile_scheduler_stream_k.hpp:833-965`, `1002-1040`).  Every plan mode
+    here applies ONE chunk to every output element, so none can express that: a structural
+    decline, not an unmeasured one.  It is read from the config directly rather than through
+    `_nsplit_of`, which normalises anything below 1 up to 1 and so would turn stream-K into a
+    silent claim of a single unsplit accumulator.
+    """
+    algo, stages = config[_CFG_ID], config[_CFG_STAGES]
+    if kind != "fp8":
+        # Only ever advertised for fp8 (`CUBLASLT_ALGO_CAP` lists 74 under e4m3 alone) and only
+        # ever measured there, so anything else is an unmeasured key rather than a known one.
+        return None, f"unsupported {kind} on ALGO_ID {algo} (measured for fp8 only)"
+    recipe = dict(prof.stages_recipe).get((family, stages))
+    if recipe is None:
+        return None, f"unsupported STAGES_ID {stages} for {family}"
+    block_k, k_per_dot = recipe
+    nsplit = config[_CFG_SPLITK]
+    if nsplit != 1:
+        return None, (f"unsupported SPLITK_NUM {nsplit} for ALGO_ID {algo} (the stream-K tile "
+                      f"scheduler, whose k partition differs per output tile)")
+    del block_k  # the threadblock k step is not a rounding boundary for this family
+    return CublasGemmPlan(mode="k_per_dot", algo_id=algo, raw_config=config, k_per_dot=k_per_dot,
+                          leading_group_k=K % k_per_dot), "ok"
 
 
 def _plan_gemmsn(prof, family, M, N, K, kind, config):
@@ -166,7 +225,10 @@ def _plan_gemv(prof, family, M, N, K, kind, config):
 
 # Which planner each kernel family uses. `algo_family` maps ALGO_ID -> family, so adding an
 # ALGO_ID to an existing family needs no code, only a table row.
-_FAMILY_PLAN = {"nvjet": _plan_tensor_core, "cutlass": _plan_tensor_core, "gemmsn": _plan_gemmsn, "gemv": _plan_gemv}
+_FAMILY_PLAN = {
+    "nvjet": _plan_tensor_core, "cutlass": _plan_tensor_core, "cutlass3x": _plan_cutlass3x, "gemmsn": _plan_gemmsn,
+    "gemv": _plan_gemv
+}
 
 
 def static_plan(prof, M, N, K, kind, config):

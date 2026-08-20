@@ -80,7 +80,12 @@ def cases(prof):
 
     # --- algo_family: one minimal case per ALGO_ID, so a family remap is caught ----------
     for algo, family in prof.algo_family:
-        if family in ("nvjet", "cutlass"):
+        if family == "cutlass3x":
+            # fp8 only, so the fp16 case the other tensor-core families use would exercise
+            # nothing here but this family's dtype decline.
+            stages = next(s for (f, s), _ in prof.stages_recipe if f == family)
+            add(f"algo_family/{algo}", 4096, 4096, 4096, "fp8", cfg(algo, stages=stages))
+        elif family in ("nvjet", "cutlass"):
             stages = next(s for (f, s), _ in prof.stages_recipe if f == family)
             add(f"algo_family/{algo}", 4096, 4096, 4096, "fp16", cfg(algo, stages=stages))
         elif family == "gemmsn":
@@ -157,6 +162,23 @@ def cases(prof):
 
     add("decline/fp8-on-cutlass", 4096, 4096, 4096, "fp8",
         cfg(cutlass_algo, stages=next(s for (f, s), _ in prof.stages_recipe if f == "cutlass")))
+
+    # --- ALGO_ID 74: the supported corner and both of its declines -------------------------
+    for algo in _algos_of(prof, "cutlass3x"):
+        stages = next(s for (f, s), _ in prof.stages_recipe if f == "cutlass3x")
+        k_per_dot = dict(prof.stages_recipe)[("cutlass3x", stages)][1]
+        for K in (4096, 8192):
+            add(f"cutlass3x/{algo}", 4096, 4098, K, "fp8", cfg(algo, stages=stages))
+        # -2 is how cuBLAS marks the stream-K scheduler, not a split count. `_nsplit_of` would
+        # read it as 1; this case is what pins that the planner does not.
+        for ns in (-2, 2):
+            add(f"decline/cutlass3x-splitk/{algo}", 4096, 4098, 4096, "fp8", cfg(algo, stages=stages, nsplit=ns))
+        # K not a whole number of MMA groups: supported, and the leading group carries the
+        # residue -- the case the flat reading got wrong.
+        add(f"cutlass3x/{algo}/k-residue", 4096, 4098, 4096 + k_per_dot // 2, "fp8", cfg(algo, stages=stages))
+        for kind in ("fp16", "bf16"):
+            add(f"decline/cutlass3x-dtype/{algo}", 4096, 4096, 4096, kind, cfg(algo, stages=stages))
+        add(f"decline/cutlass3x-stages/{algo}", 4096, 4098, 4096, "fp8", cfg(algo, stages=stages + 100))
 
     for family in ("gemmsn", "gemv"):
         for algo in _algos_of(prof, family):
