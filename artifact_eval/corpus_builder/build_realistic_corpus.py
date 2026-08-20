@@ -7,7 +7,7 @@ I_bias_grad_dim0, J_epilogue_colsum_dim0, and the LC_* loop-carried kernels).
 These are NOT in eval_kernels.resolve_kernels, so build_local_eval.py cannot
 build them. They have their OWN compile+fuzz driver already: the ``_g1_cases``
 + ``_lc_cases`` harness at the bottom of realistic_inductor_kernels.py (the same
-one D113724314 used, default 12 fuzz seeds). We REUSE it here and just emit the
+one PR #2760 used, default 12 fuzz seeds). We REUSE it here and just emit the
 standard corpus format so future checker experiments read cached artifacts
 (no recompile, no re-fuzz).
 
@@ -36,7 +36,7 @@ os.environ.setdefault("TRITON_ALWAYS_COMPILE", "1")
 # so it has to be on the path; keep this in step with PYTHONPATH in the artifact README.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-# The existing driver: same case list D113724314 fuzzed (GROUP 1/1b + LC loop-carried).
+# The existing driver: same case list PR #2760 fuzzed (GROUP 1/1b + LC loop-carried).
 from bitequiv.evaluation.realistic_inductor_kernels import _g1_cases, _lc_cases  # noqa: E402
 
 # Where the corpus is written. Same name and same default as the `checker.corpus` step reads,
@@ -134,7 +134,7 @@ def build(seeds):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--seeds", type=int, default=12, help="fuzz seeds per config (D113724314 used 12)")
+    ap.add_argument("--seeds", type=int, default=12, help="fuzz seeds per config (PR #2760 used 12)")
     args = ap.parse_args()
     build(args.seeds)
     print("ALL_DONE_realistic", flush=True)

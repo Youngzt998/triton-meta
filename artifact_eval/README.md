@@ -118,11 +118,11 @@ not show the reproducer is wrong.
 ## Section 2 — the reduction ordering switch (`inner_tree.*`)
 
 **This section evaluates work that is not ours.** The reduction-ordering mechanism —
-`reduction_ordering` / `inner_tree` (D100027220) and the `TRITON_STRICT_REDUCTION_ORDERING`
-environment variable (D101872700) — was written by **Nick Riasanovsky**, a co-author. What is ours
+`reduction_ordering` / `inner_tree` and the `TRITON_STRICT_REDUCTION_ORDERING`
+environment variable — was written by **Nick Riasanovsky**, a co-author. What is ours
 is the measurement: asking whether the guarantee holds bit for bit across the configurations an
 autotuner would actually try, and what the layout pass built on top of it,
-`tritongpu-optimize-reduction-layout` (D110978754), costs and buys.
+`tritongpu-optimize-reduction-layout` (PR #2312), costs and buys.
 
 Both steps are placeholders. Neither needs a new harness: `bitequiv/evaluation/` already contains
 the rulers they call.
@@ -166,8 +166,8 @@ GEMM in four dtypes, and flash attention — the checker never calls two configu
 recorded output bytes differ, and on a large part of the space it recovers real tuning freedom
 rather than putting every configuration in its own group.
 
-**Method.** This is not a new experiment. It is the measurement of diff **D114470722**, and its
-table is in `prior_results_D114470722.txt` next to this file, copied verbatim, so you can compare
+**Method.** This is not a new experiment. It is the measurement of diff **PR #2781**, and its
+table is in `prior_results.txt` next to this file, copied verbatim, so you can compare
 row for row. The step reads a corpus of already-compiled kernels: for each configuration a `.ptx`
 file, and an `empirical_key` recorded when the corpus was built by actually launching that
 configuration on 20 random inputs (12 for the realistic-Inductor group, 50 for flash attention)
@@ -243,7 +243,7 @@ the cached PTX and the cached key, and those two were produced by the same build
 
 **What this step does not do.** The prior table has a `before` column, the class counts at the
 parent commit. Reproducing it needs the parent commit's checker, so it is not something the
-artifact can run; it lives in `prior_results_D114470722.txt` and only there. The same file's fourth
+artifact can run; it lives in `prior_results.txt` and only there. The same file's fourth
 total row, a 72-group subset of the reduction side, is also not reproduced — that subset is a
 frozen list which is not in this branch, and guessing at it would produce a number that looks
 comparable and is not.
@@ -256,7 +256,7 @@ steps/             one file per evaluation step; the file name is the step name 
   _common.py       the helper library a step reads and never edits; its docstring is the contract
   gemm_bitmatch.py ... one module per step, each declaring its own table columns
 corpus_builder/    the scripts that build `checker.corpus`'s input; the corpus itself never ships
-prior_results_D114470722.txt
+prior_results.txt
                    the checker tables from the diffs, verbatim; what section 3 is compared against
 README.md          this file
 AGENTS.md          operational notes for an AI agent driving the artifact; CLAUDE.md points here

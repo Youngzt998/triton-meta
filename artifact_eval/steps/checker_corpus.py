@@ -1,9 +1,9 @@
 """checker.corpus -- grade the static equivalence checker over a corpus of compiled kernels.
 
-This is D114470722's measurement, made runnable by someone else. It is not a new experiment and
+This is PR #2781's measurement, made runnable by someone else. It is not a new experiment and
 nothing here was designed from scratch: the sweep, the arithmetic and the column set follow
 `build_checker_table.py`, the script that produced the diff's table, and the numbers it is
-compared against are copied verbatim into `artifact_eval/prior_results_D114470722.txt`.
+compared against are copied verbatim into `artifact_eval/prior_results.txt`.
 
 The corpus is an INPUT, not part of this repository -- 11 GB, and regenerated rather than
 archived. `artifact_eval/corpus_builder/` holds the scripts that build it and says what it costs.
@@ -56,7 +56,7 @@ TABLES = {
         "`over_merges` is the soundness violation and MUST be 0: the checker called two "
         "configurations equal and the hardware disagreed. `over_splits` is tuning freedom the "
         "checker gave up to stay safe. Compare `checker_cls` against the `after` column of "
-        "`prior_results_D114470722.txt`.",
+        "`prior_results.txt`.",
         "cols": [
             ("scope", "str", "`group` for a (kernel, dtype) row, `total` for a summed row. Do not "
              "sum the totals back in"),
@@ -411,4 +411,4 @@ def run(args, env):
     if cap:
         print(f"  Graded under cap={cap}, so every class count above is for a sample of at most {cap}\n"
               f"  configurations per group and is NOT comparable to the uncapped prior result in\n"
-              f"  prior_results_D114470722.txt. Unset CHECKER_CORPUS_CAP for the full table.")
+              f"  prior_results.txt. Unset CHECKER_CORPUS_CAP for the full table.")

@@ -8,18 +8,18 @@ recomputed, rounded, reordered or summarised -- the markdown and the fenced bloc
 byte-for-byte what each summary says. Every section names the diff it came from, and anything
 this file adds around them is marked as such.
 
-    Tables 1 and 2   D114470722  Forward checker: model the cross-warp shared exchange
-                                 https://www.internalfb.com/D114470722       (PR #2781)
+    Tables 1 and 2   PR #2781  Forward checker: model the cross-warp shared exchange
+                                 commit 91d3e0d4f
                                  NVIDIA / PTX, the corpus on this machine. THIS is what the
                                  artifact's `checker.corpus` step is compared against.
 
-    the blocks in    D114729647  Extract the architecture-neutral checker core
-    the third                    https://www.internalfb.com/D114729647       (PR #2782)
+    the blocks in    PR #2782  Extract the architecture-neutral checker core
+    the third                    commit 89c231415
     section                      A pure refactor over the SAME corpus; it is in this checkout,
                                  so a reader needs to know Tables 1 and 2 survived it.
 
-    Tables 3 and 4   D114666969  AMDGCN forward equivalence checker
-                                 https://www.internalfb.com/D114666969       (PR #2783)
+    Tables 3 and 4   PR #2783  AMDGCN forward equivalence checker
+                                 commit 4de54958d
                                  The AMD twin, on a DIFFERENT corpus. Read beside Tables 1
                                  and 2, not merged into them.
 
@@ -47,7 +47,7 @@ Reading the columns
   group        <kernel>/<dtype>
   configs      configs graded in that group (ok=true; configs that failed to build are excluded)
   before       checker equivalence classes at the PARENT commit
-  after        checker equivalence classes at D114470722 -- this is the column the artifact's
+  after        checker equivalence classes at PR #2781 -- this is the column the artifact's
                `checker.corpus` step reproduces. `before` needs the parent commit's checker and
                is NOT reproducible from the artifact; it lives here and only here.
   empirical    classes the fuzzer measured by running each config. The ground truth, and the
@@ -159,10 +159,10 @@ dot, col_* and sum_* where they were), the control-flow floor (which fingerprint
 cond_reduce), and the fma accumulation-chain guard (which refuses A_rms_norm_fwd-style leaves).
 
 
-D114729647 -- the refactor that came after, checked against the SAME corpus
+PR #2782 -- the refactor that came after, checked against the SAME corpus
 ===========================================================================
-D114729647  [triton][bitequiv] Extract the architecture-neutral checker core
-            https://www.internalfb.com/D114729647  (PR #2782)
+PR #2782  [triton][bitequiv] Extract the architecture-neutral checker core
+            commit 89c231415
 
 This one belongs with the tables above rather than beside them. It is a pure refactor that moved
 the checker's architecture-neutral half to `bitequiv/core/` with zero logic change, and this
@@ -208,12 +208,12 @@ summary also says the over-merge column of its full-table eval is untrustworthy 
 followed up separately, which is one more reason not to mix these figures into the tables above.
 
 
-D114666969 -- the AMD mirror of the same checker
+PR #2783 -- the AMD mirror of the same checker
 ================================================
-D114666969  [triton][bitequiv] AMDGCN forward equivalence checker
-            https://www.internalfb.com/D114666969  (PR #2783)
+PR #2783  [triton][bitequiv] AMDGCN forward equivalence checker
+            commit 4de54958d
 
-The AMD twin of D114470722: the same checker, the same interface, the same soundness gate, on
+The AMD twin of PR #2781: the same checker, the same interface, the same soundness gate, on
 gfx942 / CDNA3 wave64 instead of PTX. Its tables follow, copied verbatim; they are fenced blocks
 in the original, not markdown tables.
 
@@ -271,7 +271,7 @@ reductions                        configs  checker  empirical  over_merge
 Followed in the summary by: "over_merges = 0 across all 30 groups / 4,500 configs (the soundness
 gate holds)."
 
-TABLE 4 -- AMD vs NV (D114470722)
+TABLE 4 -- AMD vs NV (PR #2781)
 
 ```
 category                                   AMD  (ratio)     NV (ratio)
@@ -287,6 +287,6 @@ and col_exp_sum over-split more -- excluding those four, AMD equals NV; and AMD 
 reduction as a multi-stage pipelined store -> gather -> combine whose partials sit at different
 pipeline stages, an inner_tree order that needs a multi-stage reconstruction it does not have yet.
 
-D114666969 also notes at the top that it now REUSES the shared `bitequiv.core` extracted by
-D114729647 rather than hard-copying it, and that the AMD table above is byte-identical before and
+PR #2783 also notes at the top that it now REUSES the shared `bitequiv.core` extracted by
+PR #2782 rather than hard-copying it, and that the AMD table above is byte-identical before and
 after that switch, with NV untouched.

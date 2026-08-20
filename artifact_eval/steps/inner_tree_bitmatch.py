@@ -3,8 +3,8 @@
 PLACEHOLDER.
 
 Attribution. The ordering mechanism this step evaluates is not ours. `reduction_ordering` /
-`inner_tree` (D100027220) and the `TRITON_STRICT_REDUCTION_ORDERING` environment variable
-(D101872700) were written by Nick Riasanovsky, a co-author. What is ours is the measurement:
+`inner_tree` and the `TRITON_STRICT_REDUCTION_ORDERING` environment variable
+were written by Nick Riasanovsky, a co-author. What is ours is the measurement:
 asking whether the guarantee holds bit for bit across the configurations an autotuner would
 actually try.
 """
