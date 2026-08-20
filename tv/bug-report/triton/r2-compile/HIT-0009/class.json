@@ -1,0 +1,103 @@
+{
+ "key": "crash-assert|assert@ElementwiseOpToLLVM.cpp:482:roundingMode.has_value() && \"Rounding mode must be specified for convertsions to fpN\"",
+ "kind": "crash-assert",
+ "rule": "F2",
+ "sig": "assert@ElementwiseOpToLLVM.cpp:482:roundingMode.has_value() && \"Rounding mode must be specified for convertsions to fpN\"",
+ "culprit": "llir",
+ "detail": "assertion",
+ "count": 11,
+ "examples": [
+  "bch:special_i1_kernel_7e502f07",
+  "ind:triton_poi_fused__to_copy_clamp_mul_0_3cc69ca3",
+  "bch:output_counts_flat_kernel_6fe8ff3b",
+  "bch:_unfold_copy_kernel_2d_c4a1d507",
+  "bch:_alias_copy_kernel_04022d3e"
+ ],
+ "archs": {
+  "89": 6,
+  "90": 5
+ },
+ "stages": {
+  "llir": 11
+ },
+ "hit": "HIT-0009",
+ "first_seen": 66.8,
+ "task": {
+  "job": "compile",
+  "spec_id": "bch:special_i1_kernel_7e502f07",
+  "arch": 89,
+  "shape": {
+   "ptr_off": {
+    "x_ptr": 0,
+    "out_ptr": 0
+   },
+   "ptr_ty": {
+    "x_ptr": "*fp8e5",
+    "out_ptr": "*fp8e4nv"
+   },
+   "scalars": {
+    "n_elements": 1
+   },
+   "consts": {
+    "BLOCK_SIZE": 1024
+   },
+   "dtype_swapped": true
+  },
+  "config": {
+   "num_warps": 4,
+   "num_stages": 5,
+   "num_ctas": 1,
+   "maxnreg": 32,
+   "default_dot_input_precision": "bf16x6",
+   "launch_cooperative_grid": false,
+   "launch_pdl": false,
+   "sanitize_overflow": true,
+   "enable_fp_fusion": false
+  },
+  "draw": {
+   "round": 1,
+   "kidx": 382,
+   "seed": 20260819
+  },
+  "tid": 2568
+ },
+ "stderr": "##R4-STAGE frontend\n##R4-STAGE ttir\n##R4-STAGE ttgir\n##R4-STAGE llir\npython: /home/youngzt/fuzz/triton-public/third_party/nvidia/lib/TritonNVIDIAGPUToLLVM/ElementwiseOpToLLVM.cpp:482: SmallVector<Value> mlir::triton::gpu::(anonymous namespace)::FpToFpOpConversion::createDestOps(FpToFpOp, OpAdaptor, ConversionPatternRewriter &, Type, MultipleOperandsRange, Location) const: Assertion `roundingMode.has_value() && \"Rounding mode must be specified for convertsions to fp8\"' failed.\n#blocked = #ttg.blocked<{sizePerThread = [8], threadsPerWarp = [32], warpsPerCTA = [4], order = [0]}>\nmodule attributes {ttg.maxnreg = 32 : i32, \"ttg.num-ctas\" = 1 : i32, \"ttg.num-warps\" = 4 : i32, ttg.target = \"cuda:89\", \"ttg.threads-per-warp\" = 32 : i32, \"ttng.two-ctas\" = false} {\n  tt.func public @special_i1_kernel_7e502f07(%arg0: !tt.ptr<f8E5M2> {tt.divisibility = 16 : i32}, %arg1: !tt.ptr<f8E4M3FN> {tt.divisibility = 16 : i32}) attributes {noinline = false} {\n    %cst = arith.constant dense<1> : tensor<1024xi32, #blocked>\n    %c1024_i32 = arith.constant 1024 : i32\n    %cst_0 = arith.constant dense<0.000000e+00> : tensor<1024xf8E5M2, #blocked>\n    %cst_1 = arith.constant dense<0.000000e+00> : tensor<1024xf32, #blocked>\n    %cst_2 = arith.constant dense<0.398942292> : tensor<1024xf32, #blocked>\n    %cst_3 = arith.constant dense<-0.0398802385> : tensor<1024xf32, #blocked>\n    %cst_4 = arith.constant dense<-3.620180e-03> : tensor<1024xf32, #blocked>\n    %cst_5 = arith.constant dense<1.638010e-03> : tensor<1024xf32, #blocked>\n    %cst_6 = arith.constant dense<-0.0103155496> : tensor<1024xf32, #blocked>\n    %cst_7 = arith.constant dense<0.0228296705> : tensor<1024xf32, #blocked>\n    %cst_8 = arith.constant dense<-0.0289531201> : tensor<1024xf32, #blocked>\n    %cst_9 = arith.constant dense<0.0178765394> : tensor<1024xf32, #blocked>\n    %cst_10 = arith.constant dense<-4.200590e-03> : tensor<1024xf32, #blocked>\n    %cst_11 = arith.constant dense<9.99999968E-21> : tensor<1024xf32, #blocked>\n    %cst_12 = arith.constant dense<5.000000e-01> : tensor<1024xf32, #blocked>\n    %cst_13 = arith.constant dense<0.878905951> : tensor<1024xf32, #blocked>\n    %cst_14 = arith.constant dense<0.514988661> : tensor<1024xf32, #blocked>\n    %cst_15 = arith.constant dense<0.150849342> : tensor<1024xf32, #blocked>\n    %cst_16 = arith.constant dense<0.0265873298> : tensor<1024xf32, #blocked>\n    %cst_17 = arith.constant dense<3.015320e-03> : tensor<1024xf32, #blocked>\n    %cst_18 = arith.constant dense<3.241100e-04> : tensor<1024xf32, #blocked>\n    %cst_19 = arith.constant dense<3.750000e+00> : tensor<1024xf32, #blocked>\n    %0 = tt.get_program_id x : i32\n    %1 = arith.muli %0, %c1024_i32 : i32\n    %2 = tt.make_range {end = 1024 : i32, start = 0 : i32} : tensor<1024xi32, #blocked>\n    %3 = tt.splat %1 : i32 -> tensor<1024xi32, #blocked>\n    %4 = arith.addi %3, %2 : tensor<1024xi32, #blocked>\n    %5 = arith.cmpi slt, %4, %cst : tensor<1024xi32, #blocked>\n    %6 = tt.splat %arg0 : !tt.ptr<f8E5M2> -> tensor<1024x!tt.ptr<f8E5M2>, #blocked>\n    %7 = tt.addptr %6, %4 : tensor<1024x!tt.ptr<f8E5M2>, #blocked>, tensor<1024xi32, #blocked>\n    %8 = tt.load %7, %5, %cst_0 : tensor<1024x!tt.ptr<f8E5M2>, #blocked>\n    %9 = tt.fp_to_fp %8 : tensor<1024xf8E5M2, #blocked> -> tensor<1024xf32, #blocked>\n    %10 = math.absf %9 : tensor<1024xf32, #blocked>\n    %11 = arith.divf %9, %cst_19 : tensor<1024xf32, #blocked>\n    %12 = arith.mulf %11, %11 : tensor<1024xf32, #blocked>\n    %13 = arith.mulf %12, %cst_18 : tensor<1024xf32, #blocked>\n    %14 = arith.addf %13, %cst_17 : tensor<1024xf32, #blocked>\n    %15 = arith.mulf %12, %14 : tensor<1024xf32, #blocked>\n    %16 = arith.addf %15, %cst_16 : tensor<1024xf32, #blocked>\n    %17 = arith.mulf %12, %16 : tensor<1024xf32, #blocked>\n    %18 = arith.addf %17, %cst_15 : tensor<1024xf32, #blocked>\n    %19 = arith.mulf %12, %18 : tensor<1024xf32, #blocked>\n    %20 = arith.addf %19, %cst_14 : tensor<1024xf32, #blocked>\n    %21 = arith.mulf %12, %20 : tensor<1024xf32, #blocked>\n    %22 = arith.addf %21, %cst_13 : tensor<1024xf32, #blocked>\n    %23 = arith.mulf %12, %22 : tensor<1024xf32, #blocked>\n    %24 = arith.addf %23, %cst_12 : tensor<1024xf32, #blocked>\n    %25 = arith.mulf %9, %24 : tensor<1024xf32, #blocked>\n    %26 = arith.maxnumf %10, %cst_11 : tensor<1024xf32, #blocked>\n    %27 = arith.divf %cst_19, %26 : tensor<1024xf32, #blocked>\n    %28 = arith.mulf %27, %cst_10 : tensor<1024xf32, #blocked>\n    %29 = arith.addf %28, %cst_9 : tensor<1024xf32, #blocked>\n    %30 = arith.mulf %27, %29 : tensor<1024xf32, #blocked>\n    %31 = arith.addf %30, %cst_8 : tensor<1024xf32, #blocked>\n    %32 = arith.mulf %27, %31 : tensor<1024xf32, #blocked>\n    %33 = arith.addf %32, %cst_7 : tensor<1024xf32, #blocked>\n    %34 = arith.mulf %27, %33 : tensor<1024xf32, #blocked>\n    %35 = arith.addf %34, %cst_6 : tensor<1024xf32, #blocked>\n    %36 = arith.mulf %27, %35 : tensor<1024xf32, #blocked>\n    %37 = arith.addf %36, %cst_5 : tensor<1024xf32, #blocked>\n    %38 = arith.mulf %27, %37 : tensor<1024xf32, #blocked>\n    %39 = arith.addf %38, %cst_4 : tensor<1024xf32, #blocked>\n    %40 = arith.mulf %27, %39 : tensor<1024xf32, #blocked>\n    %41 = arith.addf %40, %cst_3 : tensor<1024xf32, #blocked>\n    %42 = arith.mulf %27, %41 : tensor<1024xf32, #blocked>\n    %43 = arith.addf %42, %cst_2 : tensor<1024xf32, #blocked>\n    %44 = math.exp %10 : tensor<1024xf32, #blocked>\n    %45 = math.sqrt %26 : tensor<1024xf32, #blocked>\n    %46 = arith.divf %44, %45 : tensor<1024xf32, #blocked>\n    %47 = arith.mulf %46, %43 : tensor<1024xf32, #blocked>\n    %48 = arith.cmpf olt, %9, %cst_1 : tensor<1024xf32, #blocked>\n    %49 = arith.negf %47 : tensor<1024xf32, #blocked>\n    %50 = arith.select %48, %49, %47 : tensor<1024xi1, #blocked>, tensor<1024xf32, #blocked>\n    %51 = arith.cmpf ole, %10, %cst_19 : tensor<1024xf32, #blocked>\n    %52 = arith.select %51, %25, %50 : tensor<1024xi1, #blocked>, tensor<1024xf32, #blocked>\n    %53 = tt.splat %arg1 : !tt.ptr<f8E4M3FN> -> tensor<1024x!tt.ptr<f8E4M3FN>, #blocked>\n    %54 = tt.addptr %53, %4 : tensor<1024x!tt.ptr<f8E4M3FN>, #blocked>, tensor<1024xi32, #blocked>\n    %55 = tt.fp_to_fp %52, rounding = rtne : tensor<1024xf32, #blocked> -> tensor<1024xf8E5M2, #blocked>\n    %56 = tt.fp_to_fp %55 : tensor<1024xf8E5M2, #blocked> -> tensor<1024xf8E4M3FN, #blocked>\n    tt.store %54, %56, %5 : tensor<1024x!tt.ptr<f8E4M3FN>, #blocked>\n    tt.return\n  }\n}\n\n{-#\n  external_resources: {\n    mlir_reproducer: {\n      pipeline: \"builtin.module(tritongpu-combine-tensor-select-and-if, tritongpu-allocate-warp-groups{instrumented=false}, convert-scf-to-cf{allow-pattern-rollback=true}, gluon-inline, allocate-shared-memory-nv{compute-capability=89 ptx-version=88}, triton-tensor-memory-allocation, triton-nvidia-gpu-proxy-fence-insertion{compute-capability=89}, triton-nvidia-gpu-tmem-barrier-insertion, convert-triton-gpu-to-llvm{compute-capability=89 enable-concurrency-sanitizer=false ptx-version=88}, initialize-ws-cluster-barriers{compute-capability=89 ptx-version=88}, llvm.func(canonicalize-llvm-ir), cse, convert-warp-specialize-to-llvm, convert-nv-gpu-to-llvm, canonicalize{cse-between-iterations=false    max-iterations=10 max-num-rewrites=-1 region-simplify=normal test-convergence=false top-down=true}, cse, symbol-dce, convert-nvvm-to-llvm)\",\n      disable_threading: true,\n      verify_each: true\n    }\n  }\n#-}\n<unknown>:0: error: Failures have been detected while processing an MLIR pass pipeline\n<unknown>:0: note: Pipeline failed while executing [`ConvertTritonGPUToLLVM` on 'builtin.module' operation]: reproducer generated at `std::errs, please share the reproducer above with Triton project.`\n",
+ "exc_msg": "PassManager::run failed",
+ "traceback": "Traceback (most recent call last):\n  File \"/home/youngzt/fuzz/r2-compile/fz/compile1.py\", line 109, in compile_stages\n    mod = compile_ir(mod, metadata)\n          ^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/youngzt/fuzz/triton-public/python/triton/backends/nvidia/compiler.py\", line 645, in <lambda>\n    stages[\"llir\"] = lambda src, metadata: self.make_llir(src, metadata, options, capability)\n                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/youngzt/fuzz/triton-public/python/triton/backends/nvidia/compiler.py\", line 447, in make_llir\n    pm.run(mod, 'make_llir')\nRuntimeError: PassManager::run failed\n",
+ "irverify": null,
+ "shrunk": {
+  "config": {
+   "num_warps": 4,
+   "num_stages": 3,
+   "num_ctas": 1,
+   "maxnreg": null,
+   "default_dot_input_precision": "tf32",
+   "launch_cooperative_grid": false,
+   "launch_pdl": false,
+   "sanitize_overflow": true,
+   "enable_fp_fusion": false
+  },
+  "shape": {
+   "ptr_off": {
+    "x_ptr": 0,
+    "out_ptr": 0
+   },
+   "ptr_ty": {
+    "x_ptr": "*fp8e5",
+    "out_ptr": "*fp8e4nv"
+   },
+   "scalars": {
+    "n_elements": 1
+   },
+   "consts": {
+    "BLOCK_SIZE": 512
+   },
+   "dtype_swapped": true
+  },
+  "arch": 89,
+  "spec_id": "bch:special_i1_kernel_7e502f07"
+ },
+ "shrink_state": "done",
+ "reported_count": 3,
+ "report_fmt": 2
+}
