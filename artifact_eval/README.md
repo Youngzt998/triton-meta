@@ -231,11 +231,12 @@ pays every time.
 
 *`gemm.perf.random`*: 1,400 shapes at the default — seven sampling families × two dtypes ×
 `PERF_RANDOM_PER_CELL` (default 100). Each shape pays a configuration search bounded by
-`PERF_RANDOM_SEARCH_S` (default 150 seconds) plus two `torch.compile` autotunes, and the first
-shape of each kind pays Triton compilation that later shapes get free from the on-disk cache. On
-this box, three workers on three GB300s covered 751 of the 1,400 shapes in the first 22 minutes
-with that cache already warm; a single GPU starting cold should be given many hours. Three knobs
-decide whether this is a twenty-minute run or an overnight one:
+`PERF_RANDOM_SEARCH_S` (default 150 seconds) plus two `torch.compile` autotunes, and every shape
+pays its own Triton compilation: `TRITON_ALWAYS_COMPILE=1` is on for every step in this artifact
+(see the quick start), so no shape gets a build free from a previous one and the search budget buys
+fewer configurations than it would with a warm cache. On this box, three workers on three GB300s
+covered 751 of the 1,400 shapes in the first 22 minutes; a single GPU should be given many hours.
+Three knobs decide whether this is a twenty-minute run or an overnight one:
 
 | knob | what it does |
 |---|---|
