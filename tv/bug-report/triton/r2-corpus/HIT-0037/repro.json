@@ -1,0 +1,292 @@
+{
+ "tag": "HIT-0037",
+ "kind": "compiler-crash",
+ "spec": {
+  "name": "bch:conv_transpose1d_forward_kernel_95ad226e",
+  "corpus": "bench",
+  "fn_name": "conv_transpose1d_forward_kernel_95ad226e",
+  "grid": [
+   1,
+   1,
+   1
+  ],
+  "num_warps": 4,
+  "meta": {
+   "runner": "run_flaggems_conv_transpose1d_forward_kernel_95ad226e",
+   "max_hint": 65536
+  },
+  "args": [
+   {
+    "name": "input_pointer",
+    "kind": "ptr",
+    "ty": "*fp32",
+    "value": null,
+    "shape": [
+     2,
+     4,
+     8
+    ],
+    "dtype": "torch.float32"
+   },
+   {
+    "name": "weight_pointer",
+    "kind": "ptr",
+    "ty": "*fp32",
+    "value": null,
+    "shape": [
+     4,
+     8,
+     3
+    ],
+    "dtype": "torch.float32"
+   },
+   {
+    "name": "output_pointer",
+    "kind": "ptr",
+    "ty": "*fp32",
+    "value": null,
+    "shape": [
+     2,
+     8,
+     10
+    ],
+    "dtype": "torch.float32"
+   },
+   {
+    "name": "bias_pointer",
+    "kind": "ptr",
+    "ty": "*fp32",
+    "value": null,
+    "shape": [
+     8
+    ],
+    "dtype": "torch.float32"
+   },
+   {
+    "name": "batch_size",
+    "kind": "int",
+    "ty": "i32",
+    "value": 2,
+    "shape": null,
+    "dtype": null
+   },
+   {
+    "name": "input_width",
+    "kind": "int",
+    "ty": "i32",
+    "value": 8,
+    "shape": null,
+    "dtype": null
+   },
+   {
+    "name": "out_channels",
+    "kind": "int",
+    "ty": "i32",
+    "value": 8,
+    "shape": null,
+    "dtype": null
+   },
+   {
+    "name": "out_width",
+    "kind": "int",
+    "ty": "i32",
+    "value": 10,
+    "shape": null,
+    "dtype": null
+   },
+   {
+    "name": "input_n_stride",
+    "kind": "int",
+    "ty": "i32",
+    "value": 32,
+    "shape": null,
+    "dtype": null
+   },
+   {
+    "name": "input_c_stride",
+    "kind": "int",
+    "ty": "i32",
+    "value": 8,
+    "shape": null,
+    "dtype": null
+   },
+   {
+    "name": "input_w_stride",
+    "kind": "int",
+    "ty": "i32",
+    "value": 1,
+    "shape": null,
+    "dtype": null
+   },
+   {
+    "name": "weight_ic_stride",
+    "kind": "int",
+    "ty": "i32",
+    "value": 24,
+    "shape": null,
+    "dtype": null
+   },
+   {
+    "name": "weight_oc_stride",
+    "kind": "int",
+    "ty": "i32",
+    "value": 3,
+    "shape": null,
+    "dtype": null
+   },
+   {
+    "name": "weight_w_stride",
+    "kind": "int",
+    "ty": "i32",
+    "value": 1,
+    "shape": null,
+    "dtype": null
+   },
+   {
+    "name": "output_n_stride",
+    "kind": "int",
+    "ty": "i32",
+    "value": 80,
+    "shape": null,
+    "dtype": null
+   },
+   {
+    "name": "output_c_stride",
+    "kind": "int",
+    "ty": "i32",
+    "value": 10,
+    "shape": null,
+    "dtype": null
+   },
+   {
+    "name": "output_w_stride",
+    "kind": "int",
+    "ty": "i32",
+    "value": 1,
+    "shape": null,
+    "dtype": null
+   },
+   {
+    "name": "in_channels",
+    "kind": "constexpr",
+    "ty": "constexpr",
+    "value": 4,
+    "shape": null,
+    "dtype": null
+   },
+   {
+    "name": "kernel_width",
+    "kind": "constexpr",
+    "ty": "constexpr",
+    "value": 3,
+    "shape": null,
+    "dtype": null
+   },
+   {
+    "name": "stride_width",
+    "kind": "constexpr",
+    "ty": "constexpr",
+    "value": 1,
+    "shape": null,
+    "dtype": null
+   },
+   {
+    "name": "padding_width",
+    "kind": "constexpr",
+    "ty": "constexpr",
+    "value": 0,
+    "shape": null,
+    "dtype": null
+   },
+   {
+    "name": "dilation_width",
+    "kind": "constexpr",
+    "ty": "constexpr",
+    "value": 1,
+    "shape": null,
+    "dtype": null
+   },
+   {
+    "name": "groups",
+    "kind": "constexpr",
+    "ty": "constexpr",
+    "value": 1,
+    "shape": null,
+    "dtype": null
+   },
+   {
+    "name": "BLOCK_N_OW",
+    "kind": "constexpr",
+    "ty": "constexpr",
+    "value": 32,
+    "shape": null,
+    "dtype": null
+   },
+   {
+    "name": "BLOCK_IC",
+    "kind": "constexpr",
+    "ty": "constexpr",
+    "value": 32,
+    "shape": null,
+    "dtype": null
+   },
+   {
+    "name": "BLOCK_OC",
+    "kind": "constexpr",
+    "ty": "constexpr",
+    "value": 32,
+    "shape": null,
+    "dtype": null
+   }
+  ]
+ },
+ "level": "ttgir",
+ "shape": {
+  "align": {
+   "input_pointer": 2
+  },
+  "consts": {
+   "BLOCK_N_OW": 16,
+   "BLOCK_IC": 128
+  },
+  "scalars": {
+   "batch_size": 1
+  },
+  "grid": [
+   3,
+   1,
+   1
+  ],
+  "id": "a3e9032c02"
+ },
+ "cfg": {
+  "num_warps": 2,
+  "num_ctas": 4,
+  "num_stages": 6,
+  "maxnreg": 64,
+  "default_dot_input_precision": "ieee",
+  "enable_fp_fusion": false,
+  "launch_cooperative_grid": false,
+  "launch_pdl": false,
+  "sanitize_overflow": false,
+  "id": "682abb64ff"
+ },
+ "base_flags": [],
+ "ref_flags": [
+  "--tritongpu-remove-layout-conversions",
+  "--tritongpu-optimize-dot-operands",
+  "--triton-nvidia-optimize-descriptor-encoding",
+  "--triton-loop-aware-cse",
+  "--canonicalize",
+  "--triton-loop-aware-cse",
+  "--triton-nvidia-mma-lowering"
+ ],
+ "added": [
+  "--triton-nvidia-gpu-plan-cta",
+  "--tritongpu-optimize-dot-operands",
+  "--triton-licm",
+  "--triton-nvidia-optimize-tmem-layouts"
+ ],
+ "verdict": "cand-opt-fail",
+ "stderr": "000004b8c5a2\n19 triton-opt 0x0000000004b8bc1a\n20 triton-opt 0x0000000004b7538a\n21 triton-opt 0x0000000004b7486b\n22 triton-opt 0x000000000bf979a6\n23 triton-opt 0x0000000004b6ac93\n24 triton-opt 0x0000000004b6b06a\n25 triton-opt 0x0000000004b6b2db\n26 triton-opt 0x0000000004b3185c\n27 libc.so.6  0x00007f01bd42a610\n28 libc.so.6  0x00007f01bd42a6c0 __libc_start_main + 128\n29 triton-opt 0x00000000041d18a5\n"
+}
