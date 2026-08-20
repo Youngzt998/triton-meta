@@ -442,3 +442,90 @@ captured `make_ttgir` input (30,145 lines of TTIR, because `K = 19` and
 * **fp8 is now five kept defects and, with HIT-0059, four separate symptoms of
   HIT-0007 alone.** Pass 2's suggestion to tell R4 to stop counting the fp8
   families is overdue.
+
+## Pass 8 (2026-08-20) — HIT-0061 … HIT-0066
+
+Batch frozen at the start: `HIT-0061 … HIT-0066` (6). **2 kept, 4 rejected.**
+All six reproduce. `r2-corpus` and `r2-inductor` were out of scope again.
+
+**Kept — HIT-0066: `AxisInfo`'s constant folder runs `%` and `/` on host
+integers with no zero check, so the compiler dies with `SIGFPE`.** A **new
+family**, the first in this line that is neither PlanCTA, nor fp8, nor ptxas,
+nor a frontend type hole. `RemOpAxisInfoVisitor::getConstantValue`
+(`lib/Analysis/AxisInfo.cpp:574`) computes `lhs % rhs` in C++ whenever both
+operands are known constants; the sibling `DivOpAxisInfoVisitor` at `:506` does
+the same for `/`. Neither checks for a zero divisor. A `reflection_pad2d` kernel
+with `W_in = 1` computes the reflection period `2 * (W_in - 1) = 0`, so the
+frontend emits `arith.remsi %c1_i32, %c0_i32` — legal MLIR that MLIR's own
+folder is careful about — and `TritonGPUCoalesce`, which builds
+`ModuleAxisInfoAnalysis` at `Coalesce.cpp:84`, executes it and is killed.
+Three triggers confirmed with hand-written 9-line TTIR: `remsi x, 0`,
+`divsi x, 0`, and `divsi INT64_MIN, -1` (signed overflow, same instruction).
+**Generic**: `num_ctas = 1`, seen on sm_80 ×2, sm_89 and sm_90, target-independent
+core code, no GPU needed. Under `triton.compile` the crash is caught by MLIR's
+`CrashRecoveryContext` and surfaces as a bare `RuntimeError: PassManager::run
+failed`, which is why R4 filed it under `crash-python` rather than a crash class.
+
+**Kept — HIT-0063: an `fp8e4b15` dot operand at `num_ctas > 1` carries a
+CTA-split CGA layout into the wgmma shared operand, and the descriptor builder
+asserts `block == 0`.** Ninth defect in the `num_ctas > 1` theme, and the first
+in it that is not PlanCTA, the scan lowering or the default reshape layout.
+`fp8e4b15` has no hardware conversion, so the `B` operand detours through
+registers (`tt.elementwise_inline_asm`) and keeps the load's
+`CGALayout = [[1, 0]]`; `AccelerateMatmul.cpp:192` then copies that CGA layout
+straight into the `nvmma_shared` allocation it makes for wgmma
+(`getCGALayout(argType.getEncoding())`), and `MMAHelpers.h:171` asserts because a
+Hopper wgmma shared-memory descriptor has no field for a CTA index. Under
+`NDEBUG` the assert is gone and the descriptor is built from the offset alone —
+silently wrong cross-CTA addressing. A 16-line hand-written TTGIR reproduces it
+with two `triton-opt` passes, and changing the one attribute
+`CGALayout = [[1, 0]]` → `[[0, 0]]` makes the same file compile.
+
+**Rejected — HIT-0062, B4 of HIT-0063.** Same pass, same condition, second site:
+`LoadStoreOpToLLVM.cpp:1054` *does* test `isTrivialOver({"block"})` and emits
+`cp.async does not support non-trivial block dimension`. Which of the two sites
+fires depends only on which operand carries the split — measured by flipping one
+pointer dtype at `num_ctas = 2`: `fp16/fp16` compiles, `fp8e4nv/fp8e5` compiles,
+`fp8e4nv/fp8e4b15` asserts, `fp8e4b15/fp8e4b15` gives the `cp.async` message.
+Along `num_ctas` the same draw gives four different messages (1 compiles,
+2 `assert(block == 0)`, 4 `assert(getReps(...).has_value())`, 8 a clean
+`failed to find valid wgmma layout` diagnostic). **One condition, four R4
+classes.**
+
+**Rejected — HIT-0064, B4 of HIT-0038.** Same kernel `bch:mode_kernel_b978d037`,
+same `num_ctas` threshold (1 and 2 compile, 4 and 8 fail), same rank-changing
+`tt.reshape` under the default CGA layout. New fact folded onto HIT-0038: with
+`N = 1` it surfaces earlier, as a verifier error out of
+`TritonGPURemoveLayoutConversions`, instead of the LLVM-lowering assert.
+
+**Rejected — HIT-0065, B4 of HIT-0047.** Same kernel as the PTX HIT-0047 already
+ships (`triton_per_fused_native_group_norm_0_9294c0a8`), sm_89, 34
+undefined-register reads against HIT-0047's 33 and HIT-0050's 0, identical
+switch profile including insensitivity to `--regAllocOptLevel`.
+
+**Rejected — HIT-0061, resource-limit.** `Insufficient registers (128) … needs
+154` at `num_warps = 16` (512 threads → 65536/512 = 128). Tenth report under this
+heading, and the first at 16 warps rather than 32 — R4's signature keeps both
+numbers, so the class keeps taking fresh ids.
+
+**Notes for pass 9.**
+* 🔴 **Correction to pass 7's ptxas note.** The undefined-register *count* is a
+  good discriminator and it settled HIT-0065 in minutes. But pass 7's claim that
+  inserting one `mov.b16 %rsN, 0;` per undefined register turns rc 139 into rc 0
+  **did not reproduce.** Two placements were tried on all three files, each
+  verified afterwards to have zero read-but-never-written registers, and `ptxas`
+  V12.9.86 still segfaults on every one. The correction is appended to HIT-0047;
+  treat "that read IS the trigger" as an open hypothesis.
+* **`num_ctas > 1` is now nine defects**, and the newest one is *not* in
+  `PlanCTA`. Keep varying `num_ctas` first, but stop assuming the answer is
+  PlanCTA — the layout the CGA assignment picks now has two known consumers that
+  cannot handle it (`ttng.warp_group_dot`, `ttg.async_copy_global_to_local`).
+* **A missing verifier, worth one upstream patch.** `LoadStoreOpToLLVM.cpp:1054`
+  already checks `isTrivialOver({"block"})` for `cp.async`. The same one-line
+  check on `ttng.warp_group_dot`'s shared operand would turn HIT-0063's assert
+  (and the `NDEBUG` silent-wrong-data case) into a diagnostic.
+* **A crash can hide behind a bland `RuntimeError`.** `PassManager::run failed`
+  with no message is what MLIR's crash reproducer produces when it catches a
+  signal. HIT-0066 is a `SIGFPE` wearing that disguise; `triton-opt` shows the
+  real thing. Run the blamed pass under `triton-opt` before believing the
+  exception type, and set `LLVM_SYMBOLIZER_PATH` so the backtrace has names.
