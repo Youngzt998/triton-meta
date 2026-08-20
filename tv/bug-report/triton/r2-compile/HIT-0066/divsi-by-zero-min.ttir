@@ -1,0 +1,13 @@
+module {
+  tt.func public @mini_div(%arg0: !tt.ptr<f32> {tt.divisibility = 16 : i32}) attributes {noinline = false} {
+    %c0_i32 = arith.constant 0 : i32
+    %c1_i32 = arith.constant 1 : i32
+    %cst = arith.constant dense<0.000000e+00> : tensor<4xf32>
+    %true = arith.constant dense<true> : tensor<4xi1>
+    %r = arith.divsi %c1_i32, %c0_i32 : i32
+    %p = tt.addptr %arg0, %r : !tt.ptr<f32>, i32
+    %s = tt.splat %p : !tt.ptr<f32> -> tensor<4x!tt.ptr<f32>>
+    tt.store %s, %cst, %true : tensor<4x!tt.ptr<f32>>
+    tt.return
+  }
+}

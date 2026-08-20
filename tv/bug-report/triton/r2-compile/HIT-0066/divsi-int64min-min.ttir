@@ -1,0 +1,14 @@
+module {
+  tt.func public @mini_ovf(%arg0: !tt.ptr<f32> {tt.divisibility = 16 : i32}) attributes {noinline = false} {
+    %cmin = arith.constant -9223372036854775808 : i64
+    %cm1 = arith.constant -1 : i64
+    %cst = arith.constant dense<0.000000e+00> : tensor<4xf32>
+    %true = arith.constant dense<true> : tensor<4xi1>
+    %r = arith.divsi %cmin, %cm1 : i64
+    %t = arith.trunci %r : i64 to i32
+    %p = tt.addptr %arg0, %t : !tt.ptr<f32>, i32
+    %s = tt.splat %p : !tt.ptr<f32> -> tensor<4x!tt.ptr<f32>>
+    tt.store %s, %cst, %true : tensor<4x!tt.ptr<f32>>
+    tt.return
+  }
+}
