@@ -223,3 +223,51 @@ matches only `operand #N`; the suggestion from pass 2 (match
   wrapper script that copies its `.ptx` argument aside and then `exec`s the real
   ptxas. That turns a Triton-dependent report into a one-command NVIDIA bug
   report.
+
+---
+
+## Pass 4 (2026-08-19) — HIT-0048, plus two crashes that arrived on another line
+
+| pass | ids | kept | rejected |
+|---|---|---|---|
+| 4 | HIT-0048 | 1 | 0 |
+
+**Kept — HIT-0048, a new class and the first one in this line that is neither
+`PlanCTA`, nor fp8, nor ptxas.** `Semantic.cast` builds `tt.int_to_ptr` for a
+source integer of **any** width (`python/triton/language/semantic.py:897-899`),
+but the op is declared `TT_I64Like` — `i64` only (`TritonOps.td:46`, backed by
+`TritonTypes.td:42`). So `x.to(tl.pointer_type(T))` on an `i8`/`i16`/`i32`
+produces malformed IR and a bare `RuntimeError: error encountered during
+parsing` with no source location. The sibling branch three lines above, pointer
+→ integer at `semantic.py:890-895`, **does** check the width and falls through
+to a clean `assert False, 'cannot cast ...'`; the two halves of one function
+disagree. A 20-line hand-written repro is committed as
+`HIT-0048/int_to_ptr_width.py`: `*i64` compiles, `*i32`, `*i16`, `*i8` and `*u8`
+all fail. Low severity (a diagnostic-quality defect, like HIT-0002) and the
+failing draw does use a swapped pointer dtype, but no fuzzer is needed to see
+it.
+
+**Two `PlanCTA` crashes were folded in from `r2-corpus`, not from this line.**
+The pass-toggle line found the same two defects this line already owns, which is
+worth recording because it is independent confirmation from a different oracle:
+
+* `r2-corpus/HIT-0066` → **HIT-0019**. `PlanCTA.cpp:164`, the `step < maxSteps`
+  assert, on a 3476-line TTGIR at `num_ctas = 2`. The budget is hit by *size*,
+  so any line that compiles a big enough function with clusters on will find it.
+* `r2-corpus/HIT-0068` → **HIT-0003**. `PlanCTA.cpp:849`, `Unexpected parent op
+  of block argument`, on an IR whose only region op is one `scf.while`.
+
+Both were reproduced with a single `triton-opt` command on the dumped reference
+IR. Occurrence lines were appended to HIT-0019 and HIT-0003 and committed on
+their own.
+
+**Notes for pass 5.**
+* The `num_ctas > 1` theme is unchanged at seven defects plus
+  `r2-oracle/HIT-0001`; nothing new joined it this pass. What is new is that a
+  *second* line now reaches two of them, so the theme is not an artifact of R4's
+  config sweep.
+* R4's guards held again: no reviewed report was clobbered, and no rejected id
+  was re-created, during this pass.
+* `TRITON_DEFAULT_FP_FUSION=0` is **useless as a control on the r2-inductor
+  line** — its spec sets `enable_fp_fusion` per compile, so the env default is
+  overridden and the arm is unchanged. Override the config instead.
