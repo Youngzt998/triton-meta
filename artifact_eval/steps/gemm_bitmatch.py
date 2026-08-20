@@ -63,8 +63,6 @@ def _decline_reason(msg):
     """A decline message with the shape taken out of it, so the reasons group into a few lines
     instead of one line per shape."""
     reason = msg.split(": ", 1)[1] if ": " in msg else msg
-    if reason.startswith("no cuBLAS algo"):  # "no cuBLAS algo for 1x1x1024 fp8 (rc=15, ret=0)"
-        return "no cuBLAS algo"
     return reason.split(" on a ")[0]  # "... on a 65536-element gemv (measured up to 9728)"
 
 
@@ -168,10 +166,12 @@ def _draw_shape(rng):
                                    of them decline -- 658 because cuBLAS offers no algorithm at
                                    all and 433 because it offers ALGO_ID 74, a family the arch
                                    profile has never measured.
-      M == 1 and N == 1            no algorithm, declined. 76 shapes.
+      M == 1 and N == 1            no algorithm, so skipped rather than declined. 76 shapes.
 
-    Those declines are kept rather than drawn around. A decline is a recorded outcome in this
-    artifact and not a failure -- it is coverage lost, not wrong bits returned -- and an fp8
+    A shape cuBLAS itself has no algorithm for is skipped, not counted: there is no answer to
+    match, so declining is the correct result rather than a shortfall, and counting it would
+    overstate the gap.  The rest are kept rather than drawn around.  A decline is a recorded
+    outcome in this artifact and not a failure -- it is coverage lost, not wrong bits returned -- and an fp8
     column vector landing on an unmeasured cuBLAS family is a gap worth having a thousand rows
     of evidence for. Rounding M up to a multiple of 8 would turn them into `plain` rows, which
     would say less.
@@ -193,7 +193,7 @@ def run(args, env):
     out = writer("gemm.bitmatch")
     rng = random.Random(args.seed)
     deadline = time.time() + args.minutes * 60
-    n = ok = declined = mism = 0
+    n = ok = declined = mism = skipped = 0
     shapes_of, differ_of, declines = collections.Counter(), collections.Counter(), collections.Counter()
     print(f"\n[gemm.bitmatch] {args.minutes} min, {args.reps} input draws per shape, seed {args.seed}")
     while time.time() < deadline:
@@ -232,9 +232,15 @@ def run(args, env):
                 ok += 1
             n += 1
         except CublasUnsupportedShape as e:
-            declined += 1
-            declines[_decline_reason(str(e))] += 1
-            rec["declined"] = str(e)
+            msg = str(e)
+            if "no cuBLAS algo" in msg:
+                # cuBLAS's own heuristic returned nothing, so there is no answer to be matched and
+                # declining IS the right result. The shape is not a test case; it is not counted.
+                skipped += 1
+            else:
+                declined += 1
+                declines[_decline_reason(msg)] += 1
+            rec["declined"] = msg
         except Exception as e:
             rec["error"] = f"{type(e).__name__}: {e}"
         out.write(json.dumps(rec) + "\n")
@@ -245,6 +251,7 @@ def run(args, env):
     print(f"  byte-identical to cuBLAS      {ok}/{n}")
     print(f"  shapes with any differing draw {mism}   (logged in data/gemm.bitmatch.jsonl)")
     print(f"  declined (out of scope)       {declined}")
+    print(f"  skipped, cuBLAS had no algorithm {skipped}   (no answer exists, so nothing to match)")
     if mism:
         print("  A mismatch is not automatically ours: cuBLAS itself drops the k tail on some\n"
               "  shapes -- run gemm.cublas-bug, which reproduces that defect on this machine.")
