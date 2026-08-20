@@ -1,0 +1,145 @@
+{
+ "t": "variant",
+ "kid": "gen_gemv_ef525af0d65e95",
+ "v": {
+  "skip": [
+   "ProducerConsumerWarpSpecialized"
+  ],
+  "cfg": {}
+ },
+ "status": "diff",
+ "mode": "large",
+ "seed": 166000,
+ "draw": 0,
+ "labels": [
+  "pass-class:numerics-changing",
+  "layout-reorders-reduction",
+  "kernel-has-reduce",
+  "input-mode:large",
+  "shared-config:ptxas-reg-level=8",
+  "shared-config:index-bits=64",
+  "exact-int-accum:reassociation-excluded",
+  "nan-pattern-changed",
+  "gross"
+ ],
+ "nums": {
+  "ulp_max": 1829257183,
+  "n_diff": 511,
+  "n_total": 511,
+  "max_abs_diff": 85476848.0
+ },
+ "diffs": [
+  {
+   "arg": 2,
+   "dtype": "float32",
+   "shape": [
+    511
+   ],
+   "kind": "float",
+   "nan_ref": 8,
+   "nan_cand": 0,
+   "nan_mask_differs": true,
+   "n_diff": 511,
+   "n_total": 511,
+   "max_abs": 85476848.0,
+   "max_rel": 1.9969475269317627,
+   "ulp_max": 1829257183,
+   "first": {
+    "idx": 0,
+    "ref": NaN,
+    "cand": -7221871.0
+   }
+  }
+ ],
+ "confirm": {
+  "draw": 0,
+  "mode": "large",
+  "seed": 166000,
+  "draws_differing": [
+   0,
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   9,
+   10,
+   11,
+   12,
+   13,
+   14,
+   15,
+   16,
+   18,
+   19
+  ],
+  "n_draws": 20,
+  "draw_modes": {
+   "0": "large",
+   "1": "intvalued",
+   "2": "uniform",
+   "3": "zeros",
+   "4": "boundary",
+   "5": "pow2",
+   "6": "denormal",
+   "7": "normal",
+   "9": "large",
+   "10": "intvalued",
+   "11": "uniform",
+   "12": "zeros",
+   "13": "boundary",
+   "14": "pow2",
+   "15": "denormal",
+   "16": "normal",
+   "18": "large",
+   "19": "intvalued"
+  },
+  "cand_self_consistent": true,
+  "diff_under_heap_shift": true,
+  "ref_self_consistent": true,
+  "shared_fast_math": false,
+  "int_control_draw": 1,
+  "int_control_exact": true,
+  "int_control_differs": true
+ },
+ "minimal": {
+  "skip": [
+   "ProducerConsumerWarpSpecialized"
+  ],
+  "cfg": {}
+ },
+ "item": {
+  "kind": "gen",
+  "spec": {
+   "fam": "gemv",
+   "p": {
+    "M": 511,
+    "K": 1025,
+    "bM": 64,
+    "bK": 256,
+    "th": 32,
+    "st": 3,
+    "dt": "float32"
+   },
+   "pc": {
+    "tl.ptxas_register_usage_level": 8,
+    "tl.config_index_bitwidth": 64
+   }
+  },
+  "kid": "gen_gemv_ef525af0d65e95"
+ },
+ "modes": [
+  "boundary",
+  "denormal",
+  "intvalued",
+  "large",
+  "normal",
+  "pow2",
+  "uniform",
+  "zeros"
+ ],
+ "ref_chars": 5001,
+ "cand_chars": 10751
+}

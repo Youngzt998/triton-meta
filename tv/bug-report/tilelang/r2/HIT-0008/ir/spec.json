@@ -1,0 +1,16 @@
+{
+ "fam": "gemv",
+ "p": {
+  "M": 511,
+  "K": 1025,
+  "bM": 64,
+  "bK": 256,
+  "th": 32,
+  "st": 3,
+  "dt": "float32"
+ },
+ "pc": {
+  "tl.ptxas_register_usage_level": 8,
+  "tl.config_index_bitwidth": 64
+ }
+}
