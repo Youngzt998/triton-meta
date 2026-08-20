@@ -278,9 +278,24 @@ def _kind_of(a) -> str:
     return "fp16"
 
 
+_LT_OUT_DTYPE = {torch.float16: _CUDA_R_16F, torch.bfloat16: _CUDA_R_16BF}
+
+
 def _lt_dtypes(kind, out_dtype):
-    """(ab_dt, cd_dt, transa, transb) for the cuBLASLt layouts, per input dtype."""
-    cd = _CUDA_R_16BF if out_dtype == torch.bfloat16 else _CUDA_R_16F
+    """(ab_dt, cd_dt, transa, transb) for the cuBLASLt layouts, per input dtype.
+
+    An output dtype outside `_LT_OUT_DTYPE` raises. It has to: cuBLAS is told the output type
+    through this mapping, and torch allocates the buffer from `out_dtype` separately, so a dtype
+    that quietly fell through to fp16 here would have cuBLAS write fp16 into, say, an fp32 buffer
+    and the caller read the halves back as one float. Nothing errors and nothing looks wrong
+    until the numbers do -- an all-ones fp8 GEMM asked for in fp32 comes back around 1e24.
+    """
+    cd = _LT_OUT_DTYPE.get(out_dtype)
+    if cd is None:
+        ok = ", ".join(str(d) for d in _LT_OUT_DTYPE)
+        raise ValueError(f"unsupported out_dtype {out_dtype}; supported: {ok}. cuBLAS is told the "
+                         f"output type from this table, so an unlisted one would be a silent "
+                         f"mis-declaration rather than a wider output.")
     if kind == "fp8":
         return _CUDA_R_8F_E4M3, cd, _OP_T, _OP_N  # e4m3 TN
     ab = _CUDA_R_16BF if kind == "bf16" else _CUDA_R_16F
