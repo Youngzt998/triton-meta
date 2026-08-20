@@ -1,0 +1,94 @@
+{
+ "tag": "HIT-0019",
+ "kind": "compiler-crash",
+ "spec": {
+  "name": "ind:triton_convolution2d_eb1afb2c",
+  "corpus": "inductor",
+  "fn_name": "triton_convolution2d_eb1afb2c",
+  "grid": [
+   4,
+   1,
+   1
+  ],
+  "num_warps": 4,
+  "meta": {
+   "entry": 138,
+   "kernel": "triton_convolution2d",
+   "sig": "loads=2 stores=1 no-reduction for-loop",
+   "category": "139. pooling :: conv_template",
+   "size_hints": {},
+   "max_hint": 65536
+  },
+  "args": [
+   {
+    "name": "arg_X",
+    "kind": "ptr",
+    "ty": "*fp16",
+    "value": null,
+    "shape": null,
+    "dtype": null
+   },
+   {
+    "name": "arg_W",
+    "kind": "ptr",
+    "ty": "*fp16",
+    "value": null,
+    "shape": null,
+    "dtype": null
+   },
+   {
+    "name": "out_ptr0",
+    "kind": "ptr",
+    "ty": "*fp16",
+    "value": null,
+    "shape": null,
+    "dtype": null
+   }
+  ]
+ },
+ "level": "ttgir",
+ "shape": {
+  "align": {},
+  "consts": {},
+  "scalars": {},
+  "grid": [
+   4,
+   1,
+   1
+  ],
+  "id": "3fafba21f7"
+ },
+ "cfg": {
+  "num_warps": 2,
+  "num_ctas": 2,
+  "num_stages": 8,
+  "maxnreg": null,
+  "default_dot_input_precision": "bf16x6",
+  "enable_fp_fusion": false,
+  "launch_cooperative_grid": false,
+  "launch_pdl": false,
+  "sanitize_overflow": true,
+  "id": "52bb0f6f4f"
+ },
+ "base_flags": [
+  "--tritongpu-coalesce",
+  "--tritongpu-accelerate-matmul",
+  "--tritongpu-remove-layout-conversions"
+ ],
+ "ref_flags": [
+  "--tritongpu-coalesce",
+  "--tritongpu-accelerate-matmul",
+  "--tritongpu-remove-layout-conversions",
+  "--tritongpu-F32DotTC",
+  "--triton-nvidia-check-matmul-two-cta",
+  "--canonicalize",
+  "--tritongpu-schedule-loops"
+ ],
+ "added": [
+  "--cse",
+  "--triton-nvidia-gpu-plan-cta",
+  "--tritongpu-remove-layout-conversions"
+ ],
+ "verdict": "cand-opt-fail",
+ "stderr": "000004b8c5a2\n18 triton-opt 0x0000000004b8bc1a\n19 triton-opt 0x0000000004b7538a\n20 triton-opt 0x0000000004b7486b\n21 triton-opt 0x000000000bf979a6\n22 triton-opt 0x0000000004b6ac93\n23 triton-opt 0x0000000004b6b06a\n24 triton-opt 0x0000000004b6b2db\n25 triton-opt 0x0000000004b3185c\n26 libc.so.6  0x00007f419be2a610\n27 libc.so.6  0x00007f419be2a6c0 __libc_start_main + 128\n28 triton-opt 0x00000000041d18a5\n"
+}
