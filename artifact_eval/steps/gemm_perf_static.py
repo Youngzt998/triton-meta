@@ -26,7 +26,7 @@ Neither step substitutes for the other.
 
 THE SHAPES
 ----------
-`fusion_moe/models_2026.py` builds 419 cases over 349 distinct (M, N, K).  Every number in that
+`fusion_moe/models_2026.py` builds 461 cases over 391 distinct (M, N, K).  Every number in that
 table was read out of the model's own `config.json` on Hugging Face on 2026-08-16 with the source
 key recorded, and the layer-to-GEMM mapping was checked against official modeling code.  Nothing
 is added here from memory.  The five pairings:
@@ -51,7 +51,7 @@ and both counts are printed.  `cases` and `shared_with` on a row say when that h
 
 DTYPE
 -----
-fp16 on every case.  fp8 (e4m3) additionally on `moe_up`, `moe_down` and `attn` and nowhere else.
+fp16 on every case.  fp8 (e4m3) additionally on the four FFN pairings and `attn`, nowhere else.
 The rule is what an fp8-served open-weight checkpoint actually quantizes: DeepSeek ships native
 fp8 weights for the transformer's linear layers, and the `qkv_proj` case in the model table
 already carries "scale then cast to fp8" as its epilogue -- that case only exists in an fp8-served
@@ -71,7 +71,7 @@ That is 195 fp8 cases over 157 more distinct shapes: 506 (M, N, K, dtype) shapes
 ORDER, SO A TRUNCATED RUN IS STILL READABLE
 -------------------------------------------
 Shapes are ordered round-robin across the five pairings.  A run that stops early therefore
-covers all five roughly equally instead of finishing `moe_up` and never reaching `attn`.  Within
+covers all seven roughly equally instead of finishing `moe_up` and never reaching `attn`.  Within
 a pairing the order is sorted and fixed, so a prefix is a deterministic slice and NOT a random
 sample of that pairing -- read a partial run as "these cases", never as "this pairing".
 
@@ -129,11 +129,11 @@ ORDER = 30
 DESCRIPTION = "price of the bit constraint on the fixed shapes of real 2026 open-weight models"
 IMPLEMENTED = True
 
-PAIRINGS = ("moe_up", "moe_down", "lora", "lmhead", "attn")
+PAIRINGS = ("moe_up", "moe_down", "mlp_up", "mlp_down", "lora", "lmhead", "attn")
 
 # The dtype rule, in one place.  See DTYPE in the module docstring for why these three and not
 # the other two.
-FP8_PAIRINGS = ("moe_up", "moe_down", "attn")
+FP8_PAIRINGS = ("moe_up", "moe_down", "mlp_up", "mlp_down", "attn")
 
 TABLES = {
     "gemm.perf.static": {
@@ -148,7 +148,7 @@ TABLES = {
             ("model", "str", "model the shape comes from"),
             ("layer", "str", "layer within that model, e.g. expert.up_proj T16k/even, "
              "q_proj.lora_B r=16, lm_head"),
-            ("pairing", "str", "which of the five layer kinds this case belongs to: moe_up, "
+            ("pairing", "str", "which of the seven layer kinds this case belongs to: moe_up, "
              "moe_down, lora, lmhead or attn. The report is aggregated on this"),
             ("note", "str", "what the layer is, carried over from the model table"),
             ("M", "int", "rows of A; the token count this case is measured at"),
