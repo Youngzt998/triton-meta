@@ -4,12 +4,13 @@ Written by the reviewing agent, not by the fuzzer. R4's own `CLASSES.md` groups
 by **error string**; this file groups by **root cause**, which is what criterion
 B4 in `tv/bug-report/REVIEW-CRITERIA.md` asks for.
 
-Two review passes so far:
+Three review passes so far (pass 3 is written up at the bottom of this file):
 
 | pass | ids | kept | rejected |
 |---|---|---|---|
 | 1 | HIT-0001 … HIT-0015 | 9 | 6 (all B4) |
 | 2 | HIT-0016 … HIT-0044 | 3 | 26 (16 B4, 4 A1, 6 resource-limit — the last is not a numbered criterion; see below) |
+| 3 | HIT-0045 … HIT-0047 | 2 | 1 (B4) |
 
 🔴 **R4 used to rewrite every `HIT-*.md` in this directory on each refresh. Since
 the driver restart at 17:52 on 2026-08-19 it does not.** Two guards are live and
@@ -19,7 +20,7 @@ carries the reviewer's headings, and it skips any id listed in
 directory. Details in `/home/youngzt/fuzz/r2-compile/NOTES-followup.md` §2 and
 §5. This file is a name R4 does not generate, so it survives either way.
 
-## The 12 kept reports
+## The 14 kept reports
 
 Counts are the **folded** totals for the root cause, read at 2026-08-19 19:27.
 They keep growing; the number matters less than the ranking.
