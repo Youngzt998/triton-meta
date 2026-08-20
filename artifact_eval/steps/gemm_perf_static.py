@@ -177,7 +177,7 @@ from .gemm_perf_random import ARM_COLS, ARM_LABEL, ARM_NAME, ARMS, make_flush_bu
 
 NAME = "gemm.perf.static"
 ORDER = 30
-DESCRIPTION = "price of the bit constraint on the fixed shapes of real 2026 open-weight models"
+DESCRIPTION = "the same five arms on the layer shapes of real 2026 open-weight models"
 IMPLEMENTED = True
 
 PAIRINGS = ("moe_up", "moe_down", "mlp_up", "mlp_down", "lora", "lmhead", "attn")

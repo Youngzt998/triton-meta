@@ -198,8 +198,8 @@ from ._common import CACHE, HERE, digest, graph_ms, hot_cublas, make_inputs, pic
 
 NAME = "gemm.perf.random"
 ORDER = 20
-DESCRIPTION = ("four-way comparison on random shapes: the bit constraint against torch, "
-               "and our rewrites against a search")
+DESCRIPTION = ("five arms on random shapes, each timed against cuBLAS: two unconstrained torch "
+               "arms and two byte-identical ones")
 IMPLEMENTED = True
 
 # The seven sampling rules, crossed with fp16 and fp8.  The family is the SAMPLING RULE, not the
@@ -1582,7 +1582,7 @@ def _report(meta, timing="device_flush_ms"):
     want = (meta or {}).get("per_cell", 0) * len(FAMILIES) * 2
     state = f"of {want} " if want and len(by_shape) < want else ""
     P(f"gemm.perf.random -- {len(by_shape)} {state}shapes measured, {len(rows)} arm records" +
-      ("  (RUN STILL IN PROGRESS)" if state else ""))
+      ("  (INCOMPLETE -- see the coverage note below)" if state else ""))
     P(f"  written {time.strftime('%Y-%m-%d %H:%M:%S')}. Regenerate with PERF_RANDOM_REPORT_ONLY=1.")
     for k, v in ARM_LABEL.items():
         P(f"    {ARM_NAME[k]:20} {v}")

@@ -1,39 +1,199 @@
 
-gemm.perf.random -- 17 of 1400 shapes measured, 85 arm records  (RUN STILL IN PROGRESS)
-  written 2026-08-19 17:56:47. Regenerate with PERF_RANDOM_REPORT_ONLY=1.
-    cublas         1  cuBLAS (the reference)
-    torch_auto     2a torch.compile ATEN,TRITON
-    torch_triton   2b torch.compile TRITON only
-    pre_search     3  pre-GB300 under a search
-    ours           4  ours (the shipped rule)
+gemm.perf.random -- 1382 of 1400 shapes measured, 6995 arm records  (RUN STILL IN PROGRESS)
+  written 2026-08-20 14:57:00. Regenerate with PERF_RANDOM_REPORT_ONLY=1.
+    cublas               cuBLAS on the algorithm its own heuristic returns. THE BIT REFERENCE, and the baseline
+    torch_auto           torch.compile as its autotuner picks it, extern included
+    torch_triton         torch.compile with the extern excluded, so Inductor's own Triton template
+    bitequiv_autotuning  bit-equivalent: the kernel BEFORE the sm_103 rewrites, configuration chosen by a search
+    gb300_accelerated    bit-equivalent: the GB300-specific rewrites and the shipped fitted rule
+    Every arm is against cuBLAS and against nothing else, as cuBLAS time over that arm's
+    time, SO ABOVE 1 MEANS FASTER THAN CUBLAS. bitequiv_autotuning and gb300_accelerated
+    are both byte-identical to cuBLAS and differ in how they got there, so a comparison
+    between them covers two things at once: the kernel and how its configuration is
+    chosen. gb300_accelerated against a torch arm is a product comparison, NOT the price
+    of bit-exactness -- they are different kernels, ours with TMA descriptors, a
+    persistent grid and warp specialization that Inductor's mm_template does not have.
   shape list: seed 20260816, 100 per (family, dtype) cell, 2120 draws, 719 rejected by the size caps (12.0 TFLOP, 16777216 output elements)
   timing column: device_flush_ms
 
   by sampling family and dtype
-    group                     n                4/2b                 4/3     3/1     4/1    2a/1      bit4      bit3     bit2a  plan modes | torch picks
-    any/fp16                 17  0.805 [ 0.67  1.00]  1.050 [ 0.82  1.31]   0.818   0.858   1.104   160/160   160/160    70/170  k_per_dot:8 splitk_groups:5 gemv13:1 gemv_cslice:1 | triton_mm:11 aten:3 reduction:3
-                                near-floor 13; declined 1; 4/2b worst 0.458 median 0.746 best 1.712; 4/3 worst 0.733 median 1.010 best 1.642
+    group                  arm                     n x cuBLAS geo   [p25    med   p75]  worst   best us/call geo   byte-identical near floor
+    aligned/fp16           cublas                100            -      -      -      -      -      -      45.629                -          0
+    aligned/fp16           torch_auto            100        0.551  0.489  0.550  0.617  0.353  0.860      82.799         910/1000          0
+    aligned/fp16           torch_triton          100        0.553  0.498  0.556  0.619  0.353  0.860      82.457                -          0
+    aligned/fp16           bitequiv_autotuning   100        0.594  0.530  0.597  0.671  0.317  0.880      76.787        1000/1000          0
+    aligned/fp16           gb300_accelerated     100        0.689  0.613  0.695  0.779  0.484  1.089      66.193        1000/1000          0
+                           calls per graph -:78 23:4 12:2 13:2; plan modes plain:91 split:9; torch picks aten:79 triton_mm:19 decompose_k+aten:2
+    aligned/fp8            cublas                100            -      -      -      -      -      -      29.657                -          3
+    aligned/fp8            torch_auto            100        0.562  0.506  0.581  0.662  0.272  0.853      52.762         935/1000          0
+    aligned/fp8            torch_triton          100        0.562  0.506  0.581  0.662  0.272  0.853      52.767                -          0
+    aligned/fp8            bitequiv_autotuning   100        0.267  0.195  0.260  0.400  0.079  0.633     111.256        1000/1000          0
+    aligned/fp8            gb300_accelerated     100        0.573  0.510  0.584  0.649  0.383  0.769      51.748        1000/1000          0
+                           calls per graph -:68 17:4 20:3 9:2; plan modes plain:90 split:10; torch picks aten+triton_mm:53 aten:47
+    any/fp16               cublas                100            -      -      -      -      -      -      11.192                -          9
+    any/fp16               torch_auto            100        1.062  0.818  1.229  1.505  0.132  4.279      10.536         446/1000         29
+    any/fp16               torch_triton          100        1.064  0.785  1.238  1.508  0.132  4.337      10.337                -         29
+    any/fp16               bitequiv_autotuning   100        0.730  0.550  0.730  0.977  0.157  1.704      15.386          980/980         19
+    any/fp16               gb300_accelerated     100        0.808  0.596  0.895  1.206  0.100  1.632      13.895          980/980         25
+                           calls per graph 64:39 -:25 17:3 24:3; plan modes k_per_dot:47 splitk_groups:37 gemmsn:8 -:2; torch picks triton_mm:63 aten:21 decompose_k+aten:9 reduction:7; declined 2
+    any/fp8                cublas                100            -      -      -      -      -      -      15.154                -          6
+    any/fp8                torch_auto            100        0.620  0.507  0.652  0.763  0.323  1.000      11.220            76/90          1
+    any/fp8                torch_triton          100        0.542  0.508  0.510  0.651  0.323  0.763      17.021                -          0
+    any/fp8                bitequiv_autotuning   100        0.670  0.423  0.847  1.105  0.089  2.012       9.907          620/620          0
+    any/fp8                gb300_accelerated     100        0.656  0.478  0.745  0.912  0.090  1.569      10.117          620/620          0
+                           calls per graph -:42 64:6 33:5 26:3; plan modes k_per_dot:40 -:38 plain:19 split:3; torch picks -:91 aten:7 aten+triton_mm:2; declined 38
+    decode/fp16            cublas                 91            -      -      -      -      -      -      20.257                -          2
+    decode/fp16            torch_auto             91        0.801  0.717  0.834  0.968  0.402  1.061      25.276          580/910          0
+    decode/fp16            torch_triton           91        0.801  0.717  0.833  0.968  0.402  1.061      25.275                -          0
+    decode/fp16            bitequiv_autotuning    91        0.773  0.671  0.797  0.982  0.311  1.041      26.221          910/910          0
+    decode/fp16            gb300_accelerated      91        0.719  0.562  0.716  0.907  0.429  1.023      28.174          910/910          0
+                           calls per graph -:36 17:6 28:6 15:5; plan modes plain:65 split:26; torch picks triton_mm:41 aten:38 reduction:12
+    decode/fp8             cublas                 92            -      -      -      -      -      -      14.562                -          3
+    decode/fp8             torch_auto             92        0.770  0.689  0.774  0.911  0.504  1.054      18.920          464/920          0
+    decode/fp8             torch_triton           92        0.770  0.690  0.775  0.911  0.504  1.054      18.912                -          0
+    decode/fp8             bitequiv_autotuning    92        0.076  0.056  0.071  0.100  0.038  0.216     191.616          920/920          0
+    decode/fp8             gb300_accelerated      92        0.570  0.451  0.509  0.754  0.348  0.943      25.532          920/920          0
+                           calls per graph -:35 17:4 23:4 27:4; plan modes plain:82 split:10; torch picks aten+triton_mm:47 aten:45
+    deepk/fp16             cublas                100            -      -      -      -      -      -      15.367                -          0
+    deepk/fp16             torch_auto            100        0.730  0.542  0.966  1.117  0.063  1.619      21.037         344/1000          0
+    deepk/fp16             torch_triton          100        0.700  0.469  0.888  1.164  0.063  1.615      22.528                -          0
+    deepk/fp16             bitequiv_autotuning   100        0.447  0.404  0.473  0.542  0.034  1.057      34.349        1000/1000          0
+    deepk/fp16             gb300_accelerated     100        0.461  0.383  0.475  0.572  0.034  1.012      33.359        1000/1000          0
+                           calls per graph -:34 12:8 17:7 14:6; plan modes splitk_groups:86 gemv14:9 gemv13:3 split:2; torch picks decompose_k+aten:63 aten:25 reduction:12
+    deepk/fp8              cublas                 99            -      -      -      -      -      -      24.994                -          0
+    deepk/fp8              torch_auto             99        0.189  0.172  0.236  0.244  0.083  0.378      35.881            35/70          0
+    deepk/fp8              torch_triton           99        0.189  0.172  0.236  0.244  0.083  0.379      35.846                -          0
+    deepk/fp8              bitequiv_autotuning    99        0.226  0.215  0.242  0.271  0.113  0.389      32.773          210/210          0
+    deepk/fp8              gb300_accelerated      99        0.333  0.272  0.316  0.455  0.166  0.573      22.287          210/210          0
+                           calls per graph -:80 19:2 15:2 24:2; plan modes -:78 split:21; torch picks -:92 aten:4 aten+triton_mm:3; declined 78
+    gemv/fp16              cublas                100            -      -      -      -      -      -       7.653                -          1
+    gemv/fp16              torch_auto            100        1.241  0.925  1.325  1.660  0.376  3.115       6.165         632/1000         30
+    gemv/fp16              torch_triton          100        1.241  0.925  1.315  1.660  0.375  3.083       6.164                -         30
+    gemv/fp16              bitequiv_autotuning   100        0.547  0.518  0.712  0.849  0.020  1.795      13.981        1000/1000          7
+    gemv/fp16              gb300_accelerated     100        0.818  0.693  0.915  1.030  0.026  1.795       9.356        1000/1000          5
+                           calls per graph 64:38 -:14 23:3 37:3; plan modes gemv13:66 gemv14:28 gemv_cslice:6; torch picks reduction:100
+    gemv/fp8               cublas                100            -      -      -      -      -      -      12.288                -         12
+    gemv/fp8               torch_auto            100        0.627  0.635  0.641  0.737  0.364  0.887       6.130            37/50          2
+    gemv/fp8               torch_triton          100        0.626  0.633  0.641  0.737  0.364  0.883       6.138                -          2
+    gemv/fp8               bitequiv_autotuning   100        0.699  0.463  0.749  1.256  0.062  2.299      10.024          710/710          8
+    gemv/fp8               gb300_accelerated     100        0.473  0.302  0.526  0.828  0.055  1.745      14.814          710/710          0
+                           calls per graph -:41 64:19 27:4 11:3; plan modes k_per_dot:41 -:29 plain:23 split:7; torch picks -:95 aten+triton_mm:5; declined 29
+    smallm/fp16            cublas                100            -      -      -      -      -      -       8.250                -          3
+    smallm/fp16            torch_auto            100        1.170  0.948  1.239  1.492  0.144  3.409       7.052         212/1000         20
+    smallm/fp16            torch_triton          100        1.171  0.947  1.245  1.496  0.144  3.408       7.048                -         21
+    smallm/fp16            bitequiv_autotuning   100        0.603  0.468  0.619  0.808  0.175  1.392      13.674        1000/1000          2
+    smallm/fp16            gb300_accelerated     100        0.875  0.694  0.992  1.125  0.355  1.617       9.433        1000/1000          5
+                           calls per graph 64:35 -:17 26:4 45:3; plan modes k_per_dot:51 gemmsn:26 splitk_groups:21 split:1; torch picks triton_mm:88 aten:12
+    smallm/fp8             cublas                100            -      -      -      -      -      -       9.543                -         14
+    smallm/fp8             torch_auto            100        0.700  0.580  0.667  0.840  0.550  1.000       3.631           83/110          6
+    smallm/fp8             torch_triton          100        0.646  0.584  0.652  0.664  0.550  0.840       4.216                -          4
+    smallm/fp8             bitequiv_autotuning   100        0.456  0.313  0.544  0.855  0.058  1.354      16.542          880/880          0
+    smallm/fp8             gb300_accelerated     100        0.473  0.371  0.473  0.648  0.153  1.048      15.965          880/880          0
+                           calls per graph -:26 64:11 27:5 14:4; plan modes k_per_dot:65 plain:23 -:12; torch picks -:89 aten+triton_mm:7 aten:4; declined 12
+    unaligned/fp16         cublas                100            -      -      -      -      -      -     255.992                -          0
+    unaligned/fp16         torch_auto            100        2.043  1.541  2.210  3.306  0.391  5.738     125.309          80/1000          0
+    unaligned/fp16         torch_triton          100        2.043  1.549  2.208  3.307  0.420  5.737     125.322                -          0
+    unaligned/fp16         bitequiv_autotuning   100        0.724  0.677  0.757  0.900  0.240  1.511     353.704        1000/1000          0
+    unaligned/fp16         gb300_accelerated     100        1.421  1.036  1.392  2.174  0.198  3.768     180.166        1000/1000          0
+                           calls per graph -:94 13:2 11:2 22:1; plan modes splitk_groups:67 k_per_dot:22 plain:8 split:3; torch picks aten:67 triton_mm:29 decompose_k+aten:4
+    unaligned/fp8          cublas                100            -      -      -      -      -      -     202.913                -          1
+    unaligned/fp8          torch_auto            100            -      -      -      -      -      -           -                -          0
+    unaligned/fp8          torch_triton          100            -      -      -      -      -      -           -                -          0
+    unaligned/fp8          bitequiv_autotuning   100        0.464  0.154  0.685  1.403  0.079  2.662      97.764          330/330          0
+    unaligned/fp8          gb300_accelerated     100        0.819  0.584  0.711  1.198  0.466  1.918      55.352          330/330          0
+                           calls per graph -:96 37:1 18:1 36:1; plan modes -:67 k_per_dot:17 plain:16; torch picks -:100; declined 67
 
   by the cuBLAS plan mode the shape actually resolved to
-    group                     n                4/2b                 4/3     3/1     4/1    2a/1      bit4      bit3     bit2a  plan modes | torch picks
-    declined/fp16             1                   -                   -       -       -   2.220         -         -     10/10  -:1 | triton_mm:1
-                                near-floor 1; declined 1
-    gemmsn/fp16               1  0.682 [ 0.68  0.68]  1.642 [ 1.64  1.64]   0.417   0.684   1.004     10/10     10/10     10/10  gemmsn:1 | triton_mm:1
-                                near-floor 1; 4/2b worst 0.682 median 0.682 best 0.682; 4/3 worst 1.642 median 1.642 best 1.642
-    gemv13/fp16               1  0.768 [ 0.77  0.77]  1.048 [ 1.05  1.05]   0.730   0.765   0.945     10/10     10/10      0/10  gemv13:1 | reduction:1
-                                4/2b worst 0.768 median 0.768 best 0.768; 4/3 worst 1.048 median 1.048 best 1.048
-    gemv_cslice/fp16          1  0.620 [ 0.62  0.62]  0.813 [ 0.81  0.81]   0.996   0.810   1.294     10/10     10/10     10/10  gemv_cslice:1 | reduction:1
-                                near-floor 1; 4/2b worst 0.620 median 0.620 best 0.620; 4/3 worst 0.813 median 0.813 best 0.813
-    k_per_dot/fp16            8  0.837 [ 0.68  1.00]  1.132 [ 1.00  1.31]   0.938   1.062   1.255     80/80     80/80     40/80  k_per_dot:8 | triton_mm:6 aten:1 reduction:1
-                                near-floor 7; 4/2b worst 0.597 median 0.995 best 1.308; 4/3 worst 0.862 median 1.218 best 1.477
-    splitk_groups/fp16        5  0.830 [ 0.52  1.29]  0.896 [ 0.78  0.82]   0.738   0.661   0.796     50/50     50/50      0/50  splitk_groups:5 | triton_mm:3 aten:2
-                                near-floor 3; 4/2b worst 0.458 median 0.746 best 1.712; 4/3 worst 0.733 median 0.805 best 1.537
+    group                  arm                     n x cuBLAS geo   [p25    med   p75]  worst   best us/call geo   byte-identical near floor
+    declined/fp16          cublas                  2            -      -      -      -      -      -       9.665                -          0
+    declined/fp16          torch_auto              2        4.008  3.754  3.754  4.279  3.754  4.279       2.412            20/20          2
+    declined/fp16          torch_triton            2        4.035  3.754  3.754  4.337  3.754  4.337       2.396                -          2
+    declined/fp16          bitequiv_autotuning     2            -      -      -      -      -      -           -                -          0
+    declined/fp16          gb300_accelerated       2            -      -      -      -      -      -           -                -          0
+                           calls per graph 64:2; plan modes -:2; torch picks triton_mm:2; declined 2
+    declined/fp8           cublas                224            -      -      -      -      -      -      85.598                -          0
+    declined/fp8           torch_auto            224            -      -      -      -      -      -           -                -          0
+    declined/fp8           torch_triton          224            -      -      -      -      -      -           -                -          0
+    declined/fp8           bitequiv_autotuning   224            -      -      -      -      -      -           -                -          0
+    declined/fp8           gb300_accelerated     224            -      -      -      -      -      -           -                -          0
+                           calls per graph -:224; plan modes -:224; torch picks -:224; declined 224
+    gemmsn/fp16            cublas                 34            -      -      -      -      -      -       6.172                -          2
+    gemmsn/fp16            torch_auto             34        1.599  1.151  1.475  2.360  0.548  3.409       3.859           60/340         14
+    gemmsn/fp16            torch_triton           34        1.598  1.151  1.475  2.360  0.546  3.408       3.861                -         14
+    gemmsn/fp16            bitequiv_autotuning    34        0.563  0.332  0.605  1.070  0.157  1.392      10.967          340/340          3
+    gemmsn/fp16            gb300_accelerated      34        0.976  0.791  0.936  1.317  0.458  1.617       6.323          340/340          4
+                           calls per graph 64:19 -:2 28:2 44:1; plan modes gemmsn:34; torch picks triton_mm:31 aten:3
+    gemv13/fp16            cublas                 70            -      -      -      -      -      -      10.499                -          1
+    gemv13/fp16            torch_auto             70        1.404  1.041  1.449  1.896  0.385  3.115       7.479          324/700         24
+    gemv13/fp16            torch_triton           70        1.405  1.041  1.450  1.896  0.384  3.083       7.474                -         24
+    gemv13/fp16            bitequiv_autotuning    70        0.427  0.293  0.569  0.987  0.020  1.795      24.610          700/700          6
+    gemv13/fp16            gb300_accelerated      70        0.747  0.624  0.861  1.089  0.026  1.795      14.051          700/700          5
+                           calls per graph 64:29 -:16 11:3 14:2; plan modes gemv13:70; torch picks reduction:70
+    gemv14/fp16            cublas                 38            -      -      -      -      -      -       5.055                -          0
+    gemv14/fp16            torch_auto             38        0.952  0.732  0.892  1.286  0.376  2.055       5.312          366/380          4
+    gemv14/fp16            torch_triton           38        0.952  0.735  0.892  1.279  0.375  2.071       5.311                -          4
+    gemv14/fp16            bitequiv_autotuning    38        0.717  0.662  0.713  0.768  0.599  0.914       7.054          380/380          0
+    gemv14/fp16            gb300_accelerated      38        0.923  0.871  0.925  0.980  0.730  1.121       5.476          380/380          0
+                           calls per graph 33:4 37:4 64:4 22:2; plan modes gemv14:38; torch picks reduction:38
+    gemv_cslice/fp16       cublas                  7            -      -      -      -      -      -       3.207                -          0
+    gemv_cslice/fp16       torch_auto              7        0.966  0.834  0.902  1.366  0.400  1.613       3.320            70/70          2
+    gemv_cslice/fp16       torch_triton            7        0.968  0.839  0.900  1.366  0.400  1.614       3.314                -          2
+    gemv_cslice/fp16       bitequiv_autotuning     7        0.796  0.765  0.773  0.783  0.672  1.185       4.028            70/70          1
+    gemv_cslice/fp16       gb300_accelerated       7        0.686  0.590  0.646  0.705  0.579  1.000       4.672            70/70          0
+                           calls per graph 64:6 49:1; plan modes gemv_cslice:7; torch picks reduction:7
+    k_per_dot/fp16         cublas                120            -      -      -      -      -      -      10.650                -          8
+    k_per_dot/fp16         torch_auto            120        1.410  1.137  1.363  1.670  0.501  4.349       7.554         498/1200         31
+    k_per_dot/fp16         torch_triton          120        1.409  1.136  1.369  1.637  0.500  4.354       7.557                -         32
+    k_per_dot/fp16         bitequiv_autotuning   120        0.749  0.551  0.800  0.996  0.294  1.704      14.224        1200/1200         17
+    k_per_dot/fp16         gb300_accelerated     120        1.151  0.936  1.096  1.320  0.313  3.768       9.251        1200/1200         26
+                           calls per graph 64:49 -:27 17:3 23:3; plan modes k_per_dot:120; torch picks triton_mm:97 aten:19 reduction:4
+    k_per_dot/fp8          cublas                163            -      -      -      -      -      -      11.262                -          0
+    k_per_dot/fp8          torch_auto            163            -      -      -      -      -      -           -                -          0
+    k_per_dot/fp8          torch_triton          163            -      -      -      -      -      -           -                -          0
+    k_per_dot/fp8          bitequiv_autotuning   163        0.885  0.685  0.928  1.248  0.217  2.662      12.728        1630/1630          5
+    k_per_dot/fp8          gb300_accelerated     163        0.668  0.493  0.732  0.930  0.132  1.918      16.867        1630/1630          0
+                           calls per graph -:41 64:14 27:10 33:9; plan modes k_per_dot:163; torch picks -:163
+    plain/fp16             cublas                167            -      -      -      -      -      -      29.806                -          4
+    plain/fp16             torch_auto            167        0.647  0.531  0.610  0.798  0.387  1.052      46.054        1600/1670          0
+    plain/fp16             torch_triton          167        0.649  0.532  0.617  0.798  0.387  1.048      45.907                -          0
+    plain/fp16             bitequiv_autotuning   167        0.631  0.542  0.644  0.760  0.240  1.017      47.258        1670/1670          1
+    plain/fp16             gb300_accelerated     167        0.679  0.592  0.688  0.788  0.357  1.089      43.888        1670/1670          0
+                           calls per graph -:97 28:7 23:6 64:5; plan modes plain:167; torch picks aten:111 triton_mm:49 reduction:7
+    plain/fp8              cublas                253            -      -      -      -      -      -      13.267                -         39
+    plain/fp8              torch_auto            253        0.672  0.563  0.667  0.765  0.378  1.054      24.307        1480/1940          9
+    plain/fp8              torch_triton          253        0.666  0.562  0.662  0.762  0.377  1.054      25.566                -          6
+    plain/fp8              bitequiv_autotuning   253        0.174  0.089  0.190  0.326  0.038  0.857      76.037        2530/2530          3
+    plain/fp8              gb300_accelerated     253        0.502  0.439  0.510  0.628  0.055  0.943      26.408        2530/2530          0
+                           calls per graph -:100 64:26 17:9 20:6; plan modes plain:253; torch picks aten+triton_mm:105 aten:89 -:59
+    split/fp16             cublas                 42            -      -      -      -      -      -      33.231                -          0
+    split/fp16             torch_auto             42        0.677  0.543  0.687  0.841  0.353  1.061      49.072            3/420          0
+    split/fp16             torch_triton           42        0.677  0.543  0.686  0.841  0.353  1.061      49.090                -          0
+    split/fp16             bitequiv_autotuning    42        0.674  0.583  0.678  0.951  0.262  1.041      49.324          420/420          0
+    split/fp16             gb300_accelerated      42        0.684  0.665  0.756  0.950  0.100  1.023      48.574          420/420          0
+                           calls per graph -:27 17:3 12:2 15:2; plan modes split:42; torch picks aten:16 triton_mm:15 decompose_k+aten:6 reduction:5
+    split/fp8              cublas                 51            -      -      -      -      -      -      14.993                -          0
+    split/fp8              torch_auto             51        0.411  0.295  0.373  0.774  0.083  0.933      51.323          150/300          0
+    split/fp8              torch_triton           51        0.411  0.295  0.373  0.774  0.083  0.931      51.298                -          0
+    split/fp8              bitequiv_autotuning    51        0.195  0.115  0.229  0.287  0.057  0.960      76.947          510/510          0
+    split/fp8              gb300_accelerated      51        0.438  0.302  0.461  0.635  0.166  0.889      34.260          510/510          0
+                           calls per graph -:23 15:3 19:3 30:3; plan modes split:51; torch picks -:21 aten:18 aten+triton_mm:12
+    splitk_groups/fp16     cublas                211            -      -      -      -      -      -      53.814                -          0
+    splitk_groups/fp16     torch_auto            211        1.054  0.751  1.097  1.877  0.063  5.738      51.054         263/2110          2
+    splitk_groups/fp16     torch_triton          211        1.058  0.675  1.153  1.953  0.063  5.737      55.466                -          2
+    splitk_groups/fp16     bitequiv_autotuning   211        0.599  0.471  0.624  0.757  0.275  1.649      89.892        2110/2110          0
+    splitk_groups/fp16     gb300_accelerated     211        0.706  0.438  0.602  1.147  0.189  3.152      76.223        2110/2110          0
+                           calls per graph -:129 12:10 13:8 17:8; plan modes splitk_groups:211; torch picks aten:93 decompose_k+aten:72 triton_mm:46
 
-  4/2b is what the bit constraint costs against an unconstrained Triton kernel.
-  4/3  is what our hand-written rewrites bought over an honest search of the SAME kernels.
-  A ratio above 1 means the numerator arm is faster. [p25 p75] beside the geometric mean.
-  bitN = draws byte-identical to cuBLAS / draws compared, summed over the group. A group whose bit4 or bit3 is short is a bug report, not a measurement.
+  x cuBLAS is cuBLAS time over that arm's time, so above 1 means faster than cuBLAS.
+  byte-identical = draws byte-identical to cuBLAS / draws compared, summed over the group.
+  A group whose bitequiv_autotuning or gb300_accelerated is short of the total is a bug
+  report, not a measurement: those two arms must be byte-identical or their times mean
+  nothing. torch is unconstrained and is not expected to match.
   near-floor rows are mostly launch overhead, so every ratio on them is pulled toward 1.
+  calls per graph is `batch_n`: how many calls were captured into one graph, each on its
+  own operand copy, with the replay divided by that. `-` is a row taken before the batch
+  existed, when a 6.9 us replay floor was added whole to every call; on a small shape a
+  `-` row and a batched row are not the same measurement and the `-` one reads slower.
 
   Watching, pausing and resuming this run
     watch     tail -f artifact_eval/run_perf_random.gpu2.log      (and .gpu3.log)

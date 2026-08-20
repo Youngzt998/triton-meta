@@ -249,7 +249,7 @@ def run(args, env):
     out.close()
     print(f"\n  {n} shapes x {args.reps} draws = {n * args.reps} comparisons")
     print(f"  byte-identical to cuBLAS      {ok}/{n}")
-    print(f"  shapes with any differing draw {mism}   (logged in data/gemm.bitmatch.jsonl)")
+    print(f"  shapes with any differing draw {mism}   (logged in cache/gemm.bitmatch.jsonl)")
     print(f"  declined (out of scope)       {declined}")
     print(f"  skipped, cuBLAS had no algorithm {skipped}   (no answer exists, so nothing to match)")
     if mism:

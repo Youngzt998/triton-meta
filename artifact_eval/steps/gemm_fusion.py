@@ -100,7 +100,7 @@ from ._common import CACHE, digest, graph_ms, hot_cublas, make_inputs, pick_batc
 
 NAME = "gemm.fusion"
 ORDER = 40
-DESCRIPTION = "what the bit constraint costs on a fused GEMM, on real model shapes"
+DESCRIPTION = "a byte-identical fused epilogue against cuBLAS-plus-a-kernel, on real model layers"
 IMPLEMENTED = True
 
 BASELINE = "cublas_unfused"

@@ -1,9 +1,12 @@
-/home/youngzt/bitwise-equiv/triton/artifact_eval/artifact.py:226: RuntimeWarning: cuBLASLt 13.2.2 on sm_103 (NVIDIA GB300) was not measured: the rules come from 13.1.x (exactly 13.1.1). Results should still be bit-identical to cuBLAS, but a version bump can change which kernel a shape lands on. Re-measure and add a ((10, 3), (13, 2)) entry to `arch._REGISTRY` to silence this.
-  "arch": platform().name.split()[0],
+gemm.bitmatch -- the run this file reports is the RE-RUN, taken after ALGO 74 was added
+to the sm_103 architecture profile. It supersedes the earlier 91,581-shape run, whose
+declines were dominated by that gap. Regenerate with:
+    python artifact_eval/artifact.py --run gemm.bitmatch --minutes 90
+
 artifact evaluation
   device      NVIDIA GB300  (sm_103)
   cuBLASLt    13.2.2
-  triton      3.8.0+fb   torch 2.12.0+cu130   commit 8c89335f7d32
+  triton      3.8.0+fb   torch 2.12.0+cu130   commit 50cf85ef37d1
   WARNING: the paper's numbers used cuBLASLt 13.1.1; this is 13.2.2. cuBLAS may pick a
            different algorithm, which changes the bits it returns and what we must reproduce.
 
@@ -42,35 +45,12 @@ artifact evaluation
   MISMATCH  fp8 128x256x255376 mode=split  10/10 draws differ
   MISMATCH  fp16 256x288x118416 mode=split  10/10 draws differ
   MISMATCH  fp8 32x1504x218896 mode=split  10/10 draws differ
-  MISMATCH  fp16 166x1504x164360 mode=split  10/10 draws differ
-  MISMATCH  fp8 160x64x298000 mode=split  10/10 draws differ
-  MISMATCH  fp16 240x1024x288208 mode=split  10/10 draws differ
-  MISMATCH  fp8 16x1056x291232 mode=split  10/10 draws differ
-  MISMATCH  fp8 32x1088x258064 mode=split  10/10 draws differ
-  MISMATCH  fp8 96x1744x244624 mode=split  10/10 draws differ
-  MISMATCH  fp16 80x2000x68112 mode=split  10/10 draws differ
-  MISMATCH  fp16 448x864x288208 mode=split  10/10 draws differ
-  MISMATCH  fp8 496x896x207376 mode=split  10/10 draws differ
-  MISMATCH  fp16 32x992x63248 mode=split  10/10 draws differ
-  MISMATCH  fp8 16x1360x104976 mode=split  10/10 draws differ
-  MISMATCH  fp16 240x1392x173904 mode=split  10/10 draws differ
-  MISMATCH  fp16 144x1728x174736 mode=split  10/10 draws differ
-  MISMATCH  fp16 336x304x139216 mode=split  10/10 draws differ
-  MISMATCH  fp16 192x2016x242000 mode=split  10/10 draws differ
-  MISMATCH  fp16 240x1040x185616 mode=split  10/10 draws differ
-  MISMATCH  fp8 224x176x235920 mode=split  10/10 draws differ
-  MISMATCH  fp8 176x480x291856 mode=split  10/10 draws differ
-  MISMATCH  fp8 32x160x238480 mode=split  10/10 draws differ
-  MISMATCH  fp16 160x1440x299152 mode=split  10/10 draws differ
-  MISMATCH  fp16 16x160x198608 mode=split  10/10 draws differ
-  MISMATCH  fp8 272x368x268816 mode=split  10/10 draws differ
-  MISMATCH  fp16 240x1040x238416 mode=split  10/10 draws differ
-  MISMATCH  fp16 160x800x150544 mode=split  10/10 draws differ
 
-  91581 shapes x 10 draws = 915810 comparisons
-  byte-identical to cuBLAS      91523/91581
-  shapes with any differing draw 58   (logged in data/gemm.bitmatch.jsonl)
-  declined (out of scope)       1118
+  62025 shapes x 10 draws = 620250 comparisons
+  byte-identical to cuBLAS      61991/62025
+  shapes with any differing draw 34   (logged in data/gemm.bitmatch.jsonl)
+  declined (out of scope)       109
+  skipped, cuBLAS had no algorithm 477   (no answer exists, so nothing to match)
   A mismatch is not automatically ours: cuBLAS itself drops the k tail on some
   shapes -- run gemm.cublas-bug, which reproduces that defect on this machine.
 
@@ -79,27 +59,16 @@ artifact evaluation
   it is invisible if only what came up is printed.
 
     mode               shapes  differing
-    plain               27548          0
-    k_per_dot            8026          0
-    split               20605         58
+    plain               18599          0
+    k_per_dot            5634          0
+    split               13939         34
     split_blocks            0          0
-    splitk_groups       20146          0
-    gemmsn               2836          0
-    gemv13               8859          0
-    gemv_cslice          1042          0
-    gemv14               2519          0
+    splitk_groups       13531          0
+    gemmsn               1895          0
+    gemv13               6038          0
+    gemv_cslice           680          0
+    gemv14               1709          0
 
   declined, by reason:
-         658  no cuBLAS algo
-         433  unsupported ALGO_ID 74
-          24  unsupported (cached)
-           3  unsupported CUSTOM_OPTION 10 for ALGO_ID 13
-
-streaming records in /home/youngzt/bitwise-equiv/triton/artifact_eval/cache
-  gemm_bitmatch.csv            92699 rows
-  gemm_perf_random.csv         430 rows
-  inner_tree_layout.csv        366 rows
-  FORMAT.md                    written
-  env.csv                      33 rows
-
-results in /home/youngzt/bitwise-equiv/triton/artifact_eval/data
+         107  unsupported SPLITK_NUM -2 for ALGO_ID 74 (the stream-K tile scheduler, whose k partition differs per output tile)
+           2  unsupported CUSTOM_OPTION 10 for ALGO_ID 13
