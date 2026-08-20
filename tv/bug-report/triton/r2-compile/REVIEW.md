@@ -128,7 +128,7 @@ one new way.**
   floating point"*, so **HIT-0043 (`'llvm.fptrunc' op **result** #0 …`) escaped
   it** and took a fresh id for the same hole. Suggested tightening: match
   `(operand|result) #N`.
-* **A genuine under-merge.** The seven ptxas register-pressure reports
+* **A genuine under-merge.** The six ptxas register-pressure reports
   (HIT-0020, 0026, 0036, 0040, 0042, 0044) are one class, split because the
   signature keeps the function name and the register count. Normalising the
   kernel name and the number inside `ptxas fatal : (CN) Insufficient registers
