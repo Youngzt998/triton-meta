@@ -38,9 +38,11 @@ reviewer should see the gaps rather than wonder why a step printed nothing.
 **Claim.** For arbitrary shapes, `cublas_equivalent_gemm` produces output byte-identical to
 cuBLAS, not merely close.
 
-**Method.** Random shapes are drawn from four regimes — square, thin, very deep `K`, and
-decode-sized — in fp16 and fp8, with half the fp16 draws rounded to multiples of 16 and fp8 always
-so (cuBLAS refuses fp8 otherwise). Deep `K` is in the mix deliberately: it is the only place
+**Method.** Random shapes are drawn from six regimes — square, thin, very deep `K`, decode-sized,
+vector (`M` or `N` equal to 1), and small-`M` — in fp16 and fp8. Two of the regimes exist because
+without them cuBLAS never reaches four of its nine kernel families: the CUDA-core chain GEMM needs
+a small `M` **and** an `N` that is not a multiple of 8, and the vector kernels need `M` or `N`
+exactly 1. Deep `K` is in the mix deliberately: it is the only place
 cuBLAS's own split-K defect appears, and a sweep that avoids it reports a clean 100% while having
 tested nothing interesting. For each shape the script runs both implementations over `--reps`
 independent input draws and compares a hash of the output bytes. Even-numbered draws are ordinary
