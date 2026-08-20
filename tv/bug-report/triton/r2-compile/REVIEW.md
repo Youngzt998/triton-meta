@@ -9,7 +9,7 @@ Two review passes so far:
 | pass | ids | kept | rejected |
 |---|---|---|---|
 | 1 | HIT-0001 … HIT-0015 | 9 | 6 (all B4) |
-| 2 | HIT-0016 … HIT-0044 | 3 | 26 (18 B4, 4 A1, 7 resource-limit — the last is not a numbered criterion; see below) |
+| 2 | HIT-0016 … HIT-0044 | 3 | 26 (16 B4, 4 A1, 6 resource-limit — the last is not a numbered criterion; see below) |
 
 🔴 **R4 used to rewrite every `HIT-*.md` in this directory on each refresh. Since
 the driver restart at 17:52 on 2026-08-19 it does not.** Two guards are live and
@@ -84,7 +84,8 @@ dtype. Instead the user gets invalid MLIR, an assert, or `abort()`.
 
 ## What pass 2 rejected, and one judgement call
 
-* **18 B4 duplicates.** Every one was re-run and its mechanism checked against
+* **16 B4 duplicates** — 6 into HIT-0004, 5 into HIT-0002, 3 into HIT-0007, 1
+  into HIT-0001, 1 into HIT-0016. Every one was re-run and its mechanism checked against
   the kept report's, not merged on the error string. Three merges needed real
   work: HIT-0021's `32 = 8 × 4` matches HIT-0001's `numCTAs × remainingCTAs`
   formula exactly; HIT-0024/0039/0041 were traced in the built IR to the
@@ -97,9 +98,10 @@ dtype. Instead the user gets invalid MLIR, an assert, or `abort()`.
   cleanly in 560 s once the harness budget was lifted). All four are
   machine-load artifacts, recorded while four other round-2 lines were
   compiling on the same box.
-* **7 ptxas register-pressure failures**, rejected as `not a defect
-  (resource-limit)`: HIT-0020, 0026, 0036, 0040, 0042, 0044 (and HIT-0032, which
-  is also A1). 🔴 **This is a judgement call and it goes against a literal
+* **6 ptxas register-pressure failures**, rejected as `not a defect
+  (resource-limit)`: HIT-0020, 0026, 0036, 0040, 0042, 0044. (HIT-0032 is a
+  seventh ptxas failure but it is counted under A1 above, since it did not
+  reproduce.) 🔴 **This is a judgement call and it goes against a literal
   reading of REVIEW-CRITERIA §2** ("compile failure … keep it"). The reasoning:
   `num_warps=32` means 1024 threads per CTA, so 65536 registers / 1024 threads
   fixes the budget at 64 per thread (`num_warps=16` → 128; HIT-0036 asked for
