@@ -1,0 +1,47 @@
+{
+ "diff_lines_added": 10,
+ "diff_lines_removed": 5,
+ "ops_only_in_output": [
+  "ttg.local_alloc",
+  "ttg.local_load",
+  "ttg.memdesc",
+  "ttg.shared_memory",
+  "ttg.swizzled_shared"
+ ],
+ "ops_only_in_input": [
+  "ttg.convert_layout"
+ ],
+ "ops_in_diff": [
+  "arith.addf",
+  "scf.yield",
+  "tt.dot",
+  "ttg.convert_layout",
+  "ttg.dot_op",
+  "ttg.local_alloc",
+  "ttg.local_load",
+  "ttg.memdesc",
+  "ttg.shared_memory",
+  "ttg.swizzled_shared"
+ ],
+ "layout_attrs_only_in_output": [
+  "shared",
+  "shared1",
+  "smem",
+  "ttg.shared_memory",
+  "ttg.swizzled_shared"
+ ],
+ "layout_attrs_only_in_input": [],
+ "hopper_tokens_in_diff": [],
+ "blackwell_tokens_in_diff": [],
+ "concurrency_constructs_in_either_ir": [
+  "ttg.local_alloc",
+  "ttg.local_load",
+  "ttg.memdesc"
+ ],
+ "cross_instance_constructs_in_either_ir": [],
+ "has_dot": true,
+ "has_reduce": false,
+ "has_loop": true,
+ "diff_head": "@@ -3,0 +4,3 @@\n+#shared = #ttg.swizzled_shared<{vec = 8, perPhase = 4, maxPhase = 2, order = [0, 1], CGALayout = [[1, 0], [2, 0]]}>\n+#shared1 = #ttg.swizzled_shared<{vec = 8, perPhase = 4, maxPhase = 2, order = [1, 0], CGALayout = [[1, 0], [2, 0]]}>\n+#smem = #ttg.shared_memory\n@@ -115,5 +118,7 @@\n-      %116 = ttg.convert_layout %96 : tensor<64x16xf16, #blocked1> -> tensor<64x16xf16, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 2}>>\n-      %117 = ttg.convert_layout %115 : tensor<16x16xf16, #blocked> -> tensor<16x16xf16, #ttg.dot_op<{opIdx = 1, parent = #mma, kWidth = 2}>>\n-      %118 = tt.dot %116, %117, %cst : tensor<64x16xf16, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 2}>> * tensor<16x16xf16, #ttg.dot_op<{opIdx = 1, parent = #mma, kWidth = 2}>> -> tensor<64x16xf32, #mma>\n-      %119 = arith.addf %arg4, %118 : tensor<64x16xf32, #mma>\n-      scf.yield %119 : tensor<64x16xf32, #mma>\n+      %116 = ttg.local_alloc %96 : (tensor<64x16xf16, #blocked1>) -> !ttg.memdesc<64x16xf16, #shared, #smem>\n+      %117 = ttg.local_load %116 : !ttg.memdesc<64x16xf16, #shared, #smem> -> tensor<64x16xf16, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 2}>>\n+      %118 = ttg.local_alloc %115 : (tensor<16x16xf16, #blocked>) -> !ttg.memdesc<16x16xf16, #shared1, #smem>\n+      %119 = ttg.local_load %118 : !ttg.memdesc<16x16xf16, #shared1, #smem> -> tensor<16x16xf16, #ttg.dot_op<{opIdx = 1, parent = #mma, kWidth = 2}>>\n+      %120 = tt.dot %117, %119, %cst : tensor<64x16xf16, #ttg.dot_op<{opIdx = 0, parent = #mma, kWidth = 2}>> * tensor<16x16xf16, #ttg.dot_op<{opIdx = 1, parent = #mma, kWidth = 2}>> -> tensor<64x16xf32, #mma>\n+      %121 = arith.addf %arg4, %120 : tensor<64x16xf32, #mma>\n+      scf.yield %121 : tensor<64x16xf32, #mma>",
+ "diff_full_lines": 17
+}

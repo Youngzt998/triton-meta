@@ -1,0 +1,45 @@
+{
+ "name": "ind:triton_convolution2d_eb1afb2c",
+ "corpus": "inductor",
+ "fn_name": "triton_convolution2d_eb1afb2c",
+ "grid": [
+  4,
+  1,
+  1
+ ],
+ "num_warps": 4,
+ "meta": {
+  "entry": 138,
+  "kernel": "triton_convolution2d",
+  "sig": "loads=2 stores=1 no-reduction for-loop",
+  "category": "139. pooling :: conv_template",
+  "size_hints": {},
+  "max_hint": 65536
+ },
+ "args": [
+  {
+   "name": "arg_X",
+   "kind": "ptr",
+   "ty": "*fp16",
+   "value": null,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "arg_W",
+   "kind": "ptr",
+   "ty": "*fp16",
+   "value": null,
+   "shape": null,
+   "dtype": null
+  },
+  {
+   "name": "out_ptr0",
+   "kind": "ptr",
+   "ty": "*fp16",
+   "value": null,
+   "shape": null,
+   "dtype": null
+  }
+ ]
+}
