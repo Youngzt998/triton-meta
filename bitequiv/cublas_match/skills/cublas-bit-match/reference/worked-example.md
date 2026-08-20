@@ -32,6 +32,17 @@ rounded all three dimensions up to a multiple of 16 first, because "cuBLAS refus
 otherwise". That is not what cuBLAS does. Algorithm 74 lives exactly in what that rounding
 removes. The family was not new; it was invisible by construction.
 
+The belief had a real source, which is why it survived so long. cuBLAS says it, at `Info` level:
+
+```
+[cublasLt][Info][cublasLtMatmul] Unsupported M dimension for FP8 matrix
+                                 multiplication. M must be divisible by 16. Got 1390.
+```
+
+and then runs the shape anyway — twice per call, a full set of heuristic results returned, output
+self-consistent over repeated calls and identical across two library versions. A stated support
+condition bounds what the vendor promises. It does not describe what the library does.
+
 ## Reading the heuristic
 
 Nine integers, as always. What mattered:
@@ -44,6 +55,26 @@ Nine integers, as always. What mattered:
 That second point needed care. A helper that normalised anything below 1 up to 1 would have
 turned stream-K into a silent claim of a single unsplit accumulator. The field is read raw,
 before any normalising, and -2 declines.
+
+`CUBLASLT_LOG_LEVEL=5` shows both of those directly. This family in the library's own words:
+
+```
+[cublasLt][Trace][cublasLtMatmul] ... algo=[algoId=74 tile=MATMUL_TILE_64x64
+  stages=MATMUL_STAGES_128xAUTO reductionScheme=REDUCTION_SCHEME_COMPUTE_TYPE
+  numSplitsK=-2] workSpace=... workSpaceSizeInBytes=33554432 beta=0 outOfPlace=0
+```
+
+and another shape on the **same** algorithm id, taking a different path inside it:
+
+```
+algo=[algoId=74 tile=MATMUL_TILE_64x64 stages=MATMUL_STAGES_128xAUTO
+  clusterShape=CLUSTER_SHAPE_1x1x1 schedulingMode=0]
+```
+
+The field sets are not the same. One prints `reductionScheme` and `numSplitsK`, the other prints
+`clusterShape` and `schedulingMode`, and neither prints the other's. So a log parser keyed on the
+algorithm id alone reads nothing on one of the two paths — the same shape of mistake as reading a
+16-bit attribute with a 4-byte buffer.
 
 ## Reading the kernel name
 
@@ -213,3 +244,9 @@ on `M % 16 or N % 16 or K % 16` in both of its sweeps, so it excluded the family
 but that is unverified and was not testable from that box.
 
 **An unverified table entry is worse than a decline.** So it was left out.
+
+One more thing this family has to say about itself, for the same reason. Most of it sits in the
+region cuBLAS logs as unsupported and runs anyway. Matching it is worth doing and the numbers
+above stand — but the honest description is **an undeclared-but-deterministic path, measured
+deterministic on this machine and these two library versions**, not a path the vendor stands
+behind. Saying so costs nothing and keeps the claim the size of the evidence.

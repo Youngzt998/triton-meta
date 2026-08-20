@@ -54,8 +54,24 @@ wants `K % 16 == 0` with N even and M free. An entire kernel family lived exactl
 rounding removed, and it took **76%** of the shapes in the slice cuBLAS actually accepts. It was
 not a rare corner. It was invisible by construction.
 
+**The belief was not invented, and that is what makes it worth studying.** cuBLAS says it out
+loud, at `Info` level:
+
+```
+[cublasLt][Info][cublasLtMatmul] Unsupported M dimension for FP8 matrix
+                                 multiplication. M must be divisible by 16. Got 1390.
+```
+
+and then runs the shape. The message fires twice per call, cuBLAS returns a full set of heuristic
+results, and the output is self-consistent over repeated calls and identical across two library
+versions. A stated support condition is a floor on what the library promises, **not a description
+of what it does**. Where the two differ is exactly where a sweep built from the documentation
+cannot go.
+
 Before trusting a sweep, write down what its shape generator cannot produce, and go and look
-there.
+there. Turn `CUBLASLT_LOG_LEVEL=5` on while you do it: the `Trace` line prints the whole algo
+config, so you see which family the excluded region actually lands on without writing a reader
+first.
 
 The same family was reachable a second way that the first fix still could not see — `N == 1` with
 M even and not a multiple of 8, where it is the **output** column's alignment rather than an

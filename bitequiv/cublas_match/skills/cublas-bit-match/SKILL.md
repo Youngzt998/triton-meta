@@ -1,7 +1,7 @@
 ---
 name: cublas-bit-match
 description: >
-  Work out the exact order in which cuBLAS adds up a GEMM, on a GPU or a
+  Reproduce the exact order in which cuBLAS adds up a GEMM, on a GPU or a
   cuBLASLt version nobody has measured yet, and write that order down so a
   Triton kernel can return byte-identical output. Use when porting a
   bit-exact cuBLAS twin to a new architecture or library version, when some
@@ -24,11 +24,29 @@ Floating-point addition is not associative. `(a+b)+c` and `a+(b+c)` can differ i
 So a GEMM that computes the right answer is not the same thing as a GEMM that computes
 **cuBLAS's** answer. To get the same bits you have to add the same numbers in the same order.
 
-cuBLAS will not tell you the order. It will tell you which kernel it picked, as nine opaque
-integers. This skill is how to turn those integers into a reduction order you can rebuild, and
-how to know when you have really got it rather than only appeared to.
+The cuBLAS API does not state the order. It states which kernel it picked, as nine integers whose
+values the header does not explain. This skill is how to turn those integers into a reduction
+order you can rebuild, and how to know when you have really got it rather than only appeared to.
 
 **Scope.** This is about bit-matching a GEMM to cuBLAS. Nothing else.
+
+## What this is: reproducing a documented contract
+
+Three facts, because the word matters and the wrong one misdescribes the job.
+
+- **Much of what cuBLAS runs is CUTLASS, and CUTLASS is open source.** Step 3 below reads that
+  source and cites it by file and line. Two of the hardest questions in this whole method were
+  answered by reading it, and one of them could not have been answered any other way. For the
+  families that are cuBLAS's own rather than CUTLASS, the inputs are still public ones: the
+  launched kernel name, and what the public API returns.
+- **The reproducibility guarantee is cuBLAS's own.** Its documentation states it: the same
+  bit-wise results for the same toolkit version, on the same architecture with the same number of
+  SMs, with a single stream and a provided workspace. Step 0 is about pinning exactly that.
+- **The work is measuring what a public API returns and rebuilding it from public source.**
+
+So the job is **reproducing a documented contract**. It is not getting at something held back.
+The reason it takes any work at all is that the contract has never been measured on *your*
+machine, with *your* library — and until it has, you cannot act on it.
 
 ## What you need
 
@@ -37,12 +55,15 @@ k loop (Triton is what this was done in), a profiler that reports launched kerne
 agent to drive the scans. **No particular repository.** Everything below is against the public
 cuBLASLt C API, public NVIDIA documentation, and the open-source CUTLASS tree.
 
+One word, used throughout: a **twin** is your own kernel that reproduces one cuBLAS kernel bit
+for bit.
+
 ## The shape of the work
 
 ```
 offline, once per (architecture, library version)
     nine config integers  ─────────────────────────────>  "how this will be summed"
-                          reverse engineering, producing a static table
+                          measured once, producing a static table
 
 runtime, once per shape
     shape ──[heuristic query, no GEMM runs]──> nine integers ──[lookup]──> kernel + parameters
@@ -76,15 +97,15 @@ Knowing which one you are looking at tells you how much is left to measure.
 | **plain** — one accumulator per output element, walk K once, never closed | **nothing** beyond "it is this one". A flat accumulator leaves no grouping choice; the output tile is irrelevant and so is the threadblock k step, because neither forms a rounding boundary | free |
 | **split-K** — K cut into contiguous slices, one partial each, merged by a second kernel | the split count (stated in the config), the grain (from the stages enum), the cut positions (a closed form, see the CUTLASS source in Step 3), and the merge scheme | mostly free |
 | **CUTLASS residue-first** — as above but the accumulator is closed **once per MMA**, and the `K % block_k` leftover goes at the **front** | the MMA's k, the threadblock k step, and therefore the leading group size | one reading |
-| **SIMT chain** — no tensor core, an explicit multiply-add chain with two or three levels | how many threads share an output column, and how many k per inner accumulator. Encoded in an opaque config field | **must be measured** |
-| **gemv** — one output element per row or column, several lanes cooperating on each | lane width, how k is dealt out to lanes, how often a lane closes its accumulator, and the merge-tree direction. All in one opaque config field | **must be measured, and this is most of the work** |
+| **SIMT chain** — no tensor core, an explicit multiply-add chain with two or three levels | how many threads share an output column, and how many k per inner accumulator. Both sit in one config field whose values the API does not explain | **must be measured** |
+| **gemv** — one output element per row or column, several lanes cooperating on each | lane width, how k is dealt out to lanes, how often a lane closes its accumulator, and the merge-tree direction. All four sit in that same one field | **must be measured, and this is most of the work** |
 
 The split count does **not** need a table entry of its own — it is a runtime argument to the
 closed form, so no split count, however large, adds an entry.
 
 **The CUDA-core structures cannot be built with a tensor-core instruction.** A tensor-core dot
 differs from an explicit multiply-add chain by one unit in the last place even at `K = 2`, and no
-regrouping recovers it. Those twins have to be built from explicit outer products.
+regrouping gets it back. Those twins have to be built from explicit outer products.
 
 ---
 
@@ -113,7 +134,7 @@ order. Make it a named parameter of your API next to the library version. If you
 your code stays self-consistent with its own reference and quietly disagrees with every caller
 who allows something else — that failure is silent, which is worse than loud.
 
-It hides well. In one 8-shape sample only 1 shape differed, so a small sweep would have said
+It is easy to miss. In one 8-shape sample only 1 shape differed, so a small sweep would have said
 "no effect". The real failing shape needed 8 seeds to show up 1 time.
 
 **The heuristic is a host cost model, not a benchmark.** Worth knowing, because it means a plan
@@ -174,7 +195,7 @@ on one family, and that is not a split count at all — it is the library's mark
 tile scheduler, which cuts the k axis differently in every output tile. Read fields raw and look
 at the whole range of values before you write any normalising code. See Step 7.
 
-### `STAGES_ID` is not opaque
+### `STAGES_ID` is a documented enum
 
 It is the public enum `cublasLtMatmulStages_t`, and the enum names spell the tile out — `32x1`,
 `64x5`, `64xAUTO`. So `block_k = 16 << ((id - 1) // 6)` for ids 1..24. That rule reproduced every
@@ -211,13 +232,63 @@ CUBLASLT_LOG_MASK=31      # bitmask if you want to pick levels instead of stacki
 CUBLASLT_LOG_FILE=/tmp/lt_%i.log   # %i is replaced with the process id
 ```
 
-At level 5 every API call prints its parameters, and the algo struct prints with its config
-fields, which is a fast way to sanity-check that your ctypes reader agrees with the library.
-Levels 3 and 4 print what cuBLAS thinks about the shape.
+**The full algo config prints on a `Trace` line.** That is the field list you are trying to read,
+in the library's own words, so it is the fastest way to check that your own attribute reader
+agrees with the library:
 
-**Read those messages as hints to check, not as verdicts.** Some of them say a shape is not
-supported and the call then goes on and runs it. Treat any such line as a pointer at something
-worth measuring, never as an answer.
+```
+[cublasLt][Trace][cublasLtMatmul] ... algo=[algoId=74 tile=MATMUL_TILE_64x64
+  stages=MATMUL_STAGES_128xAUTO reductionScheme=REDUCTION_SCHEME_COMPUTE_TYPE
+  numSplitsK=-2] workSpace=... workSpaceSizeInBytes=33554432 beta=0 outOfPlace=0
+```
+
+The line also prints the workspace allowance it was handed, which is a cheap way to confirm that
+the class you think you pinned in Step 0 is the one actually in force.
+
+**Do not assume a fixed field set per algorithm id.** Another shape, the same algorithm id, a
+different path inside it:
+
+```
+algo=[algoId=74 tile=MATMUL_TILE_64x64 stages=MATMUL_STAGES_128xAUTO
+  clusterShape=CLUSTER_SHAPE_1x1x1 schedulingMode=0]
+```
+
+One line carries `reductionScheme` and `numSplitsK`; the other carries `clusterShape` and
+`schedulingMode`; **neither carries the other's**. A parser that expects one record shape per
+algorithm id will silently read nothing on part of the population.
+
+**`numSplitsK=-2` is a sentinel, not a count.** It marks the stream-K scheduler, and the split
+count is then decided inside the kernel. That is the "a numeric field can hold something that is
+not a number" point above, now visible in the library's own log.
+
+### The "unsupported" message that runs anyway
+
+At `Info` level cuBLAS will tell you a shape is outside its declared support and then run it:
+
+```
+[cublasLt][Info][cublasLtMatmul] Unsupported M dimension for FP8 matrix
+                                 multiplication. M must be divisible by 16. Got 1390.
+```
+
+Measured on the shapes it fires for: it fires **twice per call**, once from the heuristic and once
+from the matmul; cuBLAS then returns a full set of heuristic results — seven on the shapes
+measured — and executes; and the output is self-consistent over repeated calls and identical
+across two cuBLASLt versions.
+
+So the message marks **a shape outside the declared support, not a shape that returns garbage**.
+Three things follow, and the third is the one people get wrong.
+
+- **The declared support is stricter than the behaviour, and the gap can hold whole kernel
+  families.** This exact message is where the belief "cuBLAS refuses fp8 unless every dimension is
+  a multiple of 16" came from — and acting on it, by rounding every fp8 dimension up to 16 in every
+  sweep, made an entire kernel family invisible, one that takes 76% of the shapes in the slice
+  cuBLAS actually accepts. Note `Got 1390`: even, not a multiple of 16, complained about, and run.
+  See the sweep-filter warning in `reference/porting-checklist.md`.
+- **Treat the line as a pointer at something worth measuring**, never as an answer about what the
+  library will do.
+- **If you go on to match such a path, say plainly that you are matching an
+  undeclared-but-deterministic path.** It is deterministic here, and that is measured. It is not
+  something the vendor promises, and a claim phrased as though it were is a claim you cannot back.
 
 ---
 
@@ -522,14 +593,20 @@ Three kinds of decline, and the distinction belongs in both the code and the not
   variant whose lane count comes from occupancy, so two shapes with identical nine-field configs
   run different orders. No amount of work removes this.
 
-Two rules that follow:
+Three rules that follow:
 
 - **A narrower correct claim beats a broader unproven one.** "On these 40 shapes on this GPU, no
   difference" is a result. "No difference" is not.
 - **Normalise carefully at the edges.** One split-count field carries `-2`, which is not a split
-  count at all but the library's mark for the stream-K tile scheduler. A helper that clamped
-  anything below 1 up to 1 would have turned that into a silent claim of a single unsplit
-  accumulator. Read such fields raw, before any normalising.
+  count at all but the library's mark for the stream-K tile scheduler — and cuBLAS's own log
+  prints it that way, see Step 1. A helper that clamped anything below 1 up to 1 would have turned
+  that into a silent claim of a single unsplit accumulator. Read such fields raw, before any
+  normalising.
+- **Name the paths you match that the vendor does not declare.** Some shapes run on a path cuBLAS
+  logs as unsupported and executes anyway (Step 1). Matching one is legitimate and useful, and it
+  is deterministic where it was measured — but write it up as an undeclared-but-deterministic
+  path, not as though the vendor stood behind it. That is the same discipline as the decline: say
+  exactly what you know and no more.
 
 ---
 
