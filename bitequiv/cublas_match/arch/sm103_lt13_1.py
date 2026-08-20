@@ -66,6 +66,14 @@ PROFILE = ArchProfile(
     #      a 92,699-shape random sweep had declined plus an 816-shape grid crossing M % 8 in
     #      {2, 4, 6} at seven magnitudes against K % 32 in {0, 16} at fourteen.
     #
+    #      Count OUTPUT ROWS and not shape-draws, because rows are what the byte test samples:
+    #      those 5,650 comparisons carry 27,112,686 output row-draws, 26,745,624 of them from
+    #      shapes with M >= 1000. The distinction is not pedantry. A difference in the last fp32
+    #      bits only moves an fp16 output on a row whose exact value sits that close to a rounding
+    #      boundary, measured on this family at about one row in 3,000 -- so a shape count says
+    #      little and a row count says a lot. An error of that size anywhere in this recipe would
+    #      have shown about 9,000 times here, and it showed none.
+    #
     #      The byte test does resolve the one free knob here, which is where the groups start:
     #      the same recipe with the leading group moved by 16 was caught 45 of 45 times, at every
     #      M from 2 to 49,004, and the flat-from-zero form was caught on all 30 shapes where it is

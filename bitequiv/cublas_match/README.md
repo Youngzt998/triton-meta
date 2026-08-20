@@ -212,13 +212,21 @@ Inside `ALGO_ID` 74 (sm_103 only, the only profile it is measured on), one more:
   `return false` dead code; and `ctas_per_wave` is the plain `sm_count`, because the stream-K
   `get_grid_shape` passes `truncate_by_problem_size = false` rather than the truncating form.
 
-  A twin built on that reproduces cuBLAS **byte-for-byte on 12 shapes over every narrow input
-  draw, and misses 4 elements out of about 250,000 on the wide-exponent draws**, each one ulp on
-  a single output row. Those 4 are the whole remaining gap, and they are not the chunk
-  boundaries: many different boundary perturbations "fix" any one of them, and most of those
-  violate the scheduler's own 8-k-tile minimum, which is what a 1-ulp coincidence looks like
-  rather than a correction. The N tile is ruled out too — BN 16, 32, 64 and 128 all give the same
-  4. Until it is 0 the decline stands, because 4 wrong elements is wrong bits.
+  A twin built on that is close but not right, and how close took some care to state. On 12
+  shapes at 5 draws each it matched everywhere except 4 elements out of about 250,000, each one
+  ulp on a single row — but **that reading was wrong, and the reason is worth keeping.** A
+  difference in the last fp32 bits only moves an fp16 output on a row that sits that close to a
+  rounding boundary, so the byte test detects one at a rate of about one row in 3,000. Re-running
+  the shapes that had shown 0 with 40 wide draws instead of 2 turns three of them into 8, 9 and
+  12 differing elements. Only one shape of six stayed at 0, over 131,280 row-draws. So the twin
+  carries a small persistent error on nearly the whole family, and the per-shape zeros were
+  sample size rather than correctness.
+
+  Two things it is NOT. Not the chunk boundaries: many boundary perturbations "fix" any given
+  element, and most of those violate the scheduler's own 8-k-tile minimum, which is what a 1-ulp
+  coincidence looks like rather than a correction. Not the twin's N tile: BN 16, 32, 64 and 128
+  all give the same count, which also extends the "the tile is bit-neutral" measurement to BN for
+  fp8, where only BM had been checked.
 
 fp8 reaches none of the four CUDA-core families and declines there. fp8 also needs `BM >= 64`,
 or Triton stops using the native fp8 tensor-core path and rounds differently from cuBLAS.
