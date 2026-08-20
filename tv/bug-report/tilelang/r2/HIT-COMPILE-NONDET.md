@@ -416,17 +416,64 @@ quiet.
 ```bash
 source /home/youngzt/fuzz-tilelang-r2/env.sh
 cd /home/youngzt/fuzz-tilelang-r2
-# capture `mod` just before the pass in question, then:
-#   with tilelang.transform.PassContext(opt_level=3, config=cfg), tgt:
-#       for _ in range(50): count sha256(str(p(pre)))
+python - <<'EOF'
+import collections, hashlib
+import tilelang
+from tlfz import core, steps as S
+
+CASES = [("MergeSharedMemoryAllocations",
+          {"kind": "cap", "kid": "cap_c5c2818305b35efa"}),
+         ("ThreadSync.shared.dyn",
+          {"kind": "gen", "spec": {"fam": "fa", "p": {"B": 2, "H": 4, "SQ": 385, "SKV": 127,
+            "D": 32, "bM": 64, "bN": 64, "th": 128, "st": 1, "causal": True,
+            "dt": "bfloat16", "pol": "Square"},
+            "pc": {"tl.ptxas_register_usage_level": 10}}})]
+
+ST = {"want": None, "cap": {}}
+
+def traced(mod, target):
+    cu = tilelang.cuda.transform
+    for i, (name, p) in enumerate(S._apply_order(S.build_steps(target))):
+        if name == ST["want"] and "pre" not in ST["cap"]:
+            ST["cap"]["pre"], ST["cap"]["pass"] = mod, p   # freeze the input nodes
+        if p is None:
+            if S.module_has_tma(mod):
+                mod = cu.FuseMBarrierArriveExpectTx()(mod)
+        else:
+            mod = p(mod)
+    return mod
+
+S.cuda_body = traced          # install() captures cuda_body once, so set it first
+S.install()
+
+for want, item in CASES:
+    ST["want"] = want
+    ST["cap"] = cap = {}
+    k = core.load_item(item)
+    cfg, tgt = core._merged_cfg(k, core.set_variant({})), core.target()
+    with tilelang.transform.PassContext(opt_level=3, config=cfg), tgt:
+        tilelang.lower(k.prim, target=tgt, enable_host_codegen=False,
+                       enable_device_compile=False)
+    pre, p = cap["pre"], cap["pass"]
+    outs = collections.Counter()
+    with tilelang.transform.PassContext(opt_level=3, config=cfg), tgt:
+        for _ in range(50):                            # same module, same addresses
+            outs[hashlib.sha256(str(p(pre)).encode()).hexdigest()[:8]] += 1
+    print(want, "->", len(outs), "distinct outputs in 50 applications", dict(outs))
+EOF
 ```
 
-Observed (reviewer, 50 applications each):
+Observed (reviewer, 50 applications each; the script above, run whole):
 
 ```
-MergeSharedMemoryAllocations on cap_c5c2818305b35efa : 1 distinct output  {'430f8dad': 50}
-ThreadSync.shared.dyn        on HIT-0043's fa point  : 2 distinct outputs {'adbdd531': 44, 'd960d9ae': 6}
+MergeSharedMemoryAllocations -> 1 distinct outputs in 50 applications {'5e02d0b3': 50}
+ThreadSync.shared.dyn -> 2 distinct outputs in 50 applications {'d960d9ae': 7, 'adbdd531': 43}
 ```
+
+and in two earlier separate processes, one case each: `{'430f8dad': 50}` and
+`{'adbdd531': 44, 'd960d9ae': 6}`. The frozen module is a fresh object in each
+process, so the single hash on the `Merge` line is a different value every time
+— that is the point: it is *one* value per process, 50 times.
 
 The `ThreadSync` line is the positive control (`HIT-0043` measured 38/12 the
 same way): the experiment does detect a nondeterministic pass. So the single
