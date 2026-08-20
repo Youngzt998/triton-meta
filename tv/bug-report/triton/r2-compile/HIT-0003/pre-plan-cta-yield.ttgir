@@ -1,0 +1,60 @@
+#blocked = #ttg.blocked<{sizePerThread = [1], threadsPerWarp = [32], warpsPerCTA = [4], order = [0], CGALayout = [[1], [2], [4]]}>
+module attributes {"ttg.num-ctas" = 8 : i32, "ttg.num-warps" = 4 : i32, ttg.target = "cuda:90", "ttg.threads-per-warp" = 32 : i32} {
+  tt.func public @triton_poi_fused_add_bucketize_0_8b33912d(%arg0: !tt.ptr<i64> {tt.divisibility = 16 : i32}, %arg1: !tt.ptr<f32> {tt.divisibility = 16 : i32}, %arg2: !tt.ptr<f32> {tt.divisibility = 16 : i32}, %arg3: i32 {tt.divisibility = 16 : i32}) attributes {noinline = false} {
+    %cst = arith.constant dense<0> : tensor<16xi64, #blocked>
+    %cst_0 = arith.constant dense<17> : tensor<16xi64, #blocked>
+    %c18_i32 = arith.constant 18 : i32
+    %c1_i32 = arith.constant 1 : i32
+    %c2_i32 = arith.constant 2 : i32
+    %cst_1 = arith.constant dense<2> : tensor<16xi64, #blocked>
+    %cst_2 = arith.constant dense<0.000000e+00> : tensor<16xf32, #blocked>
+    %cst_3 = arith.constant dense<1> : tensor<16xi64, #blocked>
+    %cst_4 = arith.constant dense<1024> : tensor<16xi32, #blocked>
+    %c16_i32 = arith.constant 16 : i32
+    %0 = tt.get_program_id x : i32
+    %1 = arith.muli %0, %c16_i32 : i32
+    %2 = tt.make_range {end = 16 : i32, start = 0 : i32} : tensor<16xi32, #blocked>
+    %3 = tt.splat %1 : i32 -> tensor<16xi32, #blocked>
+    %4 = arith.addi %3, %2 : tensor<16xi32, #blocked>
+    %5 = arith.cmpi slt, %4, %cst_4 : tensor<16xi32, #blocked>
+    %6 = tt.splat %arg1 : !tt.ptr<f32> -> tensor<16x!tt.ptr<f32>, #blocked>
+    %7 = tt.addptr %6, %4 : tensor<16x!tt.ptr<f32>, #blocked>, tensor<16xi32, #blocked>
+    %8 = ttg.convert_layout %7 : tensor<16x!tt.ptr<f32>, #blocked> -> tensor<16x!tt.ptr<f32>, #blocked>
+    %9 = ttg.convert_layout %5 : tensor<16xi1, #blocked> -> tensor<16xi1, #blocked>
+    %10 = tt.load %8, %9 : tensor<16x!tt.ptr<f32>, #blocked>
+    %11:3 = scf.while (%arg4 = %cst, %arg5 = %cst_0, %arg6 = %c18_i32) : (tensor<16xi64, #blocked>, tensor<16xi64, #blocked>, i32) -> (tensor<16xi64, #blocked>, tensor<16xi64, #blocked>, i32) {
+      %18 = arith.cmpi sgt, %arg6, %c1_i32 : i32
+      scf.condition(%18) %arg4, %arg5, %arg6 : tensor<16xi64, #blocked>, tensor<16xi64, #blocked>, i32
+    } do {
+    ^bb0(%arg4: tensor<16xi64, #blocked>, %arg5: tensor<16xi64, #blocked>, %arg6: i32):
+      %18 = arith.addi %arg5, %arg4 : tensor<16xi64, #blocked>
+      %19 = arith.divsi %18, %cst_1 : tensor<16xi64, #blocked>
+      %20 = arith.cmpi slt, %19, %cst_0 : tensor<16xi64, #blocked>
+      %21 = tt.splat %arg2 : !tt.ptr<f32> -> tensor<16x!tt.ptr<f32>, #blocked>
+      %22 = tt.addptr %21, %19 : tensor<16x!tt.ptr<f32>, #blocked>, tensor<16xi64, #blocked>
+      %23 = ttg.convert_layout %22 : tensor<16x!tt.ptr<f32>, #blocked> -> tensor<16x!tt.ptr<f32>, #blocked>
+      %24 = ttg.convert_layout %20 : tensor<16xi1, #blocked> -> tensor<16xi1, #blocked>
+      %25 = ttg.convert_layout %cst_2 : tensor<16xf32, #blocked> -> tensor<16xf32, #blocked>
+      %26 = tt.load %23, %24, %25 : tensor<16x!tt.ptr<f32>, #blocked>
+      %27 = arith.cmpf ogt, %10, %26 : tensor<16xf32, #blocked>
+      %28 = arith.cmpf une, %10, %10 : tensor<16xf32, #blocked>
+      %29 = arith.ori %27, %28 : tensor<16xi1, #blocked>
+      %30 = arith.andi %29, %20 : tensor<16xi1, #blocked>
+      %31 = arith.addi %19, %cst_3 : tensor<16xi64, #blocked>
+      %32 = arith.select %30, %31, %arg4 : tensor<16xi1, #blocked>, tensor<16xi64, #blocked>
+      %33 = arith.select %29, %arg5, %19 : tensor<16xi1, #blocked>, tensor<16xi64, #blocked>
+      %34 = arith.addi %arg6, %c1_i32 : i32
+      %35 = arith.divsi %34, %c2_i32 : i32
+      scf.yield %32, %33, %35 : tensor<16xi64, #blocked>, tensor<16xi64, #blocked>, i32
+    }
+    %12 = arith.addi %11#0, %cst_3 : tensor<16xi64, #blocked>
+    %13 = tt.splat %arg0 : !tt.ptr<i64> -> tensor<16x!tt.ptr<i64>, #blocked>
+    %14 = tt.addptr %13, %4 : tensor<16x!tt.ptr<i64>, #blocked>, tensor<16xi32, #blocked>
+    %15 = ttg.convert_layout %14 : tensor<16x!tt.ptr<i64>, #blocked> -> tensor<16x!tt.ptr<i64>, #blocked>
+    %16 = ttg.convert_layout %12 : tensor<16xi64, #blocked> -> tensor<16xi64, #blocked>
+    %17 = ttg.convert_layout %5 : tensor<16xi1, #blocked> -> tensor<16xi1, #blocked>
+    tt.store %15, %16, %17 : tensor<16x!tt.ptr<i64>, #blocked>
+    tt.return
+  }
+}
+
