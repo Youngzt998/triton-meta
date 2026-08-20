@@ -1,0 +1,47 @@
+
+gemm.perf.random -- 17 of 1400 shapes measured, 85 arm records  (RUN STILL IN PROGRESS)
+  written 2026-08-19 17:56:47. Regenerate with PERF_RANDOM_REPORT_ONLY=1.
+    cublas         1  cuBLAS (the reference)
+    torch_auto     2a torch.compile ATEN,TRITON
+    torch_triton   2b torch.compile TRITON only
+    pre_search     3  pre-GB300 under a search
+    ours           4  ours (the shipped rule)
+  shape list: seed 20260816, 100 per (family, dtype) cell, 2120 draws, 719 rejected by the size caps (12.0 TFLOP, 16777216 output elements)
+  timing column: device_flush_ms
+
+  by sampling family and dtype
+    group                     n                4/2b                 4/3     3/1     4/1    2a/1      bit4      bit3     bit2a  plan modes | torch picks
+    any/fp16                 17  0.805 [ 0.67  1.00]  1.050 [ 0.82  1.31]   0.818   0.858   1.104   160/160   160/160    70/170  k_per_dot:8 splitk_groups:5 gemv13:1 gemv_cslice:1 | triton_mm:11 aten:3 reduction:3
+                                near-floor 13; declined 1; 4/2b worst 0.458 median 0.746 best 1.712; 4/3 worst 0.733 median 1.010 best 1.642
+
+  by the cuBLAS plan mode the shape actually resolved to
+    group                     n                4/2b                 4/3     3/1     4/1    2a/1      bit4      bit3     bit2a  plan modes | torch picks
+    declined/fp16             1                   -                   -       -       -   2.220         -         -     10/10  -:1 | triton_mm:1
+                                near-floor 1; declined 1
+    gemmsn/fp16               1  0.682 [ 0.68  0.68]  1.642 [ 1.64  1.64]   0.417   0.684   1.004     10/10     10/10     10/10  gemmsn:1 | triton_mm:1
+                                near-floor 1; 4/2b worst 0.682 median 0.682 best 0.682; 4/3 worst 1.642 median 1.642 best 1.642
+    gemv13/fp16               1  0.768 [ 0.77  0.77]  1.048 [ 1.05  1.05]   0.730   0.765   0.945     10/10     10/10      0/10  gemv13:1 | reduction:1
+                                4/2b worst 0.768 median 0.768 best 0.768; 4/3 worst 1.048 median 1.048 best 1.048
+    gemv_cslice/fp16          1  0.620 [ 0.62  0.62]  0.813 [ 0.81  0.81]   0.996   0.810   1.294     10/10     10/10     10/10  gemv_cslice:1 | reduction:1
+                                near-floor 1; 4/2b worst 0.620 median 0.620 best 0.620; 4/3 worst 0.813 median 0.813 best 0.813
+    k_per_dot/fp16            8  0.837 [ 0.68  1.00]  1.132 [ 1.00  1.31]   0.938   1.062   1.255     80/80     80/80     40/80  k_per_dot:8 | triton_mm:6 aten:1 reduction:1
+                                near-floor 7; 4/2b worst 0.597 median 0.995 best 1.308; 4/3 worst 0.862 median 1.218 best 1.477
+    splitk_groups/fp16        5  0.830 [ 0.52  1.29]  0.896 [ 0.78  0.82]   0.738   0.661   0.796     50/50     50/50      0/50  splitk_groups:5 | triton_mm:3 aten:2
+                                near-floor 3; 4/2b worst 0.458 median 0.746 best 1.712; 4/3 worst 0.733 median 0.805 best 1.537
+
+  4/2b is what the bit constraint costs against an unconstrained Triton kernel.
+  4/3  is what our hand-written rewrites bought over an honest search of the SAME kernels.
+  A ratio above 1 means the numerator arm is faster. [p25 p75] beside the geometric mean.
+  bitN = draws byte-identical to cuBLAS / draws compared, summed over the group. A group whose bit4 or bit3 is short is a bug report, not a measurement.
+  near-floor rows are mostly launch overhead, so every ratio on them is pulled toward 1.
+
+  Watching, pausing and resuming this run
+    watch     tail -f artifact_eval/run_perf_random.gpu2.log      (and .gpu3.log)
+    progress  PERF_RANDOM_REPORT_ONLY=1 PYTHONPATH=$(git rev-parse --show-toplevel) \
+                python artifact_eval/artifact.py --run gemm.perf.random
+    pause     touch /home/youngzt/bitwise-equiv/triton/artifact_eval/cache/gemm.perf.random.PAUSE
+    resume    rm that file, then re-run the same command. Resuming IS re-running it:
+              a finished (family, dtype, M, N, K, arm) is skipped, and a shape in flight
+              when a worker died is picked up again once its claim goes stale.
+    workers   start or stop one at any time, on any free GPU. Work is claimed one shape
+              at a time, not sliced up front, so nothing is lost and nothing is repeated.

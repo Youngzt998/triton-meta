@@ -1,110 +1,1586 @@
-"""gemm.perf.random -- what does the bit constraint cost on a bare GEMM, on random shapes?
+"""gemm.perf.random -- four arms on random shapes: what does the bit constraint cost, and what
+did our hand-written kernels buy over an honest search?
 
-PLACEHOLDER. Replaces the old `gemm.perf`, whose unconstrained arm was a Triton configuration
-sweep we wrote ourselves. A ceiling we built out of our own kernel is not a credible ceiling: it
-is only as good as the configuration space we happened to type in. The ceiling here is
-`torch.compile(mode="max-autotune-no-cudagraphs")` instead -- the thing a user would actually
-reach for.
+Four arms, one bit reference, the same operands and the same timing method for all of them.
+
+    1   cuBLAS through `hot_cublas`.  NVIDIA's heuristic picks the kernel.  THE BIT REFERENCE.
+    2a  torch.compile(mode="max-autotune-no-cudagraphs"), backends ATEN,TRITON.  Unconstrained.
+    2b  the same with the extern excluded (max_autotune_gemm_backends="TRITON").  Unconstrained.
+    3   the PRE-GB300 bit-matching GEMM under a full autotuner sweep.  Must equal arm 1.
+    4   `cublas_equivalent_gemm` as it ships today.  Our hand-written rule.  Must equal arm 1.
+
+2a and 2b are one arm compiled twice, not two implementations.
+
+What the four comparisons answer
+--------------------------------
+    4 / 2b   what the bit constraint costs against an unconstrained Triton kernel.
+    4 / 3    what our hand-written rewrites bought OVER AN HONEST SEARCH.  An autotuner searches
+             a kernel's configuration space; it cannot invent a source rewrite.  This ratio
+             splits our gain into "a search would have found it" and "it needed new code".
+    3 / 1    how far a constraint-aware search alone pushes the original.
+    4 / 1, 2a / 1 for reference.
+
+4/2b and 4/3 are the headline.
+
+The per-shape measurement is `measure_shape`, and everything it is built from is importable:
+`gemm.perf.static` runs the same four arms on fixed real-model shapes and imports them from here
+rather than copying them.  The shape drawing and the report belong to this step.
+
+ARM 3, AND WHAT A SEARCH CAN AND CANNOT REACH
+---------------------------------------------
+Arm 3 is the same kernels as arm 4 before the sm_103 work, driven by a search instead of a rule.
+There is no separate pre-optimization package: the sm_103 commit added one branch at the top of
+each launcher and left the original body underneath, character for character.  So arm 3 launches
+the original `@triton.jit` kernels from `bitequiv.cublas_match.kernels` directly, with the
+launcher bodies replicated in `pre_gb300_launcher` so the configuration can be varied.
+`_kcontig`, the int64 addressing and the row-major tile order are kept exactly as they are there.
+The replication is checked, not assumed: at the default configuration every mode is byte-identical
+to what the package's own pre-GB300 body returns.
+
+The rule for the space: **anything that is part of the cuBLAS plan is pinned, because it defines
+the answer; launch parameters are searched.**
+
+    pinned      k_chunk / nsplit, k_per_dot, the residue position, merge_scheme, gemmsn's (S, B),
+                gemv's (V, W, CC, count-down) and SPLITK_NUM.  All of these come out of
+                `plan.static_plan` and moving one moves the bits.
+    searched    BM, BN, BK (the Triton dot's k extent), num_warps, num_stages -- and BE and
+                num_warps for the gemv families.
+
+Three knobs named in the design are NOT searchable, and saying why is part of the result:
+
+    GROUP_M      the original kernels compute the tile index as `pid // cdiv(N, BN)`.  There is
+                 no GROUP_M constexpr to give a value to.  Adding one is a source rewrite.
+    index width  every index in the original kernels is `.to(tl.int64)`, unconditionally.  There
+                 is no I64 constexpr.  Adding one is a source rewrite.
+    G            `_plain_gemm_k_per_dot` puts exactly KPD real k-elements in one `tl.dot` and
+                 zero-pads them to BK.  Putting G groups in one dot is a source rewrite (it is
+                 `_plain_gemm_kpd_wide` on the sm_103 side).  For `plain`, `split` and
+                 `split_blocks`, where the dot's k extent IS the group, searching BK is searching
+                 G, and it is searched.
+
+That is the 4/3 ratio doing its job: those three, and dropping the `_kcontig` copy that costs an
+fp8 call its whole weight matrix, are the "it needed new code" half.
+
+BK is searched.  A `tl.dot` of k extent `16*G` lowers to G chained k16 MMAs on one accumulator
+in ascending k, so moving the loop boundary does not move any addition.
+
+Three named exceptions are written into the space rather than left to chance:
+
+  1. fp8 never gets BM < 64.  Below that Triton drops `tcgen05.mma.kind::f8f6f4` (k=32) for
+     `mma.sync.m16n8k16` (k=16).  That is 20-36% faster and byte-identical on ordinary inputs,
+     and differs on wide-exponent ones -- exactly the trap a search walks into if it can see it.
+  2. gemv at vlen > 1 does not search BE or num_warps.  Measured not bit-neutral there.
+  3. gemmsn keeps its accumulator narrow (fp32-per-thread is capped) and every candidate's LLVM
+     IR is scanned for `.rdx`.  An unroll giving 8 or more fp32 per thread lets LLVM rewrite the
+     addition chain into a horizontal reduction, which moves the result by an ulp, and
+     `enable_fp_fusion=False` does not fix it.
+
+The winner is verified byte-identical here, over the same ten draws as arms 4 and 2a.  The
+pruner is not trusted.  If the fastest configuration fails, the fastest one that passes is used
+and `fallback` is set on the row.  The pre-GB300 default launch is always the first candidate, so
+arm 3 can never come out slower than the untuned original.
+
+FIVE TIMINGS, ALL KEPT RAW
+--------------------------
+    device_flush_ms   CUDA-graph replay, L2 flushed between replays        <- the headline today
+    device_warm_ms    the same without the flush
+    e2e_ms            an ordinary call, wall clock, no graph
+    host_ms           CPU time to issue the call
+    floor_ms          an empty kernel at the same grid, replayed the same way
+
+Which one becomes the headline is a decision for when the paper is written; the run should not
+have to be repeated for it.
+
+`floor_ms` matters more than it looks.  A one-kernel graph replay costs 7-9 us on this box before
+any real work.  gemv, decode and small-M kernels are 5-30 us, so the floor is a large fraction of
+them and compresses every ratio toward 1.  It is measured per shape (and so per family), and a
+row whose `device_flush_ms` is under three times its floor carries `near_floor = 1`.
+
+`e2e_ms` and `host_ms` matter because device time flatters us.  Our TMA path spends roughly 100
+us of host time per call building three tensor descriptors; graph replay captures that once and
+makes it free, but a real caller pays it every call.  Reporting device time alone hides a cost
+that is ours.
+
+RUNNING IT
+----------
+    export PYTHONPATH=$(git rev-parse --show-toplevel)
+    CUDA_VISIBLE_DEVICES=2 python -u artifact_eval/artifact.py --run gemm.perf.random --minutes 0
+
+`--minutes 0` means run to completion; a positive value is a wall-clock cap and exits cleanly.
+Everything else is an environment variable, because `artifact.py`'s CLI is shared by every step:
+
+    PERF_RANDOM_PER_CELL     shapes per (family, dtype) cell.  Default 100, so 1400 in all.
+    PERF_RANDOM_ROUNDS       measurement rounds, best of.  Default 3.
+    PERF_RANDOM_MAX_CONFIGS  cap on arm 3's search space.  Default 0 = no cap.  A non-zero value
+                             is recorded on every row it touched, so a bounded run cannot be
+                             read as full coverage.
+    PERF_RANDOM_SEARCH_S     wall-clock budget for arm 3's screening pass, per shape.  Default
+                             150.  `space`, `searched` and `budget_hit` on the row say whether it
+                             bit.  The sweep is dominated by Triton compilation, which the
+                             on-disk cache makes free after the first shape of each kind, so the
+                             budget mostly bounds the first few shapes.
+    PERF_RANDOM_REFINE       how many of the screened configurations are re-timed with a real
+                             CUDA-graph replay.  Default 16.
+    PERF_RANDOM_CUBLASLT     which cuBLAS to match.  Default 13.1.1, the version the arch profile
+                             was measured against and the one the paper's numbers use.
+    PERF_RANDOM_FAMILIES     comma-separated subset, for a validation slice.
+    PERF_RANDOM_LIMIT        stop after this many shapes in this process.  0 = no limit.
+    PERF_RANDOM_LEASE_MIN    minutes before another worker may steal a stale claim.  Default 45.
+    PERF_RANDOM_REPORT_ONLY  1 = print the table from what is on disk and exit.
+    PERF_RANDOM_REPORT_TXT   also write the report to this path.
+
+CHECKPOINTING
+-------------
+One JSONL record per (shape, arm), flushed as it is computed, so an interruption loses at most
+one arm.  Restart skips completed work keyed on (family, dtype, M, N, K, arm); resuming is
+re-running the same command.  `cache/gemm.perf.random.PAUSE` is checked at the top of each shape
+and exits cleanly.  Work is claimed one shape at a time through an O_EXCL lock file with a lease,
+not sliced up front, so a worker can join or leave mid-run without losing or duplicating a shape
+-- which is how a third GPU joins once it is free.
 """
 from __future__ import annotations
 
-from ._common import print_design
+import errno
+import json
+import math
+import os
+import random
+import re
+import statistics
+import time
+
+from ._common import CACHE, HERE, digest, graph_ms, hot_cublas, make_inputs, writer
 
 NAME = "gemm.perf.random"
 ORDER = 20
-DESCRIPTION = "price of the bit constraint on random shapes, by shape family"
-IMPLEMENTED = False
+DESCRIPTION = ("four-way comparison on random shapes: the bit constraint against torch, "
+               "and our rewrites against a search")
+IMPLEMENTED = True
 
-# The three arms are the same in `gemm.perf.random` and `gemm.perf.static`, so the columns that
-# describe them are written once here and reused there. Only the columns that say WHICH shape a
-# row is differ: a family here, a model and a layer there.
+# The seven sampling rules, crossed with fp16 and fp8.  The family is the SAMPLING RULE, not the
+# answer: which cuBLAS plan mode a shape lands on is recorded separately and the report groups by
+# that too, because a family does not map to a mode.
+FAMILIES = ("any", "aligned", "unaligned", "deepk", "smallm", "gemv", "decode")
+
+# The five arms, in the order a round measures them.  Interleaving them inside a round means a
+# clock or a neighbour that drifts over the run hits all five the same way.
+ARMS = ("cublas", "torch_auto", "torch_triton", "pre_search", "ours")
+
+ARM_LABEL = {
+    "cublas": "1  cuBLAS (the reference)",
+    "torch_auto": "2a torch.compile ATEN,TRITON",
+    "torch_triton": "2b torch.compile TRITON only",
+    "pre_search": "3  pre-GB300 under a search",
+    "ours": "4  ours (the shipped rule)",
+}
+
+# The per-arm measurement columns.  `gemm.perf.static` imports these so the two steps cannot
+# describe the same arm two different ways.  A row is one (shape, arm) pair -- not one shape with
+# every arm in it -- so that an interruption loses one arm and not a whole shape.
 ARM_COLS = [
     ("dtype", "str", "operand dtype: fp16 or fp8 (e4m3)"),
-    ("cublas_ms", "float", "arm 1: cuBLAS through the hot closure. Device time, median of "
-     "CUDA-graph replays with L2 flushed between them"),
-    ("torch_ms", "float", "arm 2 as it ships: torch.compile(mode='max-autotune-no-cudagraphs'), "
-     "timed on whatever its autotuner actually picked"),
-    ("torch_pick", "str", "what that autotuner picked: the extern cuBLAS call or a Triton template"),
-    ("torch_triton_ms", "float", "arm 2 with the extern call excluded, so the number is the best "
-     "Triton template torch.compile can produce rather than cuBLAS wearing a Triton hat"),
-    ("torch_triton_cfg", "str", "the winning template configuration, BLOCK_M/BLOCK_N/BLOCK_K/"
-     "num_warps/num_stages"),
-    ("ours_ms", "float", "arm 3: our GEMM, tuned, and byte-identical to arm 1"),
-    ("ours_cfg", "str", "the configuration ours was tuned to"),
-    ("bit_ok", "int", "draws of arm 3 that came back byte-identical to arm 1"),
-    ("bit_total", "int", "draws compared. bit_ok < bit_total makes the timings on this row "
-     "meaningless, because the two arms are then not computing the same thing"),
-    ("price_of_constraint", "float", "torch_triton_ms / ours_ms. Above 1 means the constraint "
-     "cost nothing; below 1 is what it cost"),
-    ("ours_over_cublas", "float", "cublas_ms / ours_ms, for reference. This is a different and "
-     "much larger term -- it is Triton against cuBLAS, not the price of the constraint"),
-    ("declined", "str", "non-empty if the shape is out of scope and no comparison was made"),
-    ("error", "str", "non-empty if an arm failed to run"),
+    ("arm", "str", "which arm this row measures: cublas (1), torch_auto (2a), torch_triton (2b), "
+     "pre_search (3), ours (4)"),
+    ("mode", "str", "the cuBLAS plan mode this SHAPE resolved to -- plain, k_per_dot, split, "
+     "split_blocks, splitk_groups, gemmsn, gemv13, gemv_cslice or gemv14. Recorded per shape, "
+     "never assumed from the family"),
+    ("device_flush_ms", "float", "CUDA-graph replay, L2 flushed between replays, median of the "
+     "replays, best of the rounds"),
+    ("device_warm_ms", "float", "the same replay without the flush"),
+    ("e2e_ms", "float", "an ordinary call, wall clock, no graph: what a caller actually waits"),
+    ("host_ms", "float", "CPU time to issue the call, no synchronise. Our TMA path builds three "
+     "tensor descriptors per call, which graph replay makes free and a real caller does not"),
+    ("floor_ms", "float", "an empty Triton kernel at the same grid, replayed the same way. The "
+     "cost of the replay itself before any work"),
+    ("near_floor", "int", "1 when device_flush_ms is under three times floor_ms, i.e. the "
+     "measurement is mostly launch overhead and every ratio on this row is compressed toward 1"),
+    ("captured", "int", "1 if the call went into a CUDA graph. 0 is [NOT CAPTURED]: the device "
+     "timings are empty and the row is kept, because a silently filtered set is a biased set"),
+    ("config", "str", "the launch configuration this arm ran. For pre_search the winning one; "
+     "for the torch arms the template configuration Inductor picked; empty for cuBLAS"),
+    ("pick", "str", "what the torch autotuner actually chose: aten, triton_mm, decompose_k, or "
+     "reduction (two reduction kernels and no GEMM template, which is what Inductor emits at "
+     "M == 1)"),
+    ("bit_ok", "int", "input draws whose output was byte-identical to arm 1"),
+    ("bit_total", "int", "input draws compared. Even draws are ordinary gaussian, odd draws "
+     "spread the exponents across the dtype's range. Empty when the arm is not bit-checked"),
+    ("searched", "int", "configurations arm 3 actually measured on this shape"),
+    ("space", "int", "configurations in arm 3's space for this shape before the search. Equal to "
+     "`searched` unless PERF_RANDOM_MAX_CONFIGS bounded it or some of them failed to launch"),
+    ("fallback", "int", "1 when arm 3's fastest configuration failed the byte check and the "
+     "fastest one that passed was used instead"),
+    ("budget_hit", "int", "1 when arm 3's search ran out of its wall-clock budget before the end "
+     "of the space, so `searched` is short of `space` and the search covered the front of the "
+     "order `_order_key` sets"),
+    ("rdx_rejected", "int", "gemmsn configurations dropped because LLVM had turned the addition "
+     "chain into a horizontal reduction (`.rdx` in the IR), which moves the result by an ulp"),
+    ("rdx_unknown", "int", "gemmsn configurations whose IR could not be read, so the check above "
+     "could not be made on them"),
+    ("cublaslt", "str", "the libcublasLt this row was matched against"),
+    ("worker", "str", "which worker produced the row, for tracing a machine-specific result"),
+    ("declined", "str", "non-empty if this arm is out of scope on this shape and nothing was "
+     "measured"),
+    ("error", "str", "non-empty if the arm failed to run"),
 ]
 
 TABLES = {
     "gemm.perf.random": {
         "doc":
-        "One row per random shape, drawn from the same four shape families as "
-        "`gemm.bitmatch` (square, thin, deep K, decode) so the price of the constraint "
-        "can be read per family rather than as one average that hides the split. Three "
-        "arms per row, same inputs and same timing method.",
+        "One row per (random shape, arm). Seven sampling families crossed with fp16 and "
+        "fp8, 100 shapes per cell, 1400 shapes, five arms each. All five timings are kept "
+        "raw; the ratios in the paper are computed from them and are not stored, so which "
+        "timing is the headline can change without re-running anything.",
         "cols": [
-            ("family", "str", "shape family the draw came from: square, thin, deepk or decode"),
+            ("family", "str", "sampling rule the shape was drawn from: any, aligned, unaligned, "
+             "deepk, smallm, gemv or decode. This is the DRAW, not the answer"),
+            ("shape_id", "int", "index into the fixed 1400-shape list, so a row can be traced "
+             "back to the draw that produced it"),
             ("M", "int", "rows of A"),
             ("N", "int", "columns of B"),
             ("K", "int", "contraction length"),
+            ("align", "str", "which alignment predicates hold on the operands as laid out: M16, "
+             "N16, K16"),
+            ("source", "str", "for the decode family, the model and projection the (N, K) came "
+             "from; empty otherwise"),
         ] + ARM_COLS,
     },
 }
 
+# --------------------------------------------------------------------------------------------
+# Shapes.  Generated once from a fixed seed and written to disk BEFORE anything is measured, so
+# a restart cannot silently run a different experiment.
+# --------------------------------------------------------------------------------------------
+
+# Caps on the draw.  A 65536x65536x65536 fp16 GEMM is 8 GiB an operand and would take a minute a
+# call, so a log-uniform draw that does not fit is rejected and redrawn.  Both numbers, and how
+# many draws they rejected, are printed in the report: a cap that is not stated reads as full
+# coverage.
+_MAX_TFLOP = 12.0  # 2*M*N*K, so about 40 ms of a perfect GB300 fp16 GEMM
+_MAX_OUT_ELEMS = 1 << 24  # M*N: bounds the fp32 split-K workspace, which is nsplit * M * N * 4
+
+
+def _decode_shapes():
+    """(N, K, source) for every projection in `fusion_moe/models_2026.py`.
+
+    Reused rather than reinvented: every number in that table was read out of the model's own
+    `config.json` with the key recorded, so a decode row can be traced to a weight that exists.
+    """
+    import sys
+    if HERE not in sys.path:
+        sys.path.insert(0, HERE)
+    from fusion_moe.models_2026 import MODELS
+    out = []
+    for m in MODELS:
+        add = lambda n, k, w: out.append((int(n), int(k), f"{m.name}.{w}"))  # noqa: E731
+        if m.head_dim and m.gqa:
+            add(m.qkv_out, m.hidden_size, "qkv_proj")
+        if m.head_dim and m.one_o_proj:
+            add(m.hidden_size, m.q_out, "o_proj")
+        if m.intermediate_size:
+            add(2 * m.intermediate_size, m.hidden_size, "gate_up_proj")
+            add(m.hidden_size, m.intermediate_size, "down_proj")
+        if m.moe_intermediate_size:
+            add(2 * m.moe_intermediate_size, m.ein, "moe_gate_up")
+            add(m.ein, m.moe_intermediate_size, "moe_down")
+        add(m.vocab_size, m.hidden_size, "lm_head")
+    return out
+
+
+def _loguniform(rng, lo, hi):
+    return int(round(math.exp(rng.uniform(math.log(lo), math.log(hi)))))
+
+
+def _fits(M, N, K, kind, max_bytes):
+    """Would this shape run at all?  Rejects are redrawn and the rate is reported."""
+    if M * N > _MAX_OUT_ELEMS:
+        return False
+    if 2.0 * M * N * K > _MAX_TFLOP * 1e12:
+        return False
+    esz = 1 if kind == "fp8" else 2
+    return (M * K + K * N) * esz + M * N * 2 <= max_bytes
+
+
+def _fp8_ok(M, N, K):
+    """What cuBLAS will accept for e4m3, measured on this box at 13.1.1 rather than assumed.
+
+    Swept M and N over 1..1392 at several K: cuBLAS returns an algorithm exactly when K is a
+    multiple of 16 and N is even, plus the one exception that an N of 1 works when M is even.
+    M is otherwise free -- 1x1024x512 fp8 resolves fine -- so the small-M, gemv and decode fp8
+    cells are real cells and not empty ones.  A shape outside this is not a measurement anybody
+    could make: there is no cuBLAS to be identical to.
+    """
+    return K % 16 == 0 and (N % 2 == 0 or (N == 1 and M % 2 == 0))
+
+
+def _draw_one(rng, family, kind, decode):
+    """One shape from one sampling rule."""
+    src = ""
+    if family == "any":
+        M, N, K = (_loguniform(rng, 1, 65536) for _ in range(3))
+    elif family in ("aligned", "unaligned"):
+        step = 32 if kind == "fp8" else 16
+        M, N, K = (max(step, _loguniform(rng, 512, 65536) // step * step) for _ in range(3))
+        if family == "unaligned":
+            # "N % 16 != 0, or a stride not a multiple of 16".  The operands are contiguous, so
+            # A's strides are (K, 1) and B's are (N, 1) for fp16 and (1, K) for fp8: the only
+            # strides there are, are K and N.  Breaking either breaks the predicate.
+            #
+            # fp8 can only break N, and only to an even value: cuBLAS returns no algorithm at all
+            # for an odd fp8 N or for a K that is not a multiple of 16.
+            if kind == "fp8":
+                N += rng.choice([2, 4, 6, 8, 10, 12, 14])
+            elif rng.random() < 0.5:
+                N += rng.choice([1, 3, 5, 7, 9, 11, 13, 15])
+            else:
+                K += rng.choice([1, 2, 4, 8])
+    elif family == "deepk":
+        K = _loguniform(rng, 8192, 65536)
+        M = _loguniform(rng, 1, 512)
+        N = _loguniform(rng, 1, 512)
+    elif family == "smallm":
+        M = rng.randint(2, 16)
+        N = _loguniform(rng, 256, 65536)
+        K = _loguniform(rng, 16, 4096)
+    elif family == "gemv":
+        K = _loguniform(rng, 16, 60000)
+        if rng.random() < 0.5:
+            M, N = 1, _loguniform(rng, 1, 65536)
+        else:
+            M, N = _loguniform(rng, 1, 65536), 1
+    else:
+        N, K, src = decode[rng.randrange(len(decode))]
+        M = rng.randint(1, 8)
+    M, N, K = max(1, M), max(1, N), max(1, K)
+    if kind == "fp8":  # see `_fp8_ok`: outside this there is no cuBLAS to be identical to
+        K = max(16, K // 16 * 16)
+        if N == 1:
+            M += M % 2
+        elif N % 2:
+            N += 1
+    return M, N, K, src
+
+
+def _build_shapes(seed, per_cell, max_bytes):
+    """The whole shape list, deterministic in (seed, per_cell, max_bytes)."""
+    decode = _decode_shapes()
+    shapes, rejected, drawn = [], 0, 0
+    for family in FAMILIES:
+        for kind in ("fp16", "fp8"):
+            rng = random.Random(f"{seed}:{family}:{kind}")
+            got, seen = 0, set()
+            while got < per_cell:
+                drawn += 1
+                M, N, K, src = _draw_one(rng, family, kind, decode)
+                if not _fits(M, N, K, kind, max_bytes):
+                    rejected += 1
+                    continue
+                if kind == "fp8" and not _fp8_ok(M, N, K):
+                    rejected += 1
+                    continue
+                # The family is a rule, so check the rule rather than trusting the draw.
+                if family == "aligned" and (N % 16 or K % 16):
+                    continue
+                if family == "unaligned" and not (N % 16 or K % 16):
+                    continue
+                if (M, N, K) in seen and family != "decode":
+                    continue
+                seen.add((M, N, K))
+                got += 1
+                align = (("M16", M % 16 == 0), ("N16", N % 16 == 0), ("K16", K % 16 == 0))
+                shapes.append(
+                    dict(family=family, dtype=kind, M=M, N=N, K=K, source=src,
+                         align=" ".join(x for x, ok in align if ok)))
+    for i, s in enumerate(shapes):
+        s["shape_id"] = i
+    return shapes, drawn, rejected
+
+
+def _shapes_path():
+    return os.path.join(CACHE, "gemm.perf.random.shapes.json")
+
+
+def _load_or_make_shapes(seed, per_cell, max_bytes):
+    """Written to disk before anything is measured.  If the file exists it wins, even if the
+    parameters differ -- a resumed run has to be the same experiment, not a fresh draw."""
+    path = _shapes_path()
+    if not os.path.exists(path):
+        shapes, drawn, rejected = _build_shapes(seed, per_cell, max_bytes)
+        meta = {
+            "seed": seed, "per_cell": per_cell, "max_bytes": max_bytes, "drawn": drawn, "rejected": rejected,
+            "max_tflop": _MAX_TFLOP, "max_out_elems": _MAX_OUT_ELEMS, "written": time.strftime("%Y-%m-%d %H:%M:%S")
+        }
+        os.makedirs(CACHE, exist_ok=True)
+        tmp = f"{path}.{os.getpid()}.tmp"
+        with open(tmp, "w") as f:
+            json.dump({"meta": meta, "shapes": shapes}, f)
+        os.replace(tmp, path)  # atomic, so two workers starting at once cannot see half a file
+    with open(path) as f:
+        blob = json.load(f)
+    return blob["shapes"], blob["meta"]
+
+
+# --------------------------------------------------------------------------------------------
+# Arm 3: the pre-GB300 launchers, and the space a search is allowed to move in.
+#
+# Everything in this section is importable. `gemm.perf.static` runs the same arm.
+# --------------------------------------------------------------------------------------------
+
+_POW2 = (16, 32, 64, 128, 256)
+
+
+def _np2(x):
+    return 1 << max(0, int(x - 1)).bit_length()
+
+
+def _tile_choices(M, N, min_bm):
+    """Tiles worth trying at this shape.  A tile may exceed the extent -- the rows past M are
+    masked, load zeros and contribute nothing, and the shipped launcher already runs a 128-row
+    tile at every M below 128 -- but a tile four times the extent only wastes machine, so the
+    ladder stops one step above."""
+    bms = [b for b in _POW2 if min_bm <= b <= max(min_bm, 2 * _np2(M))]
+    bns = [b for b in _POW2 if b <= max(16, 2 * _np2(N))]
+    return (bms or [min_bm]), (bns or [16])
+
+
+def _smem_ok(BM, BN, BK, esz, stages):
+    """A cheap pre-filter, so the search does not spend its time catching OutOfResources."""
+    return (BM * BK + BK * BN) * esz * max(1, stages) <= 220000
+
+
+def default_pre_gb300_config(mode, plan, M, N, K, kind):
+    """The launch the pre-GB300 launcher would have used with no search at all.
+
+    Put at the front of the space for two reasons.  It makes the pruning cutoff sensible from the
+    first candidate instead of after a slow one poisons it; and it means arm 3 can never come out
+    slower than the untuned original, so 3/1 is a lower bound on what a search buys and not an
+    artefact of a space that happened to miss the shipped point.
+    """
+    from bitequiv.cublas_match.arch import platform
+    from bitequiv.cublas_match.kernels import _tile
+    if mode == "plain":
+        return {"BM": 128, "BN": 128, "BK": 64, "num_warps": 8, "num_stages": 3}
+    if mode == "k_per_dot":
+        return {"BM": 128, "BN": 128, "BK": 16, "num_warps": 8, "num_stages": 3}
+    if mode in ("split", "split_blocks", "splitk_groups"):
+        import torch
+        dt = torch.float8_e4m3fn if kind == "fp8" else torch.float16
+        BM, BN = _tile(M, N, dt, platform().fp8_min_bm)
+        return {
+            "BM": BM, "BN": BN, "BK": {"split": 64, "split_blocks": 32, "splitk_groups": 16}[mode], "num_warps": 4,
+            "num_stages": 3
+        }
+    if mode == "gemmsn":
+        import triton
+        return {"BM": min(128, max(16, triton.next_power_of_2(M))), "BN": 64, "num_warps": 4, "num_stages": 3}
+    return {"BE": 16, "num_warps": 4}
+
+
+def _gemv_w(mode, plan):
+    """Lanes cooperating on one output element, which sizes the (BE, W) accumulator."""
+    return plan.gemv[0][1] if mode == "gemv13" else (plan.gemv[0] if mode == "gemv_cslice" else 128)
+
+
+def _gemv_pin(mode, plan, K):
+    """Exception 2: at vlen > 1 the gemv launches are NOT bit-neutral in BE or num_warps, so the
+    space collapses to the one shipped launch.  Returns that config, or None to search."""
+    from bitequiv.cublas_match.kernels import _gemv_vlen
+    if mode == "gemv13":
+        recipe, nsplit = plan.gemv
+        vlen = _gemv_vlen(recipe[0], -(-K // nsplit) if nsplit > 1 else K, recipe[1])
+    elif mode == "gemv14":
+        vlen = plan.gemv[1]
+    else:
+        vlen = 1  # `_gemv_cslice` has no lane vector: a lane owns one contiguous slice
+    return {"BE": 16, "num_warps": 4, "pinned": "vlen>1"} if vlen > 1 else None
+
+
+def config_space(mode, plan, M, N, K, kind, cap=0):
+    """Arm 3's search space for one shape.  Returns (configs, size_before_cap).
+
+    Everything the cuBLAS plan fixes is absent from this list by construction: the chunking, the
+    k per dot, the residue position, the merge scheme, (S, B) and the gemv recipe are read off
+    `plan` at launch time and never varied.  Only launch parameters are here.  The three named
+    exceptions are applied as they are built, not filtered out afterwards.
+    """
+    esz = 1 if kind == "fp8" else 2
+    min_bm = 64 if kind == "fp8" else 16  # exception 1: fp8 below BM 64 changes the MMA
+    out = []
+    if mode in ("plain", "k_per_dot", "split", "split_blocks", "splitk_groups"):
+        bms, bns = _tile_choices(M, N, min_bm)
+        kpd = plan.k_per_dot if mode in ("k_per_dot", "splitk_groups") else None
+        bks = [b for b in (16, 32, 64, 128) if kpd is None or b >= kpd]
+        for BM in bms:
+            for BN in bns:
+                for BK in bks:
+                    for nw in (4, 8):
+                        for ns in (2, 3, 4):
+                            if not _smem_ok(BM, BN, BK, esz, ns) or BM * BN < 32 * nw:
+                                continue
+                            out.append({"BM": BM, "BN": BN, "BK": BK, "num_warps": nw, "num_stages": ns})
+    elif mode == "gemmsn":
+        # Exception 3, first half: keep the accumulator narrow.  `_simt_chain_gemm` carries three
+        # (BM, BN) fp32 planes, so fp32-per-thread is 3*BM*BN/(32*num_warps); the cap keeps it
+        # where the shipped kernel already is and away from the horizontal-reduction rewrite.
+        for BM in (16, 32, 64, 128):
+            for BN in (16, 32, 64, 128):
+                for nw in (1, 2, 4, 8):
+                    for ns in (1, 2, 3):
+                        if BM > max(16, 2 * _np2(M)) or BN > max(16, 2 * _np2(N)):
+                            continue
+                        if 3 * BM * BN > 64 * 32 * nw or BM * BN < 32 * nw:
+                            continue
+                        out.append({"BM": BM, "BN": BN, "num_warps": nw, "num_stages": ns})
+    elif mode in ("gemv13", "gemv_cslice", "gemv14"):
+        pin = _gemv_pin(mode, plan, K)  # exception 2
+        if pin:
+            return [pin], 1
+        nel, W = (M if N == 1 else N), _gemv_w(mode, plan)
+        for BE in (4, 8, 16, 32, 64):
+            for nw in (1, 2, 4, 8):
+                if BE > max(4, 2 * _np2(nel)) or BE * W > 64 * 32 * nw:
+                    continue
+                out.append({"BE": BE, "num_warps": nw})
+    d = default_pre_gb300_config(mode, plan, M, N, K, kind)
+    out = [d] + sorted((c for c in out if c != d), key=lambda c: _order_key(c, M, N))
+    size = len(out)
+    return (out[:cap] if cap and size > cap else out), size
+
+
+def _order_key(cfg, M, N):
+    """The order the search walks the space in, so that stopping early still leaves a good subset.
+
+    Tiles that fill the machine come first -- the same thing every autotuner's config prune does
+    -- then the wider k step, then more warps, then more stages.  The order is a heuristic and it
+    is stated here rather than hidden: a run that hit its budget covered the front of THIS order,
+    and `space` and `searched` on the row say how much of it.
+    """
+    import triton
+    BM, BN = cfg.get("BM", cfg.get("BE", 16)), cfg.get("BN", 1)
+    tiles = triton.cdiv(M, BM) * triton.cdiv(N, max(1, BN))
+    return (abs(math.log(max(tiles, 1) / 148.0)), -cfg.get("BK", 0), -cfg.get("num_warps", 0),
+            -cfg.get("num_stages", 0))
+
+
+def pre_gb300_launcher(mode, plan, cfg, kind=None):
+    """A callable `(a, b, out_dtype, scale) -> c` running the ORIGINAL kernel for `mode` at `cfg`.
+
+    Each body below is the corresponding launcher in `bitequiv/cublas_match/kernels.py` with its
+    sm_103 branch removed and its hard-coded launch constants replaced by `cfg`.  Nothing else
+    moves: `_kcontig`, the grid shape, the workspace dtype, the argument order and the runtime
+    plan arguments are all as they are there.  Verified: at `default_pre_gb300_config` every mode
+    returns exactly what the package's own pre-GB300 body returns.
+    """
+    import torch
+    import triton
+    from bitequiv.cublas_match import kernels as KK
+    from bitequiv.cublas_match.ltapi import DEVICE
+
+    cdiv = triton.cdiv
+
+    def plain(a, b, out_dtype, scale):
+        BM, BN, BK = cfg["BM"], cfg["BN"], cfg["BK"]
+        b = KK._kcontig(b)
+        M, K = a.shape
+        N = b.shape[1]
+        c = torch.empty(M, N, device=DEVICE, dtype=out_dtype)
+        KK._plain_gemm[(cdiv(M, BM) * cdiv(N, BN), )](a, b, c, M, N, K, a.stride(0), a.stride(1), b.stride(0),
+                                                      b.stride(1), c.stride(0), c.stride(1), scale, BM=BM, BN=BN, BK=BK,
+                                                      num_warps=cfg["num_warps"], num_stages=cfg["num_stages"])
+        return c
+
+    def k_per_dot(a, b, out_dtype, scale):
+        BM, BN, BK = cfg["BM"], cfg["BN"], cfg["BK"]
+        b = KK._kcontig(b)
+        M, K = a.shape
+        N = b.shape[1]
+        c = torch.empty(M, N, device=DEVICE, dtype=out_dtype)
+        KK._plain_gemm_k_per_dot[(cdiv(M, BM) * cdiv(N, BN), )](a, b, c, M, N, K, a.stride(0), a.stride(1), b.stride(0),
+                                                                b.stride(1), c.stride(0), c.stride(1), scale,
+                                                                plan.k_per_dot, plan.leading_group_k, BM=BM, BN=BN,
+                                                                BK=BK, num_warps=cfg["num_warps"],
+                                                                num_stages=cfg["num_stages"])
+        return c
+
+    def split(a, b, out_dtype, scale):
+        BM, BN, BK = cfg["BM"], cfg["BN"], cfg["BK"]
+        b = KK._kcontig(b)
+        M, K = a.shape
+        N = b.shape[1]
+        nsplit = (K + plan.k_chunk - 1) // plan.k_chunk
+        ntile = cdiv(M, BM) * cdiv(N, BN)
+        w = torch.empty(nsplit, M, N, device=DEVICE, dtype=torch.float32)
+        KK._splitk_partial[(ntile, nsplit)](a, b, w, M, N, K, a.stride(0), a.stride(1), b.stride(0), b.stride(1),
+                                            w.stride(0), w.stride(1), w.stride(2), plan.k_chunk, BM=BM, BN=BN, BK=BK,
+                                            num_warps=cfg["num_warps"], num_stages=cfg["num_stages"])
+        c = torch.empty(M, N, device=DEVICE, dtype=out_dtype)
+        KK._splitk_combine[(ntile, )](w, c, M, N, w.stride(0), w.stride(1), w.stride(2), c.stride(0), c.stride(1),
+                                      nsplit, scale, BM=BM, BN=BN, num_warps=cfg["num_warps"])
+        return c
+
+    def split_blocks(a, b, out_dtype, scale):
+        BM, BN, BK = cfg["BM"], cfg["BN"], cfg["BK"]
+        b = KK._kcontig(b)
+        M, K = a.shape
+        N = b.shape[1]
+        nsplit = (K + plan.k_chunk - 1) // plan.k_chunk
+        ntile = cdiv(M, BM) * cdiv(N, BN)
+        w = torch.empty(nsplit, M, N, device=DEVICE, dtype=torch.float32)
+        KK._splitk_partial_blocks[(ntile, nsplit)](a, b, w, M, N, K, a.stride(0), a.stride(1), b.stride(0), b.stride(1),
+                                                   w.stride(0), w.stride(1), w.stride(2), plan.k_chunk, plan.block_k,
+                                                   BM=BM, BN=BN, BK=BK, num_warps=cfg["num_warps"],
+                                                   num_stages=cfg["num_stages"])
+        c = torch.empty(M, N, device=DEVICE, dtype=out_dtype)
+        KK._splitk_combine[(ntile, )](w, c, M, N, w.stride(0), w.stride(1), w.stride(2), c.stride(0), c.stride(1),
+                                      nsplit, scale, BM=BM, BN=BN, num_warps=cfg["num_warps"])
+        return c
+
+    def splitk_groups(a, b, out_dtype, scale):
+        BM, BN, BK = cfg["BM"], cfg["BN"], cfg["BK"]
+        b = KK._kcontig(b)
+        M, K = a.shape
+        N = b.shape[1]
+        nsplit = (K + plan.k_chunk - 1) // plan.k_chunk
+        ntile = cdiv(M, BM) * cdiv(N, BN)
+        w = torch.empty(nsplit, M, N, device=DEVICE, dtype=torch.float32)
+        KK._splitk_partial_k_per_dot[(ntile, nsplit)](a, b, w, M, N, K, a.stride(0), a.stride(1), b.stride(0),
+                                                      b.stride(1), w.stride(0), w.stride(1), w.stride(2), plan.k_chunk,
+                                                      plan.k_per_dot, plan.block_k, BM=BM, BN=BN, BK=BK,
+                                                      num_warps=cfg["num_warps"], num_stages=cfg["num_stages"])
+        c = torch.empty(M, N, device=DEVICE, dtype=out_dtype)
+        KK._splitk_combine_modes[(ntile, )](w, c, M, N, w.stride(0), w.stride(1), w.stride(2), c.stride(0), c.stride(1),
+                                            nsplit, scale, CMODE=plan.merge_scheme, BM=BM, BN=BN,
+                                            num_warps=cfg["num_warps"])
+        return c
+
+    def gemmsn(a, b, out_dtype, scale):
+        BM, BN = cfg["BM"], cfg["BN"]
+        S, sub = plan.simt
+        M, K = a.shape
+        N = b.shape[1]
+        c = torch.empty(M, N, device=DEVICE, dtype=out_dtype)
+        k = KK._simt_chain_gemm[(cdiv(M, BM), cdiv(N, BN))](a, b, c, M, N, K, -(-K // S), sub or K, a.stride(0),
+                                                            a.stride(1), b.stride(0), b.stride(1), c.stride(0),
+                                                            c.stride(1), BM=BM, BN=BN, S=S, num_warps=cfg["num_warps"],
+                                                            num_stages=cfg["num_stages"])
+        gemmsn.kernel = k  # exception 3's second half reads its LLVM IR back out; see `_rdx`
+        return c
+
+    def gemv13(a, b, out_dtype, scale):
+        BE, nw = cfg["BE"], cfg["num_warps"]
+        recipe, nsplit = plan.gemv
+        _, W, CC, down = recipe
+        K = a.shape[1]
+        c = torch.empty(a.shape[0], b.shape[1], device=DEVICE, dtype=out_dtype)
+        nel, *strides, sc = KK._gemv_axis(a, b, c)
+        chunk = -(-K // nsplit) if nsplit > 1 else K
+        vlen = KK._gemv_vlen(recipe[0], chunk, W)
+
+        def lane(out, k0, ke, sc_):
+            ntile = -(-(ke - k0) // (vlen * W))
+            per = CC or ntile
+            KK._gemv_lane[(cdiv(nel, BE), )](a, b, out, nel, k0, ke, *strides, sc_, -(-ntile // per), per, V=vlen, W=W,
+                                             DOWN=down, BE=BE, num_warps=nw)
+
+        if nsplit <= 1:
+            lane(c, 0, K, sc)
+            return c
+        w = torch.zeros(nsplit, nel, device=DEVICE, dtype=torch.float32)
+        for sl in range(nsplit):
+            k0 = sl * chunk
+            if k0 >= K:
+                continue  # the workspace is zeroed, so a slice past K contributes an exact 0
+            lane(w[sl], k0, min(k0 + chunk, K), 1)
+        KK._gemv_slice_combine[(cdiv(nel, BE), )](w, c, nel, w.stride(0), sc, nsplit, BE=BE, num_warps=nw)
+        return c
+
+    def gemv_cslice(a, b, out_dtype, scale):
+        BE, nw = cfg["BE"], cfg["num_warps"]
+        w_lanes, chunk = plan.gemv
+        K = a.shape[1]
+        c = torch.empty(a.shape[0], b.shape[1], device=DEVICE, dtype=out_dtype)
+        nel, *strides, sc = KK._gemv_axis(a, b, c)
+        slice_k = -(-K // w_lanes)
+        KK._gemv_cslice[(cdiv(nel, BE), )](a, b, c, nel, K, *strides, sc, slice_k, -(-slice_k // chunk), C=chunk,
+                                           W=w_lanes, BE=BE, num_warps=nw)
+        return c
+
+    def gemv14(a, b, out_dtype, scale):
+        BE, nw = cfg["BE"], cfg["num_warps"]
+        nblock, v = plan.gemv
+        K = a.shape[1]
+        c = torch.empty(a.shape[0], b.shape[1], device=DEVICE, dtype=out_dtype)
+        nel, *strides, sc = KK._gemv_axis(a, b, c)
+        ntile = -(-K // (v * 128))
+        w = torch.zeros(nblock, nel, device=DEVICE, dtype=torch.float32)
+        KK._gemv_block_dot[(cdiv(nel, BE), nblock)](a, b, w, nel, K, *strides, w.stride(0), nblock, -(-ntile // nblock),
+                                                    V=v, BE=BE, num_warps=nw)
+        KK._gemv_block_reduce[(cdiv(nel, BE), )](w, c, nel, w.stride(0), sc, nblock, -(-nblock // 128), BE=BE,
+                                                 num_warps=nw)
+        return c
+
+    return {
+        "plain": plain, "k_per_dot": k_per_dot, "split": split, "split_blocks": split_blocks, "splitk_groups":
+        splitk_groups, "gemmsn": gemmsn, "gemv13": gemv13, "gemv_cslice": gemv_cslice, "gemv14": gemv14
+    }[mode]
+
+
+def config_str(cfg):
+    """A configuration as one sortable string, for the record."""
+    return " ".join(f"{k}={v}" for k, v in sorted(cfg.items()))
+
+
+def _rdx(fn):
+    """Exception 3's second half: did LLVM turn the addition chain into a horizontal reduction?
+
+    A wide enough accumulator lets LLVM rewrite the chain into `llvm.vector.reduce.fadd`, whose
+    operands it leaves named `.rdx` in the IR.  That moves the result by an ulp and
+    `enable_fp_fusion=False` does not fix it.  Reading the IR catches it on every configuration,
+    where a byte check only catches it on a draw that happens to expose the ulp.
+
+    True, False, or None when the IR could not be read -- which is counted, not called clean.
+    """
+    try:
+        return ".rdx" in fn.kernel.asm["llir"]
+    except Exception:
+        return None
+
+
+def _screen_ms(torch, call, iters=3):
+    """One launch to compile it, then `iters` back-to-back launches timed with CUDA events.
+
+    For RANKING only: no graph, no L2 flush.  On a kernel shorter than its own launch this
+    measures the launch, but it measures the same launch for every candidate, so the order it
+    produces is still usable -- and the top of that order is then re-timed properly by
+    `graph_ms`.  Screening this way instead of capturing a graph per candidate cuts the sweep's
+    device work about sevenfold, which matters at 500 candidates a shape.
+    """
+    s, e = torch.cuda.Event(True), torch.cuda.Event(True)
+    call()
+    torch.cuda.synchronize()
+    s.record()
+    for _ in range(iters):
+        call()
+    e.record()
+    torch.cuda.synchronize()
+    return s.elapsed_time(e) / iters
+
+
+def search_pre_gb300(torch, a, b, plan, kind, out_dtype, flush, cap=0, budget_s=150.0, refine=16):
+    """Screen the whole space, then measure the best `refine` of it properly.  Ranked, fastest
+    first.
+
+    Returns (ranked, info).  `info` carries what the record needs to be read honestly: `space` is
+    how many configurations there were, `searched` how many were screened, and `budget_hit` says
+    the wall-clock budget stopped it before the end.  Both numbers land on every arm-3 row, so a
+    truncated search cannot be read as an exhaustive one.
+
+    Nothing here decides correctness.  The caller byte-checks the winner, because a pruner that
+    also judged the bits would be marking its own work.
+
+    Cost, and why there is a budget at all: the sweep is dominated by Triton COMPILATION, not by
+    running the kernels -- a 562-configuration space costs about 0.3 s a configuration the first
+    time and almost nothing once Triton's on-disk cache has it.  The budget bounds the first
+    shape of each new kind without bounding the rest.  For scale: Inductor's own mm autotune
+    considers 55 candidates.
+    """
+    cfgs, size = config_space(plan.mode, plan, a.shape[0], b.shape[1], a.shape[1], kind, cap)
+    info = {"space": size, "searched": 0}
+    screened, rejected, unknown, stop = [], 0, 0, time.time() + budget_s
+    for i, cfg in enumerate(cfgs):
+        if i and time.time() > stop:
+            info["budget_hit"] = 1
+            break
+        try:
+            fn = pre_gb300_launcher(plan.mode, plan, cfg, kind)
+            call = lambda f=fn: f(a, b, out_dtype, 1.0)  # noqa: E731
+            if plan.mode == "gemmsn":  # exception 3
+                call()
+                torch.cuda.synchronize()
+                r = _rdx(fn)
+                if r is True:
+                    rejected += 1
+                    continue
+                unknown += 1 if r is None else 0
+            screened.append((_screen_ms(torch, call), cfg))
+        except Exception:
+            torch.cuda.empty_cache()
+            continue
+    screened.sort(key=lambda x: x[0])
+    ranked = []
+    for _, cfg in screened[:refine]:
+        try:
+            fn = pre_gb300_launcher(plan.mode, plan, cfg, kind)
+            t = graph_ms(torch, lambda f=fn: f(a, b, out_dtype, 1.0), flush, reps=6)
+            if t is not None:
+                ranked.append((t, cfg))
+        except Exception:
+            torch.cuda.empty_cache()
+            continue
+    ranked.sort(key=lambda x: x[0])
+    info["searched"] = len(screened)
+    if rejected:
+        info["rdx_rejected"] = rejected
+    if unknown:
+        info["rdx_unknown"] = unknown
+    if not ranked:
+        info["error"] = "no configuration in the space ran"
+    return ranked, info
+
+
+# --------------------------------------------------------------------------------------------
+# Arm 2: torch.compile
+# --------------------------------------------------------------------------------------------
+
+_PICK_RE = re.compile(
+    r"BLOCK_M['\"]?\s*[:=]\s*(\d+).{0,400}?BLOCK_N['\"]?\s*[:=]\s*(\d+).{0,400}?"
+    r"BLOCK_K['\"]?\s*[:=]\s*(\d+)", re.S)
+_WARPS_RE = re.compile(r"num_warps['\"]?\s*[:=]\s*(\d+)")
+_STAGES_RE = re.compile(r"num_stages['\"]?\s*[:=]\s*(\d+)")
+
+
+def classify_inductor_pick(code):
+    """What the Inductor autotuner actually produced, read off the code it generated.
+
+    `aten` is the extern call, `triton_mm` a GEMM template, `decompose_k` the split-K rewrite,
+    and `reduction` is two reduction kernels and no GEMM template at all -- what Inductor emits
+    at M == 1.  That last case is the honest arm 2b there, so it is measured, not skipped.
+    Returns (pick, template configuration).
+    """
+    blob = "\n".join(code)
+    picks = []
+    if "decompose_k" in blob:
+        picks.append("decompose_k")
+    if re.search(r"extern_kernels\.(mm|addmm|bmm|_scaled_mm)|aten\._scaled_mm", blob):
+        picks.append("aten")
+    if re.search(r"triton_tem_fused|triton_mm|@triton_heuristics\.template", blob):
+        picks.append("triton_mm")
+    if not picks and re.search(r"triton_red_fused|triton_per_fused|triton_poi_fused", blob):
+        picks.append("reduction")
+    cfg = ""
+    m = _PICK_RE.search(blob)
+    if m:
+        cfg = f"BLOCK_M={m.group(1)} BLOCK_N={m.group(2)} BLOCK_K={m.group(3)}"
+        w, s = _WARPS_RE.search(blob), _STAGES_RE.search(blob)
+        cfg += f" num_warps={w.group(1)}" if w else ""
+        cfg += f" num_stages={s.group(1)}" if s else ""
+    return ("+".join(picks) or "unknown"), cfg
+
+
+class TorchCannotExpress(Exception):
+    """torch has no way to run this GEMM, so arms 2a and 2b do not exist on this shape.
+
+    That is a decline and not a failure, and the row keeps it: `torch._scaled_mm` refuses an fp8
+    operand whose N or K is not a multiple of 16, while cuBLAS itself only asks for K a multiple
+    of 16 and N even.  So there are fp8 shapes with a cuBLAS answer, our answer and a pre-GB300
+    answer, and no unconstrained torch baseline at all -- which is worth recording rather than
+    quietly leaving out of the fp8 column.
+    """
+
+
+def torch_can_express(kind, M, N, K):
+    """Will `torch.compile` accept this shape?  See `TorchCannotExpress`."""
+    return kind != "fp8" or (N % 16 == 0 and K % 16 == 0)
+
+
+def compile_torch_arm(torch, a, b, kind, out_dtype, backends):
+    """Compile one torch.compile arm on this shape.  Returns (callable, pick, config).
+
+    `backends` is what goes into `max_autotune_gemm_backends`: "ATEN,TRITON" is arm 2a, the thing
+    a user actually gets, and "TRITON" is arm 2b, the extern excluded so the number is a Triton
+    kernel and not cuBLAS wearing a Triton hat.
+
+    `mm` is defined here, so 2a and 2b hand dynamo two different function objects and get two
+    independent caches.  `torch._dynamo.reset()` is deliberately NOT called here: it would throw
+    away the arm compiled a moment ago.  `measure_shape` resets once per shape instead.
+    """
+    import torch._inductor.config as icfg
+    from torch._inductor.utils import run_and_get_code
+    M, K = a.shape
+    N = b.shape[1]
+    if not torch_can_express(kind, M, N, K):
+        raise TorchCannotExpress(f"torch._scaled_mm needs both dimensions of mat2 divisible by 16, "
+                                 f"and mat2 here is [{K}, {N}]")
+    if kind == "fp8":
+        sa = torch.ones((), device="cuda", dtype=torch.float32)
+        sb = torch.ones((), device="cuda", dtype=torch.float32)
+
+        def mm(x, y):
+            return torch._scaled_mm(x, y, sa, sb, out_dtype=out_dtype)
+    else:
+
+        def mm(x, y):
+            return torch.matmul(x, y)
+
+    _quiet_inductor()
+    with icfg.patch({"max_autotune": True, "max_autotune_gemm": True, "max_autotune_gemm_backends": backends}):
+        fn = torch.compile(mm, mode="max-autotune-no-cudagraphs", dynamic=False)
+        _, code = run_and_get_code(fn, a, b)
+    pick, cfg = classify_inductor_pick(code)
+    return (lambda: fn(a, b)), pick, cfg
+
+
+def _quiet_inductor():
+    """Stop Inductor printing its whole candidate list per shape.
+
+    1400 shapes times two arms times 55 candidates is tens of megabytes of log that says nothing
+    the record does not already carry -- the winner and its configuration are in `pick` and
+    `config`.  This only silences a `sys.stderr.write`; nothing measured changes.  Set
+    PERF_RANDOM_INDUCTOR_LOG=1 to keep it.
+    """
+    if os.environ.get("PERF_RANDOM_INDUCTOR_LOG"):
+        return
+    import logging
+    try:
+        import torch._inductor.select_algorithm as sa
+        sa.PRINT_AUTOTUNE = False
+    except Exception:
+        pass
+    # A shape torch refuses is logged with a full traceback at error level from inside dynamo's
+    # fake-tensor pass. `torch_can_express` catches those before they get there, but a new one
+    # would otherwise bury the run log in stack traces.
+    logging.getLogger("torch._subclasses.fake_tensor").setLevel(logging.CRITICAL)
+
+
+# --------------------------------------------------------------------------------------------
+# Timing.  `graph_ms` from artifact.py is the only device timer; the two host numbers below are
+# the ones it deliberately does not make.
+# --------------------------------------------------------------------------------------------
+
+_NOOP = {}
+
+
+def _noop_kernel():
+    import triton
+    if "k" not in _NOOP:
+
+        @triton.jit
+        def _empty(X):
+            pass
+
+        _NOOP["k"] = _empty
+    return _NOOP["k"]
+
+
+def floor_ms(torch, M, N, flush, reps=25):
+    """An empty Triton kernel at a grid of the same order, replayed exactly like an arm.
+
+    This is the cost of the replay before any work: 7-9 us on a GB300.  gemv, decode and small-M
+    kernels are 5-30 us, so it is a large fraction of them and compresses every ratio toward 1.
+    A 128x128 tile is the grid the shipped launcher uses on most shapes; for an empty kernel the
+    grid barely matters, because what is being measured is the launch.
+    """
+    import triton
+    k = _noop_kernel()
+    grid = (max(1, triton.cdiv(M, 128) * triton.cdiv(N, 128)), )
+    x = torch.zeros(1, device="cuda", dtype=torch.int32)
+    return graph_ms(torch, lambda: k[grid](x), flush, reps=reps)
+
+
+def host_and_e2e_ms(torch, fn, calls=20):
+    """(e2e_ms, host_ms): an ordinary call end to end, and only the time to issue it.
+
+    The gap between them is what a real caller pays that a graph replay hides -- our TMA path
+    spends roughly 100 us of host time per call building three tensor descriptors.
+    """
+    for _ in range(3):
+        fn()
+    torch.cuda.synchronize()
+    host, e2e = [], []
+    for _ in range(calls):
+        torch.cuda.synchronize()
+        t0 = time.perf_counter()
+        fn()
+        t1 = time.perf_counter()
+        torch.cuda.synchronize()
+        t2 = time.perf_counter()
+        host.append((t1 - t0) * 1e3)
+        e2e.append((t2 - t0) * 1e3)
+    return statistics.median(e2e), statistics.median(host)
+
+
+def _reps_for(torch, fn, flush):
+    """Enough replays for a stable median, few enough that a 10 ms GEMM does not cost a second."""
+    t = graph_ms(torch, fn, flush, reps=3)
+    return None if t is None else max(5, min(25, int(20.0 / max(t, 1e-3))))
+
+
+def time_arms(torch, calls, flush, rounds=3):
+    """The five timings for every arm, arms interleaved inside a round, best of the rounds.
+
+    Interleaving matters: a clock or a neighbouring process that drifts over the run then hits
+    all the arms the same way instead of penalising whichever one is measured last.  A call that
+    cannot be captured into a graph still gets its host and end-to-end numbers, because those are
+    exactly what a real caller pays, and the row records `captured = 0` rather than disappearing.
+
+    Returns {arm: {timing: value}}, with the missing device timings simply absent.
+    """
+    noflush = torch.empty(0, device="cuda", dtype=torch.int32)
+    res = {arm: {} for arm in calls}
+    reps = {}
+    for arm, fn in calls.items():
+        try:
+            reps[arm] = _reps_for(torch, fn, flush)
+        except Exception as e:
+            res[arm]["error"] = f"{type(e).__name__}: {e}"[:200]
+            reps[arm] = None
+    for _ in range(rounds):
+        for arm in ARMS:
+            if arm not in calls or reps.get(arm) is None:
+                continue
+            try:
+                pair = (("device_flush_ms", graph_ms(torch, calls[arm], flush, reps=reps[arm])),
+                        ("device_warm_ms", graph_ms(torch, calls[arm], noflush, reps=reps[arm])))
+                for key, val in pair:
+                    if val is not None and (res[arm].get(key) is None or val < res[arm][key]):
+                        res[arm][key] = val
+            except Exception as e:
+                res[arm].setdefault("error", f"{type(e).__name__}: {e}"[:200])
+    for arm, fn in calls.items():
+        try:
+            res[arm]["e2e_ms"], res[arm]["host_ms"] = host_and_e2e_ms(torch, fn)
+        except Exception as e:
+            res[arm].setdefault("error", f"{type(e).__name__}: {e}"[:200])
+    return res
+
+
+# --------------------------------------------------------------------------------------------
+# The four-arm measurement of one shape.  This is the part `gemm.perf.static` shares.
+# --------------------------------------------------------------------------------------------
+
+
+def measurement_options(args):
+    """The knobs `measure_shape` reads, from the environment and the shared CLI."""
+    return {
+        "rounds": int(os.environ.get("PERF_RANDOM_ROUNDS", 3)),
+        "max_configs": int(os.environ.get("PERF_RANDOM_MAX_CONFIGS", 0)),
+        "search_s": float(os.environ.get("PERF_RANDOM_SEARCH_S", 150)),
+        "refine": int(os.environ.get("PERF_RANDOM_REFINE", 16)),
+        "draws": max(2, args.reps),
+        "worker": f"{os.uname().nodename}:{os.environ.get('CUDA_VISIBLE_DEVICES', '?')}:{os.getpid()}",
+        "per_cell": int(os.environ.get("PERF_RANDOM_PER_CELL", 100)),
+        "lease_s": float(os.environ.get("PERF_RANDOM_LEASE_MIN", 45)) * 60,
+        "limit": int(os.environ.get("PERF_RANDOM_LIMIT", 0)),
+    }
+
+
+def make_flush_buffer(torch, mib=256):
+    """The buffer `graph_ms` zeroes between replays to evict L2.  One per process."""
+    return torch.empty(mib * 1024 * 1024 // 4, device="cuda", dtype=torch.int32)
+
+
+def measure_shape(torch, M, N, K, kind, tags, out, flush, opts):
+    """Run all four arms on one shape and stream ONE RECORD PER ARM into `out`.  Never raises.
+
+    `tags` is copied onto every record, so a caller decides what identifies its rows: this step
+    passes the family and the shape id, `gemm.perf.static` passes the model and the layer.  `out`
+    is a `writer()` handle; each record is written and flushed as soon as it is computed, so an
+    interruption loses one arm and not a shape.
+
+    The order is: resolve the cuBLAS plan, compile the two torch arms, build arm 4, search arm 3,
+    byte-check arms 4, 3 and 2a over `opts["draws"]` input draws, restore the first draw's data,
+    and only then measure.  The byte check comes before the timing on purpose -- a row whose
+    `bit_ok` is short of `bit_total` is a bug report and its timings mean nothing, because the
+    arms are then not computing the same thing.
+
+    Returns {phase: seconds} so a caller can see where a long shape went.
+    """
+    from bitequiv.cublas_match import cublas_equivalent_gemm
+    from bitequiv.cublas_match import ltapi as L
+    from bitequiv.cublas_match.errors import CublasUnsupportedShape
+    from bitequiv.cublas_match.gemm import _resolve
+    from bitequiv.cublas_match.ltapi import _kind_of
+
+    torch.cuda.empty_cache()  # the previous shape's operands are out of scope by now
+    spent, clock = {}, time.time()
+
+    def phase(name):
+        nonlocal clock
+        spent[name] = round(time.time() - clock, 1)
+        clock = time.time()
+
+    out_dtype = torch.float16
+    base = dict(tags)
+    base.update({"M": M, "N": N, "K": K, "dtype": kind, "worker": opts["worker"]})
+    seed = M * 1000003 + N * 10007 + K
+    draws = opts["draws"]
+
+    def emit(arm, **kw):
+        rec = dict(base)
+        rec["arm"] = arm
+        rec.update(kw)
+        out.write(json.dumps(rec) + "\n")
+        out.flush()
+
+    def bail(msg):
+        for arm in ARMS:
+            emit(arm, error=msg[:300])
+        return spent
+
+    # -- operands, held for the whole shape so the cuBLAS closure's pointers stay valid ---------
+    try:
+        a, b = make_inputs(torch, M, N, K, kind, 0, seed)
+    except Exception as e:
+        return bail(f"inputs: {type(e).__name__}: {e}")
+    try:
+        hot = hot_cublas(L, torch, a, b, kind, out_dtype)
+    except Exception as e:
+        # No cuBLAS algorithm means there is nothing to be bit-identical to, so the whole row is
+        # out of scope rather than broken. It is a decline, and it is kept: dropping it would
+        # quietly bias the family it came from.
+        msg = str(e)
+        for arm in ARMS:
+            emit(arm, **({"declined": msg[:300]} if "no algorithm" in msg else {"error": f"cublas: {msg}"[:300]}))
+        return spent
+
+    plan, declined = None, ""
+    try:
+        plan = _resolve(a, b, _kind_of(a), out_dtype)
+        base["mode"] = plan.mode
+    except CublasUnsupportedShape as e:
+        declined = str(e)
+    except Exception as e:
+        declined = f"{type(e).__name__}: {e}"
+
+    calls, extra = {"cublas": hot.run}, {arm: {} for arm in ARMS}
+
+    # -- arms 2a and 2b ------------------------------------------------------------------------
+    import torch._dynamo
+    torch._dynamo.reset()  # once per shape, so the two arms below keep their own caches
+    for arm, backends in (("torch_auto", "ATEN,TRITON"), ("torch_triton", "TRITON")):
+        try:
+            fn, pick, cfg = compile_torch_arm(torch, a, b, kind, out_dtype, backends)
+            calls[arm], extra[arm] = fn, {"pick": pick, "config": cfg}
+        except TorchCannotExpress as e:
+            extra[arm] = {"declined": str(e)[:300]}
+        except Exception as e:
+            extra[arm] = {"error": f"{type(e).__name__}: {e}"[:300]}
+    phase("torch")
+
+    # -- arm 4 ---------------------------------------------------------------------------------
+    if plan is None:
+        extra["ours"] = {"declined": declined}
+    else:
+        try:
+            cublas_equivalent_gemm(a, b, out_dtype)
+            calls["ours"] = lambda: cublas_equivalent_gemm(a, b, out_dtype)
+        except Exception as e:
+            extra["ours"] = {"error": f"{type(e).__name__}: {e}"[:300]}
+
+    # -- arm 3: the search ----------------------------------------------------------------------
+    ranked = []
+    if plan is None:
+        extra["pre_search"] = {"declined": declined}
+    else:
+        try:
+            ranked, extra["pre_search"] = search_pre_gb300(torch, a, b, plan, kind, out_dtype, flush,
+                                                           opts["max_configs"], opts["search_s"], opts["refine"])
+        except Exception as e:
+            extra["pre_search"] = {"error": f"{type(e).__name__}: {e}"[:300]}
+    phase("search")
+
+    # -- the byte check, which also picks arm 3's winner ------------------------------------------
+    a0 = a.clone()
+    b0 = b.clone() if b.is_contiguous() else b.t().clone().t()
+
+    def bit_pass(fns):
+        """`draws` draws against cuBLAS.  Even draws ordinary gaussian, odd draws with the
+        exponents spread across the dtype's range -- with narrow exponents almost every
+        regrouping rounds to the same bits, so an ordinary-input-only check proves very little."""
+        okc = {k: 0 for k in fns}
+        for r in range(draws):
+            aa, bb = make_inputs(torch, M, N, K, kind, r, seed)
+            a.copy_(aa)
+            b.copy_(bb)
+            del aa, bb
+            if hot.run() != 0:
+                return None
+            torch.cuda.synchronize()
+            ref = digest(torch, hot.out)
+            for k, f in fns.items():
+                try:
+                    okc[k] += 1 if digest(torch, f()) == ref else 0
+                except Exception:
+                    pass
+        return okc
+
+    checks = {k: calls[k] for k in ("ours", "torch_auto") if k in calls}
+    fallback, win = 0, None
+    for i, (_, cfg) in enumerate(ranked[:6]):
+        fn = pre_gb300_launcher(plan.mode, plan, cfg, kind)
+        trial = dict(checks)
+        trial["pre_search"] = lambda f=fn: f(a, b, out_dtype, 1.0)
+        okc = bit_pass(trial)
+        if okc is None:
+            break
+        if checks:  # arms 4 and 2a are checked once; a further pass only re-checks arm 3
+            for k in checks:
+                extra[k].update(bit_ok=okc[k], bit_total=draws)
+            checks = {}
+        extra["pre_search"].update(bit_ok=okc["pre_search"], bit_total=draws)
+        if okc["pre_search"] == draws:
+            win, fallback = (lambda f=fn: f(a, b, out_dtype, 1.0)), (1 if i else 0)
+            extra["pre_search"]["config"] = config_str(cfg)
+            break
+        fallback = 1
+    if checks:  # every arm-3 candidate failed, so arms 4 and 2a were never checked
+        okc = bit_pass(checks)
+        for k in (checks if okc else {}):
+            extra[k].update(bit_ok=okc[k], bit_total=draws)
+    if win is not None:
+        calls["pre_search"] = win
+    elif ranked:
+        extra["pre_search"].setdefault("error", "no configuration in the space was byte-identical")
+    extra["pre_search"]["fallback"] = fallback
+
+    a.copy_(a0)
+    b.copy_(b0)
+    del a0, b0
+    hot.run()
+    torch.cuda.synchronize()
+    phase("bits")
+
+    # -- the five timings -------------------------------------------------------------------------
+    fl = floor_ms(torch, M, N, flush)
+    res = time_arms(torch, calls, flush, opts["rounds"])
+    for arm in ARMS:
+        rec = dict(extra[arm])
+        rec.update(res.get(arm, {}))
+        rec["floor_ms"] = fl
+        captured = 1 if rec.get("device_flush_ms") is not None else 0
+        if arm in calls:
+            rec["captured"] = captured
+            if not captured and not rec.get("error"):
+                rec["error"] = "[NOT CAPTURED]"
+        d = rec.get("device_flush_ms")
+        rec["near_floor"] = 1 if (d and fl and d < 3 * fl) else 0
+        emit(arm, **rec)
+    phase("time")
+    calls.clear()
+    return spent
+
+
+# --------------------------------------------------------------------------------------------
+# Work claiming.  One shape at a time through an O_EXCL lock with a lease, so adding or removing
+# a worker mid-run neither loses nor duplicates a shape.
+# --------------------------------------------------------------------------------------------
+
+
+def _claims_dir():
+    d = os.path.join(CACHE, "gemm.perf.random.claims")
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def _try_claim(idx, me, lease_s):
+    """Take shape `idx` if nobody holds it.  A claim older than the lease is stale -- its worker
+    was killed -- and may be stolen, which is why a claim is refreshed as the shape runs."""
+    path = os.path.join(_claims_dir(), str(idx))
+    try:
+        fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except OSError as e:
+        if e.errno != errno.EEXIST:
+            raise
+        try:
+            if time.time() - os.path.getmtime(path) < lease_s:
+                return False
+            os.utime(path, None)  # take the lease first, so two thieves cannot both win
+            with open(path, "w") as f:
+                f.write(f"{me} stolen {time.strftime('%H:%M:%S')}\n")
+            return True
+        except OSError:
+            return False
+    with os.fdopen(fd, "w") as f:
+        f.write(f"{me} {time.strftime('%H:%M:%S')}\n")
+    return True
+
+
+def _touch_claim(idx):
+    try:
+        os.utime(os.path.join(_claims_dir(), str(idx)), None)
+    except OSError:
+        pass
+
+
+def _done_keys():
+    """(family, dtype, M, N, K, arm) already on disk, so a restart skips finished work."""
+    path = os.path.join(CACHE, "gemm.perf.random.jsonl")
+    done = set()
+    if not os.path.exists(path):
+        return done
+    with open(path, errors="replace") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                r = json.loads(line)
+            except Exception:
+                continue  # a torn last line from a kill; that shape is simply redone
+            done.add((r.get("family"), r.get("dtype"), r.get("M"), r.get("N"), r.get("K"), r.get("arm")))
+    return done
+
+
+def _pause_path():
+    return os.path.join(CACHE, "gemm.perf.random.PAUSE")
+
+
+# --------------------------------------------------------------------------------------------
+# The report
+# --------------------------------------------------------------------------------------------
+
+
+def _geo(xs):
+    xs = [x for x in xs if x and x > 0]
+    return math.exp(sum(map(math.log, xs)) / len(xs)) if xs else None
+
+
+def _rows():
+    path = os.path.join(CACHE, "gemm.perf.random.jsonl")
+    rows = []
+    if not os.path.exists(path):
+        return rows
+    with open(path, errors="replace") as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                try:
+                    rows.append(json.loads(line))
+                except Exception:
+                    continue
+    return rows
+
+
+def _pct(xs, q):
+    xs = sorted(xs)
+    if not xs:
+        return None
+    return xs[min(len(xs) - 1, max(0, int(round(q * (len(xs) - 1)))))]
+
+
+def _dist(vals, top=4):
+    c = {}
+    for v in vals:
+        c[v or "-"] = c.get(v or "-", 0) + 1
+    return " ".join(f"{k}:{n}" for k, n in sorted(c.items(), key=lambda kv: -kv[1])[:top])
+
+
+_RATIOS = (("4/2b", "ours", "torch_triton"), ("4/3", "ours", "pre_search"), ("3/1", "pre_search", "cublas"),
+           ("4/1", "ours", "cublas"), ("2a/1", "torch_auto", "cublas"))
+
+
+def _report(meta, timing="device_flush_ms"):
+    """One block per (family, dtype), then the same grouped by the resolved plan mode.
+
+    4/2b and 4/3 are the headline; 3/1, 4/1 and 2a/1 are printed beside them because a reader who
+    only sees a ratio cannot tell a fast numerator from a slow denominator.
+    """
+    rows = _rows()
+    by_shape = {}
+    for r in rows:
+        key = (r.get("family"), r.get("dtype"), r.get("M"), r.get("N"), r.get("K"))
+        by_shape.setdefault(key, {})[r.get("arm")] = r
+    out = []
+    P = out.append
+    P("")
+    want = (meta or {}).get("per_cell", 0) * len(FAMILIES) * 2
+    state = f"of {want} " if want and len(by_shape) < want else ""
+    P(f"gemm.perf.random -- {len(by_shape)} {state}shapes measured, {len(rows)} arm records" +
+      ("  (RUN STILL IN PROGRESS)" if state else ""))
+    P(f"  written {time.strftime('%Y-%m-%d %H:%M:%S')}. Regenerate with PERF_RANDOM_REPORT_ONLY=1.")
+    for k, v in ARM_LABEL.items():
+        P(f"    {k:14} {v}")
+    if meta:
+        P(f"  shape list: seed {meta.get('seed')}, {meta.get('per_cell')} per (family, dtype) cell, "
+          f"{meta.get('drawn')} draws, {meta.get('rejected')} rejected by the size caps "
+          f"({meta.get('max_tflop')} TFLOP, {meta.get('max_out_elems')} output elements)")
+    P(f"  timing column: {timing}")
+
+    def block(title, groups):
+        P("")
+        P(f"  {title}")
+        P(f"    {'group':22} {'n':>4} {'4/2b':>19} {'4/3':>19} {'3/1':>7} {'4/1':>7} {'2a/1':>7} "
+          f"{'bit4':>9} {'bit3':>9} {'bit2a':>9}  plan modes | torch picks")
+        for gname, shapes in sorted(groups.items()):
+            rat = {k: [] for k, _, _ in _RATIOS}
+            bits = {"ours": [0, 0], "pre_search": [0, 0], "torch_auto": [0, 0]}
+            modes, picks, nf, nc, ndec = [], [], 0, 0, 0
+            for arms in shapes:
+                t = {k: (arms.get(k) or {}).get(timing) for k in ARMS}
+                for name, num, den in _RATIOS:
+                    if t.get(num) and t.get(den):
+                        rat[name].append(t[den] / t[num])
+                for k in bits:
+                    r = arms.get(k) or {}
+                    if r.get("bit_total"):
+                        bits[k][0] += int(r.get("bit_ok") or 0)
+                        bits[k][1] += int(r["bit_total"])
+                modes.append(next((a.get("mode") for a in arms.values() if a.get("mode")), None))
+                picks.append((arms.get("torch_auto") or {}).get("pick"))
+                nf += 1 if any((arms.get(k) or {}).get("near_floor") for k in ARMS) else 0
+                nc += 1 if any((arms.get(k) or {}).get("captured") == 0 for k in ARMS) else 0
+                ndec += 1 if (arms.get("ours") or {}).get("declined") else 0
+
+            def col(name, wide):
+                g = _geo(rat[name])
+                if g is None:
+                    return f"{'-':>{19 if wide else 7}}"
+                if wide:
+                    return f"{g:6.3f} [{_pct(rat[name], .25):5.2f} {_pct(rat[name], .75):5.2f}]"
+                return f"{g:7.3f}"
+
+            def bit(k):
+                o, t = bits[k]
+                return f"{o}/{t}" if t else "-"
+
+            P(f"    {gname:22} {len(shapes):4d} {col('4/2b', 1):>19} {col('4/3', 1):>19} "
+              f"{col('3/1', 0):>7} {col('4/1', 0):>7} {col('2a/1', 0):>7} {bit('ours'):>9} "
+              f"{bit('pre_search'):>9} {bit('torch_auto'):>9}  {_dist(modes)} | {_dist(picks)}")
+            notes = []
+            if nf:
+                notes.append(f"near-floor {nf}")
+            if nc:
+                notes.append(f"uncaptured arm {nc}")
+            if ndec:
+                notes.append(f"declined {ndec}")
+            for name in ("4/2b", "4/3"):
+                if rat[name]:
+                    notes.append(f"{name} worst {min(rat[name]):.3f} median {_pct(rat[name], .5):.3f} "
+                                 f"best {max(rat[name]):.3f}")
+            if notes:
+                P(f"    {'':27} {'; '.join(notes)}")
+
+    fam = {}
+    for (f_, d_, *_), arms in by_shape.items():
+        fam.setdefault(f"{f_}/{d_}", []).append(arms)
+    block("by sampling family and dtype", fam)
+    mod = {}
+    for (_, d_, *_), arms in by_shape.items():
+        m = next((a.get("mode") for a in arms.values() if a.get("mode")), "declined")
+        mod.setdefault(f"{m}/{d_}", []).append(arms)
+    block("by the cuBLAS plan mode the shape actually resolved to", mod)
+    P("")
+    P("  4/2b is what the bit constraint costs against an unconstrained Triton kernel.")
+    P("  4/3  is what our hand-written rewrites bought over an honest search of the SAME kernels.")
+    P("  A ratio above 1 means the numerator arm is faster. [p25 p75] beside the geometric mean.")
+    P("  bitN = draws byte-identical to cuBLAS / draws compared, summed over the group. A group "
+      "whose bit4 or bit3 is short is a bug report, not a measurement.")
+    P("  near-floor rows are mostly launch overhead, so every ratio on them is pulled toward 1.")
+    P("")
+    P("  Watching, pausing and resuming this run")
+    P("    watch     tail -f artifact_eval/run_perf_random.gpu2.log      (and .gpu3.log)")
+    P("    progress  PERF_RANDOM_REPORT_ONLY=1 PYTHONPATH=$(git rev-parse --show-toplevel) \\")
+    P("                python artifact_eval/artifact.py --run gemm.perf.random")
+    P(f"    pause     touch {_pause_path()}")
+    P("    resume    rm that file, then re-run the same command. Resuming IS re-running it:")
+    P("              a finished (family, dtype, M, N, K, arm) is skipped, and a shape in flight")
+    P("              when a worker died is picked up again once its claim goes stale.")
+    P("    workers   start or stop one at any time, on any free GPU. Work is claimed one shape")
+    P("              at a time, not sliced up front, so nothing is lost and nothing is repeated.")
+    return out
+
+
+# --------------------------------------------------------------------------------------------
+
 
 def run(args, env):
-    print_design(
-        NAME,
-        claim="""
-        Requiring the output to be byte-identical to cuBLAS costs very little speed, and that
-        stays true across the whole shape space rather than on a handful of shapes chosen by us.
-        This is a smaller quantity than the gap between Triton and cuBLAS, and the two are easy
-        to conflate.
-        """,
-        method="""
-        Draw random shapes with `draw_shape_with_family` from `steps/_common.py` -- the same draw
-        `gemm.bitmatch` uses, so the two steps cover the same space and a row here can be lined
-        up with a row there. Keep the family name on the row.
+    import torch
+    from bitequiv.cublas_match import cublaslt_version, set_cublaslt
 
-        Three arms per shape, same operands, same timing (`graph_ms`: CUDA-graph capture, median
-        replay, L2 flushed between replays). Arm 1 is cuBLAS through `hot_cublas`; it is both the
-        baseline and the reference the bits are compared against. Arm 2 is torch with no numerics
-        requirement, `torch.compile(mode="max-autotune-no-cudagraphs")`, reported twice: once as
-        its autotuner actually picks (which is often the extern cuBLAS call, and saying so is
-        part of the result) and once with the extern excluded, so the second number is the best
-        Triton template torch.compile can build. Arm 3 is ours, tuned, and byte-identical to
-        arm 1 -- checked with `digest` over several draws before any time is recorded.
+    opts = measurement_options(args)
+    only = [x for x in os.environ.get("PERF_RANDOM_FAMILIES", "").split(",") if x]
+    txt = os.environ.get("PERF_RANDOM_REPORT_TXT", "")
 
-        Budget with `--minutes`, like `gemm.bitmatch`. Stream one record per shape so a killed
-        run keeps what it had.
-        """,
-        cost="Set by `--minutes`. Much slower per shape than `gemm.bitmatch`, because each row "
-        "pays for a torch.compile autotune of the shape.",
-        see="Per shape: the family, the three times, the price of the constraint, and what "
-        "torch.compile picked. Then a geometric mean per family and one overall.",
-        judge="""
-        The claim rests on `price_of_constraint` = torch_triton_ms / ours_ms. `ours_over_cublas`
-        is printed for reference only; it also contains Triton against cuBLAS, which is a
-        separate and much larger term and is not what this step is about.
+    def show(meta):
+        lines = _report(meta)
+        print("\n".join(lines))
+        if txt:
+            with open(txt, "w") as f:
+                f.write("\n".join(lines) + "\n")
 
-        Check `bit_ok` equals `bit_total` first. If it does not, arm 3 is not byte-identical on
-        that shape and its time means nothing -- the row is a bug report, not a measurement.
+    if os.environ.get("PERF_RANDOM_REPORT_ONLY"):
+        meta = json.load(open(_shapes_path()))["meta"] if os.path.exists(_shapes_path()) else {}
+        return show(meta)
 
-        Read the families separately. A single geometric mean over a mixed draw hides the case
-        where the constraint is free on square shapes and expensive on deep K, which is exactly
-        the thing worth knowing.
-        """,
-        notes="""
-        Why not the old arm 3. `gemm.perf` autotuned a Triton GEMM we wrote over a 108-entry
-        space of our own choosing and called the best of it the ceiling. That is not a ceiling a
-        reviewer has any reason to trust. torch.compile's max-autotune is the honest stand-in for
-        what a user gets when they ask for speed and nothing else.
-        """,
-    )
+    set_cublaslt(os.environ.get("PERF_RANDOM_CUBLASLT", "13.1.1") or None)
+    ltver = ".".join(map(str, cublaslt_version()))
+    shapes, meta = _load_or_make_shapes(args.seed, opts["per_cell"], args.max_bytes)
+    if only:
+        shapes = [s for s in shapes if s["family"] in only]
+    worker = opts["worker"]
+
+    print(f"\n[gemm.perf.random] {len(shapes)} shapes, matching cuBLASLt {ltver}, worker {worker}")
+    print(f"  shape list  {_shapes_path()}")
+    print(f"  records     {os.path.join(CACHE, 'gemm.perf.random.jsonl')}")
+    print(f"  pause with  touch {_pause_path()}")
+    print(f"  arm 3: space cap {opts['max_configs'] or 'none'}, {opts['search_s']}s budget, "
+          f"top {opts['refine']} re-timed; {opts['rounds']} rounds, {opts['draws']} byte-check draws")
+    if opts["max_configs"]:
+        print("  WARNING: arm 3's space is BOUNDED in this run. Every row it touched records both "
+              "`space` and `searched`, so the bound is visible in the data.")
+
+    out = writer("gemm.perf.random")
+    flush = make_flush_buffer(torch)
+    deadline = time.time() + args.minutes * 60 if args.minutes and args.minutes > 0 else None
+    n, stop, idle = 0, False, 0
+    # Sweep the list until nothing is left. One pass skips a shape another worker holds, so a
+    # worker that was killed mid-shape would strand it if the pass never came back -- the second
+    # pass takes it once its claim goes stale. An idle pass waits for that to happen; enough idle
+    # passes in a row and the remaining shapes belong to workers that are still alive, so stop.
+    while not stop:
+        before, done = n, _done_keys()
+        for spec in shapes:
+            if os.path.exists(_pause_path()):
+                print("  PAUSE sentinel present; stopping cleanly. Remove it and re-run to resume.")
+                stop = True
+                break
+            if deadline and time.time() > deadline:
+                print("  --minutes budget reached; stopping cleanly.")
+                stop = True
+                break
+            if opts["limit"] and n >= opts["limit"]:
+                print("  PERF_RANDOM_LIMIT reached; stopping cleanly.")
+                stop = True
+                break
+            key = (spec["family"], spec["dtype"], spec["M"], spec["N"], spec["K"])
+            if all((*key, arm) in done for arm in ARMS):
+                continue
+            if not _try_claim(spec["shape_id"], worker, opts["lease_s"]):
+                continue
+            tags = {k: spec[k] for k in ("family", "shape_id", "align", "source")}
+            tags["cublaslt"] = ltver
+            t0 = time.time()
+            _touch_claim(spec["shape_id"])
+            try:
+                spent = measure_shape(torch, spec["M"], spec["N"], spec["K"], spec["dtype"], tags, out, flush,
+                                      opts) or {}
+            except KeyboardInterrupt:
+                raise
+            except Exception as e:
+                spent = {"failed": round(time.time() - t0, 1)}
+                for arm in ARMS:
+                    rec = {
+                        **tags, "M": spec["M"], "N": spec["N"], "K": spec["K"], "dtype": spec["dtype"], "worker":
+                        worker, "arm": arm, "error": f"{type(e).__name__}: {e}"[:300]
+                    }
+                    out.write(json.dumps(rec) + "\n")
+                out.flush()
+            n += 1
+            shape = f"{spec['M']}x{spec['N']}x{spec['K']}"
+            print(
+                f"  [{n}] {spec['family']:9} {spec['dtype']:4} {shape:<22} {time.time() - t0:6.1f}s  "
+                f"{' '.join(f'{k}={v}' for k, v in spent.items())}", flush=True)
+            _touch_claim(spec["shape_id"])
+        if n == before:
+            idle += 1
+            left = sum(1 for s in shapes
+                       if not all((s['family'], s['dtype'], s['M'], s['N'], s['K'], arm) in done for arm in ARMS))
+            if stop or not left or idle > 12:
+                break
+            print(
+                f"  {left} shapes left, all claimed by another worker; waiting 5 min for a"
+                f" claim to go stale (idle pass {idle}/12)", flush=True)
+            time.sleep(300)
+        else:
+            idle = 0
+    out.close()
+    show(meta)
