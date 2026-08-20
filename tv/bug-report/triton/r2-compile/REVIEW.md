@@ -529,3 +529,76 @@ numbers, so the class keeps taking fresh ids.
   signal. HIT-0066 is a `SIGFPE` wearing that disguise; `triton-opt` shows the
   real thing. Run the blamed pass under `triton-opt` before believing the
   exception type, and set `LLVM_SYMBOLIZER_PATH` so the backtrace has names.
+
+## Pass 9 (2026-08-20) — HIT-0067 … HIT-0071
+
+Batch frozen at the start: HIT-0067, 0068, 0069, 0070, 0071 (5). Scope was this
+line plus `r2-oracle`; `r2-corpus` and `r2-inductor` were left untouched on
+instruction. **0 kept, 5 rejected.** All five reproduce from the shipped
+`repro.py`; none of them is a new root cause.
+
+| id | verdict | why |
+|---|---|---|
+| HIT-0067 | B4 of HIT-0047 | ptxas SIGSEGV, sm_89, `ind:triton_per_fused_sum_1_0da31e31` |
+| HIT-0068 | B4 of HIT-0047 | the same kernel again; the PTX differs from HIT-0067's by one argument and one register number |
+| HIT-0069 | resource-limit | `Insufficient registers (64) … needs 94` at `num_warps = 32` |
+| HIT-0070 | B4 of HIT-0007 | `arith.minnumf` on `f64` against `f16` — the fp8e4b15 cast returning the wrong type, fifth consumer op |
+| HIT-0071 | B4 of HIT-0047 | ptxas SIGSEGV, sm_89, and the report that breaks the pass-7 discriminator |
+
+### 🔴 The undefined-register discriminator is withdrawn
+
+Passes 7 and 8 split the two kept ptxas classes by counting PTX registers that
+are read but never written — 33 in HIT-0047, 0 in HIT-0050. **HIT-0071 has 0 and
+still crashes at HIT-0047's address**, so 0 now appears on both sides and the
+count labels nothing:
+
+```
+HIT-0047  33      HIT-0067  48      HIT-0071   0   -> all die at 0xa910d0
+HIT-0060  13      HIT-0068  48
+HIT-0065  34
+HIT-0050   0                                       -> dies at 0x961948
+```
+
+Pass 8 had already shown that defining those registers does not cure the crash.
+Between the two results the undefined read is neither the trigger nor a class
+marker, and it should not be carried into a bug report to NVIDIA as either.
+
+What does hold is the check pass 5 introduced and pass 7 used as a cross-check:
+`gdb -batch -ex run -ex 'bt 14' --args ptxas …`. `ptxas` is not position
+independent, so the addresses are stable across runs, and the two classes give
+completely different chains. It is one command per file and it decided all three
+of this pass's ids. **Use the backtrace; drop the register count.**
+
+### One crash, six ids — and why
+
+R4 de-duplicates these on the ptxas repro command line, which contains the
+temporary file name `/tmp/tmpXXXXXXXX.ptx`. The normaliser masks digits but not
+letters, so every run's random name is a new signature. HIT-0047, 0060, 0065,
+0067, 0068 and 0071 are one crash wearing six ids, and HIT-0067/0068 are even the
+same kernel. Masking the whole `tmp\w+\.ptx` token would collapse them; giving a
+`ptxas` SIGSEGV its own class name would be better, since `crash-python` /
+`PTXASError@compiler.py:630` describes the Python frame that caught it rather
+than what happened. This is the same shape of problem as the `Insufficient
+registers (N) … in function <name>` signature, which has now produced eleven ids
+for one non-defect.
+
+### The fp8e4b15 cast reaches a fifth consumer
+
+HIT-0070 is `Semantic.minimum` (`semantic.py:361-362`) calling
+`binary_op_type_checking_impl`, which promotes to `f64`, and
+`convert_custom_float8` handing back `f16` instead. Nothing new about the defect
+— the list of consumers that build an op on the wrong type is now `tt.store`,
+`arith.mulf`, `arith.addf`, `tt.atomic_rmw`, `arith.minnumf`, and
+`Semantic.maximum` four lines below is waiting its turn. It is worth saying
+plainly that a single assertion in `Semantic.cast` would have caught all five
+before any of them reached a verifier.
+
+**Notes for pass 10.**
+* The ptxas class will keep arriving under new ids. The whole triage is: capture
+  the PTX with a `TRITON_PTXAS_PATH` wrapper, run one gdb backtrace, compare the
+  address against `0xa910d0` (HIT-0047) and `0x961948` (HIT-0050). Two minutes.
+* Both remaining open crash families in this line — `num_ctas > 1` and fp8 — are
+  still producing only duplicates. The last genuinely new family was HIT-0066
+  (`SIGFPE` in `AxisInfo`), and it is the only one that is generic, `num_ctas = 1`
+  and needs no GPU. If the campaign wants new root causes rather than new ids,
+  the analyses are where they are, not the backend.
