@@ -238,9 +238,12 @@ generator now avoids it with the rule `bK * itemsize >= 128`
 192- and 320-byte slots still fault — but it is enough to keep the known bug from
 killing a worker on every cycle.
 
-**Determinism.** Deterministic: 8 independent runs of the `bK=32, float16, st=2`
-point in 8 fresh processes, 8 faults; every passing row above was also measured
-in its own fresh process.
+**Determinism.** Deterministic. The R5 line measured 8 independent runs of the
+`bK=32, float16, st=2` point in 8 fresh processes: 8 faults. This review re-ran
+that point twice more (once through `tlfz.repro`, once through the sweep) and
+saw the fault both times; every row of the sweep, passing or failing, was
+measured in its own fresh process, because one CUDA fault poisons the process
+and would make every later point in it look broken.
 
 ## 4. In plain words
 
