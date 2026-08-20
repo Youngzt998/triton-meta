@@ -350,11 +350,61 @@ def attn_cases():
     return out
 
 
+# How many layers of each model are a DENSE FFN rather than MoE, read from the same config.json
+# on 2026-08-19.  `intermediate_size` on its own does NOT answer this and using it would invent
+# shapes: Qwen3-30B-A3B carries `intermediate_size: 6144` and has no dense layer at all, because
+# `mlp_only_layers: []` with `decoder_sparse_step: 1` makes every one of its 48 layers MoE.
+#
+# `hidden_act` is `silu` for all seven, so the up projection's epilogue is SwiGLU.  (Kimi-K3's
+# config actually spells it `situ`; that is a typo in the published file, not another activation.)
+# The down projection feeds the residual add, which is structural in a transformer block.
+#
+# Two models are deliberately absent.  Qwen3-30B-A3B, above.  And Nemotron-3.5-L-30B-A3B, whose
+# config has no `hidden_act`, no dense-layer key, and `intermediate_size == moe_intermediate_size
+# == 1856` -- there is no way to tell from it whether a dense FFN layer exists.
+DENSE_LAYERS = {
+    # model              dense  of    the key that says so
+    "GLM-5.2": (3, 78, "first_k_dense_replace"),
+    "GLM-4.7-Flash": (1, 47, "first_k_dense_replace"),
+    "Kimi-K2.6": (1, 61, "first_k_dense_replace"),
+    "Kimi-K3": (1, 93, "first_k_dense_replace"),
+    "Ling-3.0-flash": (2, 42, "first_k_dense_replace"),
+    "Qwen3.8-27B": (64, 64, "no MoE keys at all: every layer is dense"),
+    "granite-4.1-8b": (40, 40, "no MoE keys at all: every layer is dense"),
+}
+
+
+def mlp_cases():
+    """5. The dense FFN, which every one of these models has and the MoE arm never reaches.
+
+    `moe_up` / `moe_down` iterate the routed experts, so the dense `intermediate_size` -- 12288 on
+    GLM-5.2, 18432 on Kimi-K2.6, 17408 on Qwen3.8-27B -- was in no case at all.  Two of the seven
+    models here are dense end to end; the other five are hybrids where the first few layers are
+    dense and the rest are MoE, and the layer string says which so no row reads as the whole model.
+
+    Unlike an expert FFN, a dense FFN sees every token, so the token counts are attention's."""
+    out = []
+    for m in MODELS:
+        if m.name not in DENSE_LAYERS or not m.intermediate_size:
+            continue
+        n, of, _ = DENSE_LAYERS[m.name]
+        where = f"{n}/{of}L"
+        for t in ATTN_TOKENS:
+            out.append(
+                Case(m.name, f"mlp.up_proj {where}", "mlp_up", t, m.intermediate_size, m.hidden_size, "swiglu",
+                     note="silu(gate_proj) * up_proj"))
+            out.append(
+                Case(m.name, f"mlp.down_proj {where}", "mlp_down", t, m.hidden_size, m.intermediate_size, "resid",
+                     note="ffn out + residual stream"))
+    return out
+
+
 GROUPS = {
     "moe": moe_cases,
     "lora": lora_cases,
     "lmhead": lmhead_cases,
     "attn": attn_cases,
+    "mlp": mlp_cases,
 }
 
 
