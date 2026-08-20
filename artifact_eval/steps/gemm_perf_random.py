@@ -220,6 +220,10 @@ ARM_COLS = [
     ("worker", "str", "which worker produced the row, for tracing a machine-specific result"),
     ("declined", "str", "non-empty if this arm is out of scope on this shape and nothing was "
      "measured"),
+    ("contended", "int", "compute processes other than ours on this GPU while the row was measured; "
+     "must be 0. Non-zero means the timings are not this kernel's and the row needs re-taking: "
+     "shared SMs, L2 and bandwidth make the kernel genuinely slower, and no per-process counter "
+     "can subtract that back out. -1 means it could not be determined."),
     ("error", "str", "non-empty if the arm failed to run"),
 ]
 
@@ -1068,6 +1072,40 @@ def make_flush_buffer(torch, mib=256):
     return torch.empty(mib * 1024 * 1024 // 4, device="cuda", dtype=torch.int32)
 
 
+def others_on_our_gpu():
+    """How many compute processes are on our GPU besides us.
+
+    A timing number taken while another process is resident is not a measurement of this kernel.
+    It is not an attribution problem that a per-process counter could fix -- without MPS the driver
+    swaps our context out entirely and the wall clock between the two CUDA events keeps running,
+    and with MPS the kernels genuinely share SMs, L2 and bandwidth, so the kernel really is slower.
+    Nothing can subtract that out afterwards, so the only honest move is to record that it happened
+    and re-take the row.
+
+    Returns -1 when it cannot tell, which is recorded rather than treated as zero.
+    """
+    import os
+    import subprocess
+    try:
+        vis = os.environ.get("CUDA_VISIBLE_DEVICES", "").strip()
+        q = ["nvidia-smi", "--query-gpu=index,uuid", "--format=csv,noheader"]
+        uuids = {i.strip(): u.strip() for i, u in (l.split(",") for l in _sh(q).splitlines() if "," in l)}
+        # CUDA_VISIBLE_DEVICES renumbers the devices we see, but nvidia-smi reports the real index.
+        ours = uuids.get(vis.split(",")[0]) if vis else None
+        if ours is None:
+            return -1
+        apps = _sh(["nvidia-smi", "--query-compute-apps=gpu_uuid,pid", "--format=csv,noheader"])
+        mine = str(os.getpid())
+        return sum(1 for l in apps.splitlines() if l.strip().startswith(ours) and l.rsplit(",", 1)[-1].strip() != mine)
+    except Exception:
+        return -1
+
+
+def _sh(cmd):
+    import subprocess
+    return subprocess.run(cmd, capture_output=True, text=True, timeout=20).stdout
+
+
 def measure_shape(torch, M, N, K, kind, tags, out, flush, opts):
     """Run all four arms on one shape and stream ONE RECORD PER ARM into `out`.  Never raises.
 
@@ -1104,10 +1142,15 @@ def measure_shape(torch, M, N, K, kind, tags, out, flush, opts):
     seed = M * 1000003 + N * 10007 + K
     draws = opts["draws"]
 
+    others_before = others_on_our_gpu()
+
     def emit(arm, **kw):
         rec = dict(base)
         rec["arm"] = arm
         rec.update(kw)
+        # Non-zero means somebody else was on this GPU while the row was measured, so its timings
+        # are not this kernel's. -1 means we could not tell. Either way the row needs re-taking.
+        rec["contended"] = max(others_before, others_on_our_gpu())
         out.write(json.dumps(rec) + "\n")
         out.flush()
 
