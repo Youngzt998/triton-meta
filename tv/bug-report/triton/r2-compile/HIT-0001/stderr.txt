@@ -1,0 +1,79 @@
+##R4-STAGE frontend
+##R4-STAGE ttir
+##R4-STAGE ttgir
+<unknown>:0: error: Result has an invalid layout: #ttg.slice<{dim = 1, parent = #ttg.blocked<{sizePerThread = [1, 1], threadsPerWarp = [32, 1], warpsPerCTA = [4, 1], order = [1, 0], CGALayout = [[1, 0], [0, 1]]}>}>.
+Layout has 4 CTAs per CGA, but the context requires 2 CTAs per CGA.
+module {
+  tt.func public @logsumexp_kernel_non_inner_baaf36b4(%arg0: !tt.ptr<i1> {tt.divisibility = 16 : i32}, %arg1: !tt.ptr<f16> {tt.divisibility = 16 : i32}, %arg2: i32, %arg3: i32, %arg4: i32) attributes {noinline = false} {
+    %cst = arith.constant dense<0.000000e+00> : tensor<1x1xf32>
+    %cst_0 = arith.constant dense<0xFC00> : tensor<64x1xf16>
+    %cst_1 = arith.constant dense<0xFF800000> : tensor<1x1xf32>
+    %0 = tt.get_program_id x : i32
+    %1 = arith.extsi %0 : i32 to i64
+    %2 = tt.get_program_id y : i32
+    %3 = arith.extsi %2 : i32 to i64
+    %4 = tt.make_range {end = 64 : i32, start = 0 : i32} : tensor<64xi32>
+    %5 = tt.expand_dims %4 {axis = 1 : i32} : tensor<64xi32> -> tensor<64x1xi32>
+    %6 = arith.extsi %arg3 : i32 to i64
+    %7 = arith.muli %1, %6 : i64
+    %8 = arith.extsi %arg4 : i32 to i64
+    %9 = arith.muli %7, %8 : i64
+    %10 = tt.splat %arg4 : i32 -> tensor<64x1xi32>
+    %11 = arith.muli %5, %10 : tensor<64x1xi32>
+    %12 = arith.extsi %11 : tensor<64x1xi32> to tensor<64x1xi64>
+    %13 = tt.splat %9 : i64 -> tensor<64x1xi64>
+    %14 = arith.addi %13, %12 : tensor<64x1xi64>
+    %15 = tt.splat %3 : i64 -> tensor<64x1xi64>
+    %16 = arith.addi %14, %15 : tensor<64x1xi64>
+    %17 = tt.splat %arg3 : i32 -> tensor<64x1xi32>
+    %18 = arith.cmpi slt, %5, %17 : tensor<64x1xi32>
+    %19 = arith.cmpi slt, %3, %8 : i64
+    %20 = tt.splat %19 : i1 -> tensor<64x1xi1>
+    %21 = arith.andi %18, %20 : tensor<64x1xi1>
+    %22 = tt.splat %arg1 : !tt.ptr<f16> -> tensor<64x1x!tt.ptr<f16>>
+    %23 = tt.addptr %22, %16 : tensor<64x1x!tt.ptr<f16>>, tensor<64x1xi64>
+    %24 = tt.load %23, %21, %cst_0 : tensor<64x1x!tt.ptr<f16>>
+    %25 = arith.extf %24 : tensor<64x1xf16> to tensor<64x1xf32>
+    %26 = "tt.reduce"(%25) <{axis = 0 : i32}> ({
+    ^bb0(%arg5: f32, %arg6: f32):
+      %45 = arith.maxnumf %arg5, %arg6 : f32
+      tt.reduce.return %45 : f32
+    }) : (tensor<64x1xf32>) -> tensor<1xf32>
+    %27 = tt.expand_dims %26 {axis = 0 : i32} : tensor<1xf32> -> tensor<1x1xf32>
+    %28 = arith.cmpf oeq, %27, %cst_1 : tensor<1x1xf32>
+    %29 = arith.select %28, %cst, %27 : tensor<1x1xi1>, tensor<1x1xf32>
+    %30 = tt.broadcast %29 : tensor<1x1xf32> -> tensor<64x1xf32>
+    %31 = arith.subf %25, %30 : tensor<64x1xf32>
+    %32 = math.exp %31 : tensor<64x1xf32>
+    %33 = "tt.reduce"(%32) <{axis = 0 : i32}> ({
+    ^bb0(%arg5: f32, %arg6: f32):
+      %45 = arith.addf %arg5, %arg6 : f32
+      tt.reduce.return %45 : f32
+    }) : (tensor<64x1xf32>) -> tensor<1xf32>
+    %34 = tt.expand_dims %33 {axis = 0 : i32} : tensor<1xf32> -> tensor<1x1xf32>
+    %35 = math.log %34 : tensor<1x1xf32>
+    %36 = arith.addf %29, %35 : tensor<1x1xf32>
+    %37 = arith.select %28, %27, %36 : tensor<1x1xi1>, tensor<1x1xf32>
+    %38 = arith.muli %1, %8 : i64
+    %39 = arith.addi %38, %3 : i64
+    %40 = tt.addptr %arg0, %39 : !tt.ptr<i1>, i64
+    %41 = tt.splat %19 : i1 -> tensor<1x1xi1>
+    %42 = tt.bitcast %40 : !tt.ptr<i1> -> !tt.ptr<i8>
+    %43 = tt.splat %42 : !tt.ptr<i8> -> tensor<1x1x!tt.ptr<i8>>
+    %44 = arith.fptosi %37 : tensor<1x1xf32> to tensor<1x1xi8>
+    tt.store %43, %44, %41 : tensor<1x1x!tt.ptr<i8>>
+    tt.return
+  }
+}
+
+{-#
+  external_resources: {
+    mlir_reproducer: {
+      pipeline: "builtin.module(convert-triton-to-tritongpu{enable-source-remat=false num-ctas=2 num-warps=4 target=cuda:90 threads-per-warp=32}, tritongpu-coalesce, tritongpu-F32DotTC{emu-tf32=true}, triton-nvidia-gpu-plan-cta, tritongpu-remove-layout-conversions{disable-remat-splitting=false}, tritongpu-optimize-thread-locality, tritongpu-accelerate-matmul, triton-nvidia-check-matmul-two-cta, tritongpu-remove-layout-conversions{disable-remat-splitting=false}, tritongpu-optimize-dot-operands{hoist-layout-conversion=true}, triton-nvidia-optimize-descriptor-encoding, triton-loop-aware-cse, tritongpu-fuse-nested-loops, canonicalize{cse-between-iterations=false    max-iterations=10 max-num-rewrites=-1 region-simplify=normal test-convergence=false top-down=true}, triton-licm, canonicalize{cse-between-iterations=false    max-iterations=10 max-num-rewrites=-1 region-simplify=normal test-convergence=false top-down=true}, tritongpu-combine-tensor-select-and-if, nvgpu-warp-specialization{dump-intermediate-steps=false num-stages=2}, tritongpu-assign-latencies{num-stages=2}, tritongpu-schedule-loops, tritongpu-pipeline{dump-intermediate-steps=false num-stages=2}, canonicalize{cse-between-iterations=false    max-iterations=10 max-num-rewrites=-1 region-simplify=normal test-convergence=false top-down=true}, triton-loop-aware-cse, tritongpu-optimize-dot-operands{hoist-layout-conversion=true}, tritongpu-coalesce-async-copy, triton-nvidia-optimize-tmem-layouts, triton-nvidia-tmem-load-reduce, triton-nvidia-tma-lowering, tritongpu-remove-layout-conversions{disable-remat-splitting=false}, triton-nvidia-interleave-tmem, tritongpu-reduce-data-duplication, tritongpu-reorder-instructions, triton-loop-aware-cse, symbol-dce, triton-nvidia-gpu-fence-insertion{compute-capability=90}, triton-nvidia-mma-lowering, triton-nvidia-gpu-hoist-mbarrier-lifecycle{compute-capability=90}, sccp, cse, canonicalize{cse-between-iterations=false    max-iterations=10 max-num-rewrites=-1 region-simplify=normal test-convergence=false top-down=true})",
+      disable_threading: true,
+      verify_each: true
+    }
+  }
+#-}
+<unknown>:0: error: Failures have been detected while processing an MLIR pass pipeline
+<unknown>:0: note: Pipeline failed while executing [`TritonGPUPlanCTAPass` on 'builtin.module' operation]: reproducer generated at `std::errs, please share the reproducer above with Triton project.`
