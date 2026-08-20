@@ -152,69 +152,101 @@ with it, answering three independent questions: does it still compile, do the bi
 faster. Read `bit_changed` before the speedup; a speedup on a row whose bits changed is not a
 result.
 
-## Section 3 — the equivalence checker (`checker.*`)
+## Section 3 — the equivalence checker (`checker.corpus`)
 
 The GEMM sections ask whether one kernel matches one reference. This section asks the broader
 question the project is built on: given a static checker that reads compiled IR and decides which
 autotuner configurations return identical bits, **is it sound, and how much tuning freedom does it
-recover?** There are two checkers and they are peers, not a chain — the PTX one
-(`bitequiv/ptx_reduction.py`) reconstructs the floating-point reduction tree from the PTX, and the
-TTGIR one (`bitequiv/ttgir_reduction.py`) reads the association order out of the parsed MLIR with
-the compiler's own layout machinery. Every step here runs both.
+recover?**
 
-All four steps are placeholders, and all four mirror a stage that
-`bitequiv/evaluation/evaluate.py` already runs; the work is to drive it from the artifact and
-record its numbers as a table, not to design a new experiment. `bitequiv/evaluation/README.md`
-describes the framework.
+### `checker.corpus` — is the checker sound, and how much does it recover?
 
-The ground truth throughout is the empirical fuzzer in
-`bitequiv/evaluation/equivalence_fuzzer.py`: launch a configuration on many random seeds and group
-configurations by the output bytes. A fuzzer can only ever *refute* equivalence, never prove it, so
-more seeds is stronger evidence and never certainty.
+**Claim.** Over 51,152 compiled configurations spanning 93 `(kernel, dtype)` groups — reductions,
+GEMM in four dtypes, and flash attention — the checker never calls two configurations equal whose
+recorded output bytes differ, and on a large part of the space it recovers real tuning freedom
+rather than putting every configuration in its own group.
 
-### `checker.precision` — is the checker sound? — *placeholder*
+**Method.** This is not a new experiment. It is the measurement of diff **D114470722**, and its
+table is in `prior_results_D114470722.txt` next to this file, copied verbatim, so you can compare
+row for row. The step reads a corpus of already-compiled kernels: for each configuration a `.ptx`
+file, and an `empirical_key` recorded when the corpus was built by actually launching that
+configuration on 20 random inputs (12 for the realistic-Inductor group, 50 for flash attention)
+and hashing the outputs. It runs the checker over every `.ptx` and groups configurations by the
+answer; it groups the same configurations by `empirical_key`; then it counts the pairs the two
+groupings disagree about, in both directions. The grouping and the counting come from
+`bitequiv/evaluation/equivalence_fuzzer.py`, which is standalone and knows nothing about the
+checker, so the arithmetic does not depend on the thing being graded.
 
-**Claim.** The checker never calls two configurations equal that actually return different bytes,
-and it recovers a useful part of the tuning freedom rather than splitting every configuration into
-its own group.
+**The corpus is an input, not a file in this repository.** It is 11 GB — 54,120 PTX files — and it
+is regenerated, not archived. The step looks for it at `$CHECKER_CORPUS`, default
+`~/bitwise-equiv/local_evaluation/corpus`. Without one it prints how to get one and exits 0. The
+scripts that build it ship in `corpus_builder/`; its README gives the commands, and the cost:
+**11 GB of disk and the order of a day on a GPU**, because every configuration is compiled and
+then launched on every seed. Flash attention is about half of both. `build_local_eval.py` alone
+gives the reduction and GEMM groups for roughly 6 GB and a much shorter build, and the step grades
+whatever groups it finds, so a partial corpus still produces the rows it can fill.
 
-**Over-merges must be 0** — that is the gate. Over-splits are the opposite direction: safe, but
-recovery left on the table. The TTGIR checker is *expected* to over-merge and that is the finding,
-not a defect being hidden: TTGIR fixes the association order but is blind to FMA contraction, which
-is decided below TTGIR and gated by `enable_fp_fusion`, so on the multiply-fed kernels it merges
-configurations whose bits differ. That is precisely the gap the PTX checker closes.
+```
+export PYTHONPATH=$(git rev-parse --show-toplevel)
+export CHECKER_CORPUS=$HOME/bitwise-equiv/local_evaluation/corpus
+python artifact_eval/artifact.py --run checker.corpus
+```
 
-### `checker.performance` — what does staying inside one certified set cost? — *placeholder*
+No GPU is needed to run the step: the checker reads text. Knobs are environment variables rather
+than flags, because `artifact.py`'s CLI is shared by every step — `CHECKER_CORPUS_CAP` (per-group
+configuration limit, 0 = all), `CHECKER_CORPUS_KERNELS`, `CHECKER_CORPUS_WORKERS`,
+`CHECKER_CORPUS_CHECKER`, `CHECKER_CORPUS_FRESH`. Rows are written as each group finishes, and a
+re-run skips groups already recorded at the same cap, so a killed run resumes.
 
-**Claim.** Restricting an autotuner to one checker-certified set still leaves it real choices, and
-the fastest configuration it can then pick is close to the fastest available with no numerics
-requirement at all.
+**Cost.** Tens of minutes for the full corpus at 16 workers, CPU only. Flash attention dominates:
+roughly 2 seconds per configuration against 0.05 for everything else. To see the shape of the
+result in a couple of minutes, cap it or pick a few kernels:
 
-Two ratios come out and they must not be confused. The freedom inside the set says whether the
-question is interesting at all — a set of one configuration has no choice to make. The best member
-against the global ceiling is the price of the constraint.
+```
+CHECKER_CORPUS_KERNELS=softmax,col_max,sum,dot,layernorm python artifact_eval/artifact.py --run checker.corpus
+```
 
-### `checker.regpressure` — does the verdict survive `ptxas`? — *placeholder*
+**What you should see.** One row per group in `data/checker_corpus.csv` plus three summed rows,
+and a printed line per group. The columns to read are `checker_cls` (classes the checker proved),
+`empirical_cls` (classes the recorded bytes actually fall into) and `over_merges`. Compare
+`checker_cls` against the `after` column of the prior table and `empirical_cls` against its
+`empirical` column.
 
-**Claim.** The verdict is not an artefact of reading PTX. Configurations the checker certifies stay
-byte-identical after `ptxas` has allocated registers and spilled.
+**How to judge it.** **`over_merges` = 0 is the gate**, and it is the only hard one. Anything else
+means the checker certified two configurations as identical and the bytes they returned were not,
+which is a soundness bug and not a tuning trade-off. The step prints the offending groups by name.
 
-A `.maxnreg` cap leaves the PTX body identical, so the checker puts the capped and uncapped builds
-in the same group by construction and only `ptxas` behaves differently. Check that members actually
-spilled before believing a clean result: if none did, the caps were too loose and the step
-exercised nothing.
+`checker_cls` against `empirical_cls` is the other direction and is a trade-off, not a failure.
+Equal means nothing is left to recover. Above means the checker is safe but conservative: those
+are configurations an autotuner could have moved between and was not told it could. `recovery`
+summarises it in one word, and `fail-closed` — every configuration its own class — is the checker
+refusing to answer rather than answering wrongly. Flash attention is almost entirely fail-closed
+and the prior table says why: its shared-memory addresses are xor-swizzled, so the checker cannot
+prove what a `ldmatrix` reads and keeps the old address-blind behaviour.
 
-### `checker.korder` — which GEMM knobs move the bits? — *placeholder*
+Two things will make your numbers differ from the prior table, and neither is a defect.
 
-The one step here whose verdict does not come from the checker. Two configurations differing in
-exactly one axis are compiled and run on the same input and compared byte for byte, which is the
-ground truth a checker has to agree with. A `DIFFER` on split-K is the expected answer, not a
-failure. Read what each arm actually lowered to before the verdict — if both arms took the same
-path, `BIT-IDENTICAL` is trivially true and the row asked nothing.
+*A cap.* `CHECKER_CORPUS_CAP` takes a strided sample per group, so its class counts are for the
+sample and not for the space. The cap is recorded on every row and named in every note. The prior
+table was taken with no cap.
 
-`evaluate.py` also has a `cublas` stage, a stub there on purpose: comparing a Triton GEMM against a
-cuBLAS reference is `gemm.bitmatch` above, at a far larger scale. There is deliberately no
-`checker.cublas` step.
+*A corpus you rebuilt yourself.* The corpus is a snapshot of one compiler and one copy of the
+kernel sources. Rebuilding it on a different Triton will not reproduce the prior table exactly.
+We measured this: 32 configurations drawn across seven groups were recompiled and re-run on the
+GPU and compared against their cached entries. 25 came back unchanged; 7 changed — and in all 7
+the checker's answer and the output bits changed **together**, never one without the other. All 7
+were `reduction_ordering=unordered`, which is the setting that leaves the order to the compiler;
+no `inner_tree` configuration in that sample moved. That is 32 configurations, not a sweep, so
+read it as "compiler drift on `unordered` reductions happens and the checker tracked it", not as a
+guarantee about `inner_tree`. None of it affects the step itself, which never recompiles: it reads
+the cached PTX and the cached key, and those two were produced by the same build.
+
+**What this step does not do.** The prior table has a `before` column, the class counts at the
+parent commit. Reproducing it needs the parent commit's checker, so it is not something the
+artifact can run; it lives in `prior_results_D114470722.txt` and only there. The same file's fourth
+total row, a 72-group subset of the reduction side, is also not reproduced — that subset is a
+frozen list which is not in this branch, and guessing at it would produce a number that looks
+comparable and is not.
 
 ## Files
 
@@ -223,6 +255,9 @@ artifact.py        the entry point: shared machinery, step discovery, CLI
 steps/             one file per evaluation step; the file name is the step name with . and - as _
   _common.py       the helper library a step reads and never edits; its docstring is the contract
   gemm_bitmatch.py ... one module per step, each declaring its own table columns
+corpus_builder/    the scripts that build `checker.corpus`'s input; the corpus itself never ships
+prior_results_D114470722.txt
+                   the checker tables from the diffs, verbatim; what section 3 is compared against
 README.md          this file
 AGENTS.md          operational notes for an AI agent driving the artifact; CLAUDE.md points here
 data/              committed. Results only, as CSV.
