@@ -1,0 +1,105 @@
+##R4-STAGE frontend
+/home/youngzt/fuzz/r2-compile/corpus/benchmark_kernels.py:10426: UserWarning: Logical operators 'and' and 'or' are deprecated for non-scalar tensors; please use '&' or '|' instead
+  mask = m_offset[:, None] < M and n_offset[None, :] < N
+UserWarning: Enable tracemalloc to get the object allocation traceback
+/home/youngzt/fuzz/r2-compile/corpus/benchmark_kernels.py:10426: UserWarning: Logical operators 'and' and 'or' are deprecated for non-scalar tensors; please use '&' or '|' instead
+  mask = m_offset[:, None] < M and n_offset[None, :] < N
+UserWarning: Enable tracemalloc to get the object allocation traceback
+/home/youngzt/fuzz/r2-compile/corpus/benchmark_kernels.py:10426: UserWarning: Logical operators 'and' and 'or' are deprecated for non-scalar tensors; please use '&' or '|' instead
+  mask = m_offset[:, None] < M and n_offset[None, :] < N
+UserWarning: Enable tracemalloc to get the object allocation traceback
+/home/youngzt/fuzz/r2-compile/corpus/benchmark_kernels.py:10426: UserWarning: Logical operators 'and' and 'or' are deprecated for non-scalar tensors; please use '&' or '|' instead
+  mask = m_offset[:, None] < M and n_offset[None, :] < N
+UserWarning: Enable tracemalloc to get the object allocation traceback
+##R4-STAGE ttir
+##R4-STAGE ttgir
+##R4-STAGE llir
+<unknown>:0: error: 'llvm.fcmp' op operand #0 must be floating point LLVM type or LLVM dialect-compatible vector of floating point LLVM type, but got 'i8'
+#blocked = #ttg.blocked<{sizePerThread = [1], threadsPerWarp = [32], warpsPerCTA = [2], order = [0]}>
+#blocked1 = #ttg.blocked<{sizePerThread = [1, 1], threadsPerWarp = [32, 1], warpsPerCTA = [2, 1], order = [1, 0]}>
+#blocked2 = #ttg.blocked<{sizePerThread = [1, 1], threadsPerWarp = [32, 1], warpsPerCTA = [2, 1], order = [0, 1]}>
+module attributes {"ttg.num-ctas" = 1 : i32, "ttg.num-warps" = 2 : i32, ttg.target = "cuda:89", "ttg.threads-per-warp" = 32 : i32, "ttng.two-ctas" = false} {
+  tt.func public @argmin_kernel_f8fcbf2b(%arg0: !tt.ptr<f8E4M3FN> {tt.divisibility = 16 : i32}, %arg1: !tt.ptr<i1> {tt.divisibility = 16 : i32}, %arg2: i32) attributes {noinline = false} {
+    %c4_i64 = arith.constant 4 : i64
+    %cst = arith.constant 0x7F800000 : f32
+    %cst_0 = arith.constant dense<0> : tensor<4xi64, #blocked>
+    %c0_i32 = arith.constant 0 : i32
+    %c1_i32 = arith.constant 1 : i32
+    %cst_1 = arith.constant dense<1> : tensor<4x1xi64, #blocked1>
+    %cst_2 = arith.constant dense<1> : tensor<4xi64, #blocked>
+    %cst_3 = arith.constant dense<0> : tensor<4x1xi32, #blocked1>
+    %0 = tt.get_program_id x : i32
+    %1 = arith.extsi %0 : i32 to i64
+    %2 = tt.get_program_id y : i32
+    %3 = arith.extsi %2 : i32 to i64
+    %4 = arith.muli %1, %c4_i64 : i64
+    %5 = tt.make_range {end = 4 : i32, start = 0 : i32} : tensor<4xi32, #blocked>
+    %6 = arith.extsi %5 : tensor<4xi32, #blocked> to tensor<4xi64, #blocked>
+    %7 = tt.splat %4 : i64 -> tensor<4xi64, #blocked>
+    %8 = arith.addi %7, %6 : tensor<4xi64, #blocked>
+    %9 = tt.fp_to_fp %cst, rounding = rtne : f32 -> f8E4M3FN
+    %10 = tt.splat %9 : f8E4M3FN -> tensor<4xf8E4M3FN, #blocked>
+    %11 = ttg.convert_layout %8 : tensor<4xi64, #blocked> -> tensor<4xi64, #ttg.slice<{dim = 1, parent = #blocked2}>>
+    %12 = tt.expand_dims %11 {axis = 1 : i32} : tensor<4xi64, #ttg.slice<{dim = 1, parent = #blocked2}>> -> tensor<4x1xi64, #blocked2>
+    %13 = ttg.convert_layout %12 : tensor<4x1xi64, #blocked2> -> tensor<4x1xi64, #blocked1>
+    %14 = arith.extsi %arg2 : i32 to i64
+    %15 = tt.splat %14 : i64 -> tensor<4x1xi64, #blocked1>
+    %16 = arith.muli %13, %15 : tensor<4x1xi64, #blocked1>
+    %17 = tt.splat %3 : i64 -> tensor<4x1xi64, #blocked1>
+    %18 = arith.cmpi slt, %13, %cst_1 : tensor<4x1xi64, #blocked1>
+    %19 = tt.splat %arg0 : !tt.ptr<f8E4M3FN> -> tensor<4x1x!tt.ptr<f8E4M3FN>, #blocked1>
+    %20 = tt.splat %9 : f8E4M3FN -> tensor<4x1xf8E4M3FN, #blocked1>
+    %21:2 = scf.for %arg3 = %c0_i32 to %arg2 step %c1_i32 iter_args(%arg4 = %10, %arg5 = %cst_0) -> (tensor<4xf8E4M3FN, #blocked>, tensor<4xi64, #blocked>)  : i32 {
+      %29 = arith.extsi %arg3 : i32 to i64
+      %30 = tt.splat %29 : i64 -> tensor<4x1xi64, #blocked1>
+      %31 = arith.addi %16, %30 : tensor<4x1xi64, #blocked1>
+      %32 = arith.addi %31, %17 : tensor<4x1xi64, #blocked1>
+      %33 = arith.cmpi slt, %arg3, %arg2 : i32
+      %34 = tt.splat %33 : i1 -> tensor<4x1xi1, #blocked1>
+      %35 = arith.andi %18, %34 : tensor<4x1xi1, #blocked1>
+      %36 = tt.addptr %19, %32 : tensor<4x1x!tt.ptr<f8E4M3FN>, #blocked1>, tensor<4x1xi64, #blocked1>
+      %37 = tt.load %36, %35, %20 : tensor<4x1x!tt.ptr<f8E4M3FN>, #blocked1>
+      %38:2 = "tt.reduce"(%37, %cst_3) <{axis = 1 : i32}> ({
+      ^bb0(%arg6: f8E4M3FN, %arg7: i32, %arg8: f8E4M3FN, %arg9: i32):
+        %47 = arith.cmpf oeq, %arg6, %arg8 : f8E4M3FN
+        %48 = arith.cmpi slt, %arg7, %arg9 : i32
+        %49 = arith.andi %47, %48 : i1
+        %50 = arith.cmpf olt, %arg6, %arg8 : f8E4M3FN
+        %51 = arith.ori %50, %49 : i1
+        %52 = arith.select %51, %arg6, %arg8 : f8E4M3FN
+        %53 = arith.select %51, %arg7, %arg9 : i32
+        tt.reduce.return %52, %53 : f8E4M3FN, i32
+      }) : (tensor<4x1xf8E4M3FN, #blocked1>, tensor<4x1xi32, #blocked1>) -> (tensor<4xf8E4M3FN, #ttg.slice<{dim = 1, parent = #blocked1}>>, tensor<4xi32, #ttg.slice<{dim = 1, parent = #blocked1}>>)
+      %39 = ttg.convert_layout %38#1 : tensor<4xi32, #ttg.slice<{dim = 1, parent = #blocked1}>> -> tensor<4xi32, #blocked>
+      %40 = ttg.convert_layout %38#0 : tensor<4xf8E4M3FN, #ttg.slice<{dim = 1, parent = #blocked1}>> -> tensor<4xf8E4M3FN, #blocked>
+      %41 = arith.cmpf olt, %40, %arg4 : tensor<4xf8E4M3FN, #blocked>
+      %42 = arith.select %41, %40, %arg4 : tensor<4xi1, #blocked>, tensor<4xf8E4M3FN, #blocked>
+      %43 = tt.splat %arg3 : i32 -> tensor<4xi32, #blocked>
+      %44 = arith.addi %43, %39 : tensor<4xi32, #blocked>
+      %45 = arith.extsi %44 : tensor<4xi32, #blocked> to tensor<4xi64, #blocked>
+      %46 = arith.select %41, %45, %arg5 : tensor<4xi1, #blocked>, tensor<4xi64, #blocked>
+      scf.yield %42, %46 : tensor<4xf8E4M3FN, #blocked>, tensor<4xi64, #blocked>
+    }
+    %22 = tt.splat %3 : i64 -> tensor<4xi64, #blocked>
+    %23 = arith.addi %8, %22 : tensor<4xi64, #blocked>
+    %24 = tt.splat %arg1 : !tt.ptr<i1> -> tensor<4x!tt.ptr<i1>, #blocked>
+    %25 = tt.addptr %24, %23 : tensor<4x!tt.ptr<i1>, #blocked>, tensor<4xi64, #blocked>
+    %26 = arith.cmpi slt, %8, %cst_2 : tensor<4xi64, #blocked>
+    %27 = tt.bitcast %25 : tensor<4x!tt.ptr<i1>, #blocked> -> tensor<4x!tt.ptr<i8>, #blocked>
+    %28 = arith.trunci %21#1 : tensor<4xi64, #blocked> to tensor<4xi8, #blocked>
+    tt.store %27, %28, %26 : tensor<4x!tt.ptr<i8>, #blocked>
+    tt.return
+  }
+}
+
+{-#
+  external_resources: {
+    mlir_reproducer: {
+      pipeline: "builtin.module(tritongpu-combine-tensor-select-and-if, tritongpu-allocate-warp-groups{instrumented=false}, convert-scf-to-cf{allow-pattern-rollback=true}, gluon-inline, allocate-shared-memory-nv{compute-capability=89 ptx-version=88}, triton-tensor-memory-allocation, triton-nvidia-gpu-proxy-fence-insertion{compute-capability=89}, triton-nvidia-gpu-tmem-barrier-insertion, convert-triton-gpu-to-llvm{compute-capability=89 enable-concurrency-sanitizer=false ptx-version=88}, initialize-ws-cluster-barriers{compute-capability=89 ptx-version=88}, llvm.func(canonicalize-llvm-ir), cse, convert-warp-specialize-to-llvm, convert-nv-gpu-to-llvm, canonicalize{cse-between-iterations=false    max-iterations=10 max-num-rewrites=-1 region-simplify=normal test-convergence=false top-down=true}, cse, symbol-dce, convert-nvvm-to-llvm)",
+      disable_threading: true,
+      verify_each: true
+    }
+  }
+#-}
+<unknown>:0: error: Failures have been detected while processing an MLIR pass pipeline
+<unknown>:0: note: Pipeline failed while executing [`ConvertTritonGPUToLLVM` on 'builtin.module' operation]: reproducer generated at `std::errs, please share the reproducer above with Triton project.`
