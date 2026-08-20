@@ -1,0 +1,125 @@
+{
+ "t": "variant",
+ "kid": "cap_7fd65a04c9705768",
+ "v": {
+  "skip": [
+   "tirxSimplify#2",
+   "VerifyParallelLoop"
+  ],
+  "cfg": {
+   "tl.enable_lower_ldgstg": true
+  }
+ },
+ "status": "diff",
+ "mode": "normal",
+ "seed": 1265001,
+ "draw": 1,
+ "labels": [
+  "pass-class:bit-preserving",
+  "input-mode:normal",
+  "exact-int-accum:reassociation-excluded",
+  "gross"
+ ],
+ "nums": {
+  "ulp_max": 3301810510,
+  "n_diff": 2048,
+  "n_total": 2048,
+  "max_abs_diff": 3.5616910457611084
+ },
+ "diffs": [
+  {
+   "arg": 1,
+   "dtype": "float32",
+   "shape": [
+    1,
+    32,
+    64
+   ],
+   "kind": "float",
+   "nan_ref": 0,
+   "nan_cand": 0,
+   "nan_mask_differs": false,
+   "n_diff": 2048,
+   "n_total": 2048,
+   "max_abs": 3.5616910457611084,
+   "max_rel": 1.0,
+   "ulp_max": 3301810510,
+   "first": {
+    "idx": 0,
+    "ref": 1.4427739381790161,
+    "cand": 0.0
+   }
+  }
+ ],
+ "confirm": {
+  "draw": 1,
+  "mode": "normal",
+  "seed": 1265001,
+  "draws_differing": [
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8,
+   9,
+   10,
+   11,
+   12,
+   13,
+   14,
+   15,
+   16,
+   17,
+   18,
+   19
+  ],
+  "n_draws": 20,
+  "draw_modes": {
+   "1": "normal",
+   "2": "uniform",
+   "3": "extremes",
+   "4": "intvalued",
+   "5": "large",
+   "6": "zeros",
+   "7": "normal",
+   "8": "uniform",
+   "9": "extremes",
+   "10": "intvalued",
+   "11": "large",
+   "12": "zeros",
+   "13": "normal",
+   "14": "uniform",
+   "15": "extremes",
+   "16": "intvalued",
+   "17": "large",
+   "18": "zeros",
+   "19": "normal"
+  },
+  "cand_self_consistent": false,
+  "diff_under_heap_shift": true,
+  "ref_self_consistent": true,
+  "int_control_draw": 4,
+  "int_control_exact": true,
+  "int_control_differs": true
+ },
+ "minimal": {
+  "skip": [],
+  "cfg": {
+   "tl.enable_lower_ldgstg": true
+  },
+  "order": []
+ },
+ "modes": [
+  "extremes",
+  "intvalued",
+  "large",
+  "normal",
+  "uniform",
+  "zeros"
+ ],
+ "ref_chars": 850,
+ "cand_chars": 936
+}

@@ -1,0 +1,85 @@
+{
+ "t": "variant",
+ "kid": "cap_6fc5657f5c561dda",
+ "v": {
+  "skip": [
+   "ProducerConsumerWarpSpecialized",
+   "tirxSimplify#1",
+   "Simplify#1",
+   "tirxSimplify#2"
+  ],
+  "cfg": {
+   "tl.enable_async_copy": true,
+   "tl.enable_fast_math": true,
+   "tl.config_index_bitwidth": 64
+  }
+ },
+ "status": "diff",
+ "mode": "extremes",
+ "seed": 1238017,
+ "draw": 17,
+ "labels": [
+  "pass-class:numerics-changing",
+  "input-mode:extremes"
+ ],
+ "nums": {
+  "ulp_max": 142724,
+  "n_diff": 2,
+  "n_total": 30720,
+  "max_abs_diff": 1.999989220222952e-40
+ },
+ "diffs": [
+  {
+   "arg": 1,
+   "dtype": "float32",
+   "shape": [
+    192,
+    160
+   ],
+   "kind": "float",
+   "nan_ref": 12014,
+   "nan_cand": 12014,
+   "nan_mask_differs": false,
+   "n_diff": 2,
+   "n_total": 30720,
+   "max_abs": 1.999989220222952e-40,
+   "max_rel": 1.9999892020283738e-10,
+   "ulp_max": 142724,
+   "first": {
+    "idx": 20196,
+    "ref": 9.99994610111476e-41,
+    "cand": 0.0
+   }
+  }
+ ],
+ "confirm": {
+  "draw": 17,
+  "mode": "extremes",
+  "seed": 1238017,
+  "draws_differing": [
+   17
+  ],
+  "n_draws": 20,
+  "draw_modes": {
+   "17": "extremes"
+  },
+  "cand_self_consistent": true,
+  "diff_under_heap_shift": true,
+  "ref_self_consistent": true,
+  "int_control_exact": false,
+  "int_control_differs": false
+ },
+ "minimal": {
+  "skip": [],
+  "cfg": {
+   "tl.enable_fast_math": true,
+   "tl.config_index_bitwidth": 64
+  },
+  "order": []
+ },
+ "modes": [
+  "extremes"
+ ],
+ "ref_chars": 1649,
+ "cand_chars": 1852
+}

@@ -1,0 +1,128 @@
+{
+ "t": "variant",
+ "kid": "cap_7fd65a04c9705768",
+ "v": {
+  "skip": [
+   "Simplify#3",
+   "PipelinePlanning",
+   "HoistIfThenElse"
+  ],
+  "cfg": {
+   "tl.enable_lower_ldgstg": true,
+   "tl.disable_shuffle_elect": true
+  }
+ },
+ "status": "diff",
+ "mode": "extremes",
+ "seed": 6260001,
+ "draw": 1,
+ "labels": [
+  "pass-class:bit-preserving",
+  "input-mode:extremes",
+  "exact-int-accum:reassociation-excluded",
+  "nan-pattern-changed",
+  "gross"
+ ],
+ "nums": {
+  "ulp_max": 4294967295,
+  "n_diff": 2048,
+  "n_total": 2048,
+  "max_abs_diff": 65504.0
+ },
+ "diffs": [
+  {
+   "arg": 1,
+   "dtype": "float32",
+   "shape": [
+    1,
+    32,
+    64
+   ],
+   "kind": "float",
+   "nan_ref": 31,
+   "nan_cand": 0,
+   "nan_mask_differs": true,
+   "n_diff": 2048,
+   "n_total": 2048,
+   "max_abs": 65504.0,
+   "max_rel": 1.0,
+   "ulp_max": 4294967295,
+   "first": {
+    "idx": 0,
+    "ref": -0.8751927018165588,
+    "cand": 1.1479437019748901e-41
+   }
+  }
+ ],
+ "confirm": {
+  "draw": 1,
+  "mode": "extremes",
+  "seed": 6260001,
+  "draws_differing": [
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8,
+   9,
+   10,
+   11,
+   12,
+   13,
+   14,
+   15,
+   16,
+   17,
+   18,
+   19
+  ],
+  "n_draws": 20,
+  "draw_modes": {
+   "1": "extremes",
+   "2": "large",
+   "3": "normal",
+   "4": "intvalued",
+   "5": "zeros",
+   "6": "uniform",
+   "7": "extremes",
+   "8": "large",
+   "9": "normal",
+   "10": "intvalued",
+   "11": "zeros",
+   "12": "uniform",
+   "13": "extremes",
+   "14": "large",
+   "15": "normal",
+   "16": "intvalued",
+   "17": "zeros",
+   "18": "uniform",
+   "19": "extremes"
+  },
+  "cand_self_consistent": false,
+  "diff_under_heap_shift": true,
+  "ref_self_consistent": true,
+  "int_control_draw": 4,
+  "int_control_exact": true,
+  "int_control_differs": true
+ },
+ "minimal": {
+  "skip": [],
+  "cfg": {
+   "tl.enable_lower_ldgstg": true
+  },
+  "order": []
+ },
+ "modes": [
+  "extremes",
+  "intvalued",
+  "large",
+  "normal",
+  "uniform",
+  "zeros"
+ ],
+ "ref_chars": 850,
+ "cand_chars": 936
+}

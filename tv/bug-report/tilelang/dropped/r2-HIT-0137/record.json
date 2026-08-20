@@ -1,0 +1,109 @@
+{
+ "t": "variant",
+ "kid": "gen_gemv_d4bc1ef49dd602",
+ "v": {
+  "skip": [
+   "UnrollLoop"
+  ],
+  "cfg": {
+   "tl.disable_warp_specialized": true,
+   "tirx.merge_static_smem": true,
+   "tl.enable_fast_math": true
+  }
+ },
+ "status": "diff",
+ "mode": "extremes",
+ "seed": 4290018,
+ "draw": 18,
+ "labels": [
+  "pass-class:numerics-changing",
+  "layout-reorders-reduction",
+  "kernel-has-reduce",
+  "input-mode:extremes",
+  "shared-config:ptxas-reg-level=8",
+  "nan-pattern-changed",
+  "reference-mostly-nan:1.00",
+  "few-ulp"
+ ],
+ "nums": {
+  "ulp_max": 0,
+  "n_diff": 1,
+  "n_total": 2037,
+  "max_abs_diff": 0.0
+ },
+ "diffs": [
+  {
+   "arg": 2,
+   "dtype": "float32",
+   "shape": [
+    2037
+   ],
+   "kind": "float",
+   "nan_ref": 2036,
+   "nan_cand": 2037,
+   "nan_mask_differs": true,
+   "n_diff": 1,
+   "n_total": 2037,
+   "max_abs": 0.0,
+   "max_rel": 0.0,
+   "ulp_max": 0,
+   "first": {
+    "idx": 734,
+    "ref": Infinity,
+    "cand": NaN
+   }
+  }
+ ],
+ "confirm": {
+  "draw": 18,
+  "mode": "extremes",
+  "seed": 4290018,
+  "draws_differing": [
+   18
+  ],
+  "n_draws": 20,
+  "draw_modes": {
+   "18": "extremes"
+  },
+  "cand_self_consistent": true,
+  "diff_under_heap_shift": true,
+  "ref_self_consistent": true,
+  "shared_fast_math": false,
+  "accum_inexact": "",
+  "int_control_exact": false,
+  "int_control_differs": false,
+  "ref_nan_frac": 0.9995
+ },
+ "minimal": {
+  "skip": [],
+  "cfg": {
+   "tl.disable_warp_specialized": true,
+   "tl.enable_fast_math": true
+  },
+  "order": []
+ },
+ "item": {
+  "kind": "gen",
+  "spec": {
+   "fam": "gemv",
+   "p": {
+    "M": 2037,
+    "K": 224,
+    "bM": 64,
+    "bK": 64,
+    "th": 32,
+    "st": 5,
+    "dt": "bfloat16"
+   },
+   "pc": {
+    "tl.ptxas_register_usage_level": 8
+   }
+  },
+  "kid": "gen_gemv_d4bc1ef49dd602"
+ },
+ "modes": [
+  "extremes"
+ ],
+ "ref_chars": 4620,
+ "cand_chars": 10591
+}

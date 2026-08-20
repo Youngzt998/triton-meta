@@ -1,0 +1,88 @@
+# from tvm.script import ir as I
+# from tvm.script import tirx as T
+
+@I.ir_module
+class Module:
+    @T.prim_func
+    def cumsum(self_handle: T.handle, args: T.handle, num_args: T.int32, result: T.handle("void", "global")) -> T.int32:
+        B_desc = T.handle("uint8x128", "grid_constant")
+        B = T.handle("float32", "global")
+        T.func_attr({"calling_conv": 1, "global_symbol": "__tvm_ffi_cumsum", "target": T.target({"keys": ["cpu"], "kind": "c", "tag": ""}), "thread_extent": {}, "tirx.is_entry_func": True, "tl.has_tma": T.bool(True), "tl.readonly_param_indices": [0, 1], "tma_descriptor_args": {B_desc: ["__tvm_tensormap_create_tiled", B_desc, 7, 2, B, 160, 192, 4, 640, 32, 64, 1, 1, 0, 0, 2, 0]}})
+        assert num_args == 2, ("RuntimeError", ["cumsum: num_args should be 2"])
+        assert not T.isnullptr(args), ("RuntimeError", ["cumsum: args pointer is NULL"])
+        A_handle_type_index: T.int32 = T.tvm_struct_get(args, 0, 13, "int32")
+        assert A_handle_type_index == 0 or A_handle_type_index == 4 or A_handle_type_index == 7 or 64 <= A_handle_type_index, ("RuntimeError", ["kernel cumsum input A expected pointer or tensor handle"])
+        B_handle_type_index: T.int32 = T.tvm_struct_get(args, 1, 13, "int32")
+        assert B_handle_type_index == 0 or B_handle_type_index == 4 or B_handle_type_index == 7 or 64 <= B_handle_type_index, ("RuntimeError", ["kernel cumsum input B expected pointer or tensor handle"])
+        A_handle: T.handle = T.Select(A_handle_type_index == 70, T.handle_add_byte_offset(T.tvm_struct_get(args, 0, 15, "handle"), 24), T.tvm_struct_get(args, 0, 15, "handle"))
+        B_handle: T.handle = T.Select(B_handle_type_index == 70, T.handle_add_byte_offset(T.tvm_struct_get(args, 1, 15, "handle"), 24), T.tvm_struct_get(args, 1, 15, "handle"))
+        cumsum_A_is_null: T.bool = T.isnullptr(A_handle)
+        assert not cumsum_A_is_null, ("RuntimeError", ["cumsum.A is expected to have non-NULL pointer"])
+        cumsum_B_is_null: T.bool = T.isnullptr(B_handle)
+        assert not cumsum_B_is_null, ("RuntimeError", ["cumsum.B is expected to have non-NULL pointer"])
+        cumsum_A_shape: T.handle("int64", "global") = T.tvm_struct_get(A_handle, 0, 2, "handle")
+        cumsum_A_shape_1 = T.decl_buffer((2,), "int64", data=cumsum_A_shape)
+        cumsum_B_shape: T.handle("int64", "global") = T.tvm_struct_get(B_handle, 0, 2, "handle")
+        cumsum_B_shape_1 = T.decl_buffer((2,), "int64", data=cumsum_B_shape)
+        assert T.tvm_struct_get(A_handle, 0, 4, "int32") == 2, ("RuntimeError", ["kernel cumsum input A ndim mismatch, expected 2"])
+        cumsum_A_strides: T.handle("int64", "global") = T.tvm_struct_get(A_handle, 0, 3, "handle")
+        cumsum_A_strides_1 = T.decl_buffer((2,), "int64", data=cumsum_A_strides)
+        dev_id: T.int32 = T.tvm_struct_get(A_handle, 0, 9, "int32")
+        A: T.handle("float32", "global") = T.tvm_struct_get(A_handle, 0, 1, "handle")
+        T.attr(A, "storage_alignment", 64)
+        assert T.tvm_struct_get(B_handle, 0, 4, "int32") == 2, ("RuntimeError", ["kernel cumsum input B ndim mismatch, expected 2"])
+        cumsum_B_strides: T.handle("int64", "global") = T.tvm_struct_get(B_handle, 0, 3, "handle")
+        cumsum_B_strides_1 = T.decl_buffer((2,), "int64", data=cumsum_B_strides)
+        B = T.tvm_struct_get(B_handle, 0, 1, "handle")
+        T.attr(B, "storage_alignment", 64)
+        T.attr("default", "device_id", dev_id)
+        T.attr("default", "device_type", 2)
+        assert T.tvm_struct_get(A_handle, 0, 5, "uint8") == T.uint8(2) and T.tvm_struct_get(A_handle, 0, 6, "uint8") == T.uint8(32) and T.tvm_struct_get(A_handle, 0, 7, "uint16") == T.uint16(1), ("RuntimeError", ["kernel cumsum input A dtype mismatch, expected float32"])
+        assert T.Cast("int32", cumsum_A_shape_1[0]) == 192, ("RuntimeError", ["kernel cumsum input A shape[0] violates packed ABI constraint"])
+        assert T.Cast("int32", cumsum_A_shape_1[1]) == 160, ("RuntimeError", ["kernel cumsum input A shape[1] violates packed ABI constraint"])
+        assert T.if_then_else(T.isnullptr(cumsum_A_strides), 1, T.Cast("int32", cumsum_A_strides_1[1])) == 1, ("RuntimeError", ["kernel cumsum input A strides[1] violates packed ABI constraint"])
+        assert T.if_then_else(T.isnullptr(cumsum_A_strides), 1, T.Cast("int32", cumsum_A_strides_1[0])) == 160, ("RuntimeError", ["kernel cumsum input A strides[0] violates packed ABI constraint"])
+        assert T.uint64(0) == T.tvm_struct_get(A_handle, 0, 8, "uint64"), ("RuntimeError", ["kernel cumsum input A byte_offset violates packed ABI constraint"])
+        assert T.tvm_struct_get(A_handle, 0, 10, "int32") == 2, ("RuntimeError", ["kernel cumsum input A device_type mismatch, expected cuda"])
+        assert not T.isnullptr(A), ("RuntimeError", ["kernel cumsum input A data pointer is NULL"])
+        assert T.tvm_struct_get(B_handle, 0, 5, "uint8") == T.uint8(2) and T.tvm_struct_get(B_handle, 0, 6, "uint8") == T.uint8(32) and T.tvm_struct_get(B_handle, 0, 7, "uint16") == T.uint16(1), ("RuntimeError", ["kernel cumsum input B dtype mismatch, expected float32"])
+        assert T.Cast("int32", cumsum_B_shape_1[0]) == 192, ("RuntimeError", ["kernel cumsum input B shape[0] violates packed ABI constraint"])
+        assert T.Cast("int32", cumsum_B_shape_1[1]) == 160, ("RuntimeError", ["kernel cumsum input B shape[1] violates packed ABI constraint"])
+        assert T.if_then_else(T.isnullptr(cumsum_B_strides), 1, T.Cast("int32", cumsum_B_strides_1[1])) == 1, ("RuntimeError", ["kernel cumsum input B strides[1] violates packed ABI constraint"])
+        assert T.if_then_else(T.isnullptr(cumsum_B_strides), 1, T.Cast("int32", cumsum_B_strides_1[0])) == 160, ("RuntimeError", ["kernel cumsum input B strides[0] violates packed ABI constraint"])
+        assert T.uint64(0) == T.tvm_struct_get(B_handle, 0, 8, "uint64"), ("RuntimeError", ["kernel cumsum input B byte_offset violates packed ABI constraint"])
+        assert T.tvm_struct_get(B_handle, 0, 9, "int32") == T.tvm_struct_get(A_handle, 0, 9, "int32"), ("RuntimeError", ["kernel cumsum input B device_id violates packed ABI constraint"])
+        assert T.tvm_struct_get(B_handle, 0, 10, "int32") == 2, ("RuntimeError", ["kernel cumsum input B device_type mismatch, expected cuda"])
+        assert not T.isnullptr(B), ("RuntimeError", ["kernel cumsum input B data pointer is NULL"])
+        A_1 = T.decl_buffer((192, 160), data=A, strides=(160, 1))
+        B_1 = T.decl_buffer((192, 160), data=B, strides=(160, 1))
+        T.call_packed("__tvm_set_device", 2, dev_id)
+        with T.attr(0, "compute_scope", "cumsum_compute_"):
+            B_desc = T.tvm_stack_alloca("tvm_ffi_any", 16)
+            T.call_packed("__tvm_tensormap_create_tiled", B_desc, 7, 2, B, 160, 192, 4, 640, 32, 64, 1, 1, 0, 0, 2, 0)
+            T.call_packed("cumsum_kernel", A, B_desc, 5, 3, 256, 1, 1, 8192)
+        return 0
+
+    @T.prim_func
+    def cumsum_kernel(A: T.handle("float32", "global"), B_desc: T.handle("uint8x128", "grid_constant")):
+        T.func_attr({"calling_conv": 2, "dyn_shared_memory_buf": 8192, "target": T.target({"arch": "sm_90a", "keys": ["cuda", "gpu"], "kind": "cuda", "max_num_threads": 1024, "tag": "", "thread_warp_size": 32}), "thread_extent": {"blockIdx.x": 5, "blockIdx.y": 3, "threadIdx.x": 256, "threadIdx.y": 1, "threadIdx.z": 1}, "tirx.is_global_func": T.bool(True), "tirx.kernel_launch_params": ["blockIdx.x", "blockIdx.y", "threadIdx.x", "threadIdx.y", "threadIdx.z", "tirx.use_dyn_shared_memory"], "tirx.noalias": True, "tl.non_restrict_params": [], "tl.readonly_param_indices": [0, 1], "tl.smem_alignment_map": {"A_shared": 128}})
+        A_1 = T.decl_buffer((30720,), data=A)
+        bx = T.launch_thread("blockIdx.x", 5)
+        A_shared = T.alloc_buffer((2048,), scope="shared.dyn")
+        by = T.launch_thread("blockIdx.y", 3)
+        tx = T.launch_thread("threadIdx.x", 256)
+        if T.tl_shuffle_elect(0):
+            T.prefetch_tma_descriptor(B_desc)
+        ty = T.launch_thread("threadIdx.y", 1)
+        tz = T.launch_thread("threadIdx.z", 1)
+        A_shared_1 = T.decl_buffer((2048,), data=A_shared.data, scope="shared.dyn")
+        for i in T.unroll(2):
+            A_shared_1[i * 1024 + tx * 4:i * 1024 + tx * 4 + 4] = A_1[by * 10240 + i * 5120 + tx // 8 * 160 + bx * 32 + tx % 8 * 4:by * 10240 + i * 5120 + tx // 8 * 160 + bx * 32 + tx % 8 * 4 + 4]
+        T.tvm_storage_sync("shared.dyn")
+        T.call_extern("float32", "tl::CumSum2D<256, 0, true>::run", T.tvm_access_ptr(T.type_annotation("float32"), A_shared.data, 0, 2048, 1), T.tvm_access_ptr(T.type_annotation("float32"), A_shared.data, 0, 2048, 2), 64, 32)
+        T.tvm_storage_sync("shared.dyn")
+        if T.tl_shuffle_elect(256):
+            T.fence_proxy_async()
+            T.tma_store(B_desc, T.tvm_access_ptr(T.type_annotation("float32"), A_shared.data, 0, 2048, 1), bx * 32, by * 64, 0, 0)
+            T.tma_store_arrive()
+            T.tma_store_wait(0, T.bool(True))

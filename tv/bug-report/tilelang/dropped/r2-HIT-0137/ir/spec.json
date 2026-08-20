@@ -1,0 +1,15 @@
+{
+ "fam": "gemv",
+ "p": {
+  "M": 2037,
+  "K": 224,
+  "bM": 64,
+  "bK": 64,
+  "th": 32,
+  "st": 5,
+  "dt": "bfloat16"
+ },
+ "pc": {
+  "tl.ptxas_register_usage_level": 8
+ }
+}
