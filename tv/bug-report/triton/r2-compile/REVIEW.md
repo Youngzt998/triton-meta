@@ -271,3 +271,76 @@ their own.
 * `TRITON_DEFAULT_FP_FUSION=0` is **useless as a control on the r2-inductor
   line** — its spec sets `enable_fp_fusion` per compile, so the env default is
   overridden and the arm is unchanged. Override the config instead.
+
+---
+
+## Pass 5 (2026-08-19) — HIT-0049 … HIT-0051
+
+| pass | ids | kept | rejected |
+|---|---|---|---|
+| 5 | HIT-0049 … HIT-0051 | 2 | 1 (A1) |
+
+**Kept — HIT-0049, an eighth `num_ctas > 1` defect and the sixth in `PlanCTA`.**
+`CTAPlanner::processMultiUsersBackward` (`PlanCTA.cpp:903-958`) gives a value
+two different CTA layouts by cloning the op that defined it; a block argument
+has no defining op, so line 937 calls
+`llvm::report_fatal_error("Layout conflict for block arg")` — with a `// TODO`
+next to it. It is reached when a loop-carried value has **two** users that want
+**two** layouts: here the `scf.for`-carried A-operand pointer block, read by
+`tt.load` and advanced by `tt.addptr`, with a `tt.dot` forcing the load's CTA
+split. Checked against HIT-0003, which is the other `report_fatal_error` on a
+block argument: that one is the *single*-user path at line 849, a different
+message, and needs an `scf.while`. The crash reproducer Triton prints was cut
+down to an 81-line `.ttir` and a 116-line pre-pass `.ttgir`, both committed;
+`num_ctas = 1` compiles clean, `2` and `4` crash. Two attempts at a
+hand-written minimal file did **not** reproduce, so the conflict needs more
+index arithmetic than the obvious skeleton — recorded so the next reviewer does
+not spend the ten minutes again.
+
+**Kept — HIT-0050, a second and distinct `ptxas` crash.** `ptxas` V12.9.86
+segfaults at `--opt-level 2` and `3` on a 23983-line `sm_90a` PTX from a
+`tl.associative_scan` at `num_warps = 1`. It is **not** HIT-0047: under `gdb`
+the two die at different addresses with different call chains (`0x961948` here
+against `0xa910d0` there, sharing only the outer driver frame), and they answer
+the register-allocator switch in opposite ways — this one is cured by
+`--regAllocOptLevel=0` while HIT-0047 crashes at all four levels. `--maxrregcount`
+32…255 all crash, so it is not a register budget. At `-O3 --regAllocOptLevel=0`
+the file assembles with 128 registers and 7.5 KB of spill stores, which is what
+puts the crash in the optimising register allocator. The `.ptx` is committed, so
+the repro is one command with no Triton, no Python and no GPU.
+
+**Rejected — HIT-0051, A1.** `SIGIOT@ptx`, `LLVM ERROR: out of memory / Buffer
+allocation failed`. On a quiet box the same `repro.py` compiled cleanly through
+`cubin` in 6 min 30 s with a 10.9 GB peak resident set. Third member of the
+host-memory class already represented by HIT-0022, HIT-0023 and HIT-0032.
+
+**Notes for pass 6.**
+* The `num_ctas > 1` theme is now **eight** defects: HIT-0001, 0003, 0005,
+  0006, 0019, 0045, **0049** in `PlanCTA`, HIT-0016 in the scan lowering,
+  HIT-0038 in the default layout assignment, `r2-corpus/HIT-0037` in
+  `replaceCGALayout`, plus `r2-oracle/HIT-0001` as the only silent-wrong-answer
+  member. Six of the eight are crashes.
+* `r2-corpus` reached a **ninth** `PlanCTA` assertion this pass —
+  `PlanCTA.cpp:242`, `"PlanCTAPass should follow immediately after
+  CoalescePass"` (`r2-corpus/HIT-0086`, `HIT-0087`) — and it was **rejected**,
+  not folded in, because the pass-permutation oracle put `plan-cta` after
+  `accelerate-matmul` and the assert states that as its own precondition. The
+  production pipeline never does that. Judgement call in the same family as
+  pass 2's six `resource-limit` rejections; flagged here so it is visible. Note
+  that with `NDEBUG` the assert disappears and the pass would silently build
+  wrong layouts.
+* Capturing the PTX with a `TRITON_PTXAS_PATH` wrapper worked again and is now
+  two for two. For any `crash-ptxas` / `crash-python@cubin` report, do it
+  first: it turns a Triton-dependent report into a one-command NVIDIA repro and
+  makes the `--opt-level` / `--regAllocOptLevel` / `--maxrregcount` sweep that
+  separates the ptxas classes cost about a minute.
+* 🔴 **The `onesish` (all-inputs-equal) control is written but not running.**
+  The three GPU lines' `fz/driver.py` files contain `reassoc_controls`, the
+  `ONESISH_CONTROL` flag files exist since 21:45, and `fz/worker.py` has
+  `task_onesish` — but the driver processes were started at 18:45–19:00 and
+  hold the older module, and the edit preserved the files' mtime (ctime 21:30,
+  mtime 18:38), so nothing forces a reload. **0 of 190 `r2-inductor` findings,
+  0 of 79 `r2-corpus`, 0 of 12 `r2-oracle` carry the `reassociation_excluded`
+  field, and no report in the repo carries the label.** A reviewer must run the
+  control by hand (`op: onesish` against the line's own worker) until a driver
+  restart picks the code up.
