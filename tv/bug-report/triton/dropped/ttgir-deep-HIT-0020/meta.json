@@ -1,0 +1,102 @@
+{
+  "labels": {
+    "pass-class": "layout,sched",
+    "numerics-changing-pass": false,
+    "layout-reorders-reduction": true,
+    "kernel-tags": [
+      "dot",
+      "tma",
+      "ws"
+    ],
+    "ndiff": 1,
+    "total": 1048576,
+    "frac": 1e-06,
+    "max_abs_diff": 0.0,
+    "first_diff_ref_bits": "0x0",
+    "first_diff_cand_bits": "0xffffffffffff8000",
+    "reproduced": "0/3",
+    "effective-seed": 474695713,
+    "rep-offset": 9,
+    "heap-shift-survives": "2/3",
+    "int-input-control": {
+      "exact": "yes",
+      "bound": 65536,
+      "exact_below": 16777216,
+      "holds": true,
+      "why": "the whole kernel is one dot plus a cast; with inputs in [-8, 8] the fp32 accumulator is an integer with |acc| <= 8*8*K",
+      "result": "equal"
+    },
+    "arch": "hopper-only",
+    "suspect-unstable": true,
+    "distinct-culprits-on-this-case": 4,
+    "ub-scan": "clean (no data-dependent store address, no atomic; see artifacts/ubscan.json)"
+  },
+  "case": "mm_tma[BK=64,BM=128,BN=128,K=1024,M=1024,N=1024,NS=4,W=4,WS=1,dt=fp16]",
+  "family": "mm_tma",
+  "cfg": {
+    "dt": "fp16",
+    "M": 1024,
+    "N": 1024,
+    "K": 1024,
+    "BM": 128,
+    "BN": 128,
+    "BK": 64,
+    "NS": 4,
+    "WS": 1,
+    "W": 4
+  },
+  "opts": {
+    "num_warps": 4,
+    "num_stages": 4
+  },
+  "grid": [
+    64,
+    1,
+    1
+  ],
+  "drop": [
+    "optimize-dot-operands-1",
+    "triton-licm"
+  ],
+  "culprit": [
+    "optimize-dot-operands-1",
+    "triton-licm"
+  ],
+  "groups": [
+    "layout",
+    "sched"
+  ],
+  "dist": "tiny",
+  "diff": {
+    "index": 775731,
+    "count": 1,
+    "total": 1048576,
+    "ref": 0.0,
+    "cand": -0.0,
+    "ref_bits": "0x0",
+    "cand_bits": "0xffffffffffff8000",
+    "max_abs_diff": 0.0
+  },
+  "signature": {
+    "a_ptr": "*fp16",
+    "b_ptr": "*fp16",
+    "c_ptr": "*fp16",
+    "a0": "i32",
+    "b0": "i32",
+    "c0": "i32",
+    "M": "i32",
+    "N": "i32",
+    "K": "i32"
+  },
+  "constexprs": {
+    "a1": 1,
+    "b1": 1,
+    "c1": 1,
+    "NS": 4,
+    "BM": 128,
+    "BN": 128,
+    "BK": 64,
+    "WS": true,
+    "OUT_F32": false
+  }
+}

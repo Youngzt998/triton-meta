@@ -1,0 +1,29 @@
+{
+ "diff_lines_added": 8,
+ "diff_lines_removed": 9,
+ "ops_only_in_output": [],
+ "ops_only_in_input": [
+  "arith.addf"
+ ],
+ "ops_in_diff": [
+  "arith.addf",
+  "arith.muli",
+  "scf.yield",
+  "tt.addptr",
+  "tt.dot",
+  "tt.ptr",
+  "tt.splat",
+  "ttg.dot_op"
+ ],
+ "layout_attrs_only_in_output": [],
+ "layout_attrs_only_in_input": [],
+ "hopper_tokens_in_diff": [],
+ "blackwell_tokens_in_diff": [],
+ "concurrency_constructs_in_either_ir": [],
+ "cross_instance_constructs_in_either_ir": [],
+ "has_dot": true,
+ "has_reduce": false,
+ "has_loop": true,
+ "diff_head": "@@ -68,9 +68,8 @@\n-      %78 = tt.dot %76, %77, %cst_1, inputPrecision = tf32 : tensor<64x32xf32, #ttg.dot_op<{opIdx = 0, parent = #blocked2}>> * tensor<32x64xf32, #ttg.dot_op<{opIdx = 1, parent = #blocked2}>> -> tensor<64x64xf32, #blocked2>\n-      %79 = arith.addf %arg15, %78 : tensor<64x64xf32, #blocked2>\n-      %80 = arith.muli %arg7, %c32_i32 : i32\n-      %81 = tt.splat %80 : i32 -> tensor<64x32xi32, #blocked>\n-      %82 = tt.addptr %arg13, %81 : tensor<64x32x!tt.ptr<f32>, #blocked>, tensor<64x32xi32, #blocked>\n-      %83 = arith.muli %arg8, %c32_i32 : i32\n-      %84 = tt.splat %83 : i32 -> tensor<32x64xi32, #blocked1>\n-      %85 = tt.addptr %arg14, %84 : tensor<32x64x!tt.ptr<f32>, #blocked1>, tensor<32x64xi32, #blocked1>\n-      scf.yield %82, %85, %79 : tensor<64x32x!tt.ptr<f32>, #blocked>, tensor<32x64x!tt.ptr<f32>, #blocked1>, tensor<64x64xf32, #blocked2>\n+      %78 = tt.dot %76, %77, %arg15, inputPrecision = tf32 : tensor<64x32xf32, #ttg.dot_op<{opIdx = 0, parent = #blocked2}>> * tensor<32x64xf32, #ttg.dot_op<{opIdx = 1, parent = #blocked2}>> -> tensor<64x64xf32, #blocked2>\n+      %79 = arith.muli %arg7, %c32_i32 : i32\n+      %80 = tt.splat %79 : i32 -> tensor<64x32xi32, #blocked>\n+      %81 = tt.addptr %arg13, %80 : tensor<64x32x!tt.ptr<f32>, #blocked>, tensor<64x32xi32, #blocked>\n+      %82 = arith.muli %arg8, %c32_i32 : i32\n+      %83 = tt.splat %82 : i32 -> tensor<32x64xi32, #blocked1>\n+      %84 = tt.addptr %arg14, %83 : tensor<32x64x!tt.ptr<f32>, #blocked1>, tensor<32x64xi32, #blocked1>\n+      scf.yield %81, %84, %78 : tensor<64x32x!tt.ptr<f32>, #blocked>, tensor<32x64x!tt.ptr<f32>, #blocked1>, tensor<64x64xf32, #blocked2>",
+ "diff_full_lines": 18
+}

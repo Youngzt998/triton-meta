@@ -1,0 +1,26 @@
+--- input.ttgir
++++ output.ttgir
+@@ -65,15 +65,14 @@
+       %75 = tt.load %arg14, %74, %cst_0 : tensor<32x64x!tt.ptr<f32>, #blocked1>
+       %76 = ttg.convert_layout %68 : tensor<64x32xf32, #blocked> -> tensor<64x32xf32, #ttg.dot_op<{opIdx = 0, parent = #blocked2}>>
+       %77 = ttg.convert_layout %75 : tensor<32x64xf32, #blocked1> -> tensor<32x64xf32, #ttg.dot_op<{opIdx = 1, parent = #blocked2}>>
+-      %78 = tt.dot %76, %77, %cst_1, inputPrecision = tf32 : tensor<64x32xf32, #ttg.dot_op<{opIdx = 0, parent = #blocked2}>> * tensor<32x64xf32, #ttg.dot_op<{opIdx = 1, parent = #blocked2}>> -> tensor<64x64xf32, #blocked2>
+-      %79 = arith.addf %arg15, %78 : tensor<64x64xf32, #blocked2>
+-      %80 = arith.muli %arg7, %c32_i32 : i32
+-      %81 = tt.splat %80 : i32 -> tensor<64x32xi32, #blocked>
+-      %82 = tt.addptr %arg13, %81 : tensor<64x32x!tt.ptr<f32>, #blocked>, tensor<64x32xi32, #blocked>
+-      %83 = arith.muli %arg8, %c32_i32 : i32
+-      %84 = tt.splat %83 : i32 -> tensor<32x64xi32, #blocked1>
+-      %85 = tt.addptr %arg14, %84 : tensor<32x64x!tt.ptr<f32>, #blocked1>, tensor<32x64xi32, #blocked1>
+-      scf.yield %82, %85, %79 : tensor<64x32x!tt.ptr<f32>, #blocked>, tensor<32x64x!tt.ptr<f32>, #blocked1>, tensor<64x64xf32, #blocked2>
++      %78 = tt.dot %76, %77, %arg15, inputPrecision = tf32 : tensor<64x32xf32, #ttg.dot_op<{opIdx = 0, parent = #blocked2}>> * tensor<32x64xf32, #ttg.dot_op<{opIdx = 1, parent = #blocked2}>> -> tensor<64x64xf32, #blocked2>
++      %79 = arith.muli %arg7, %c32_i32 : i32
++      %80 = tt.splat %79 : i32 -> tensor<64x32xi32, #blocked>
++      %81 = tt.addptr %arg13, %80 : tensor<64x32x!tt.ptr<f32>, #blocked>, tensor<64x32xi32, #blocked>
++      %82 = arith.muli %arg8, %c32_i32 : i32
++      %83 = tt.splat %82 : i32 -> tensor<32x64xi32, #blocked1>
++      %84 = tt.addptr %arg14, %83 : tensor<32x64x!tt.ptr<f32>, #blocked1>, tensor<32x64xi32, #blocked1>
++      scf.yield %81, %84, %78 : tensor<64x32x!tt.ptr<f32>, #blocked>, tensor<32x64x!tt.ptr<f32>, #blocked1>, tensor<64x64xf32, #blocked2>
+     }
+     %39 = ttg.convert_layout %38#2 : tensor<64x64xf32, #blocked2> -> tensor<64x64xf32, #blocked1>
+     %40 = tt.expand_dims %8 {axis = 1 : i32} : tensor<64xi32, #ttg.slice<{dim = 1, parent = #blocked1}>> -> tensor<64x1xi32, #blocked1>

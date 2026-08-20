@@ -1,0 +1,30 @@
+--- ref.ttgir
++++ cand.ttgir
+@@ -235,9 +235,9 @@
+         ttng.wait_barrier %63, %61 {async_task_id = array<i32: 1>} : !ttg.memdesc<1xi64, #shared, #smem, mutable>
+         %64 = ttg.memdesc_index %arg17[%a_24] {async_task_id = array<i32: 1>} : !ttg.memdesc<4x128x64xf16, #shared1, #smem, mutable> -> !ttg.memdesc<128x64xf16, #shared1, #smem>
+-        %acc_27 = ttg.memdesc_trans %64 {order = array<i32: 1, 0>} : !ttg.memdesc<128x64xf16, #shared1, #smem> -> !ttg.memdesc<64x128xf16, #shared2, #smem>
+-        %65 = ttg.memdesc_index %arg22[%a_24] {async_task_id = array<i32: 1>} : !ttg.memdesc<4x1xi64, #shared, #smem, mutable> -> !ttg.memdesc<1xi64, #shared, #smem, mutable>
++        %acc_27 = ttg.memdesc_trans %64 {async_task_id = array<i32: 1>, order = array<i32: 1, 0>} : !ttg.memdesc<128x64xf16, #shared1, #smem> -> !ttg.memdesc<64x128xf16, #shared2, #smem>
++        %acc_28 = ttng.warp_group_dot %62, %acc_27, %arg25 {async_task_id = array<i32: 1>, inputPrecision = 0 : i32} : !ttg.memdesc<64x64xf16, #shared1, #smem> * !ttg.memdesc<64x128xf16, #shared2, #smem> -> tensor<64x128xf32, #mma>
++        %65 = ttg.memdesc_index %arg20[%a_24] {async_task_id = array<i32: 1>} : !ttg.memdesc<4x1xi64, #shared, #smem, mutable> -> !ttg.memdesc<1xi64, #shared, #smem, mutable>
+         ttng.arrive_barrier %65, 128 {async_task_id = array<i32: 1>} : !ttg.memdesc<1xi64, #shared, #smem, mutable>
+-        %acc_28 = ttng.warp_group_dot %62, %acc_27, %arg25 {async_task_id = array<i32: 1>, inputPrecision = 0 : i32} : !ttg.memdesc<64x64xf16, #shared1, #smem> * !ttg.memdesc<64x128xf16, #shared2, #smem> -> tensor<64x128xf32, #mma>
+-        %66 = ttg.memdesc_index %arg20[%a_24] {async_task_id = array<i32: 1>} : !ttg.memdesc<4x1xi64, #shared, #smem, mutable> -> !ttg.memdesc<1xi64, #shared, #smem, mutable>
++        %66 = ttg.memdesc_index %arg22[%a_24] {async_task_id = array<i32: 1>} : !ttg.memdesc<4x1xi64, #shared, #smem, mutable> -> !ttg.memdesc<1xi64, #shared, #smem, mutable>
+         ttng.arrive_barrier %66, 128 {async_task_id = array<i32: 1>} : !ttg.memdesc<1xi64, #shared, #smem, mutable>
+         %acc_29 = arith.addi %acc_21, %c1_i64_11 {async_task_id = array<i32: 1>} : i64
+@@ -293,9 +293,9 @@
+         ttng.wait_barrier %64, %62 {async_task_id = array<i32: 2>} : !ttg.memdesc<1xi64, #shared, #smem, mutable>
+         %65 = ttg.memdesc_index %arg17[%b_24] {async_task_id = array<i32: 2>} : !ttg.memdesc<4x128x64xf16, #shared1, #smem, mutable> -> !ttg.memdesc<128x64xf16, #shared1, #smem>
+-        %acc_27 = ttg.memdesc_trans %65 {order = array<i32: 1, 0>} : !ttg.memdesc<128x64xf16, #shared1, #smem> -> !ttg.memdesc<64x128xf16, #shared2, #smem>
+-        %66 = ttg.memdesc_index %arg23[%b_24] {async_task_id = array<i32: 2>} : !ttg.memdesc<4x1xi64, #shared, #smem, mutable> -> !ttg.memdesc<1xi64, #shared, #smem, mutable>
++        %acc_27 = ttg.memdesc_trans %65 {async_task_id = array<i32: 2>, order = array<i32: 1, 0>} : !ttg.memdesc<128x64xf16, #shared1, #smem> -> !ttg.memdesc<64x128xf16, #shared2, #smem>
++        %acc_28 = ttng.warp_group_dot %63, %acc_27, %arg25 {async_task_id = array<i32: 2>, inputPrecision = 0 : i32} : !ttg.memdesc<64x64xf16, #shared1, #smem> * !ttg.memdesc<64x128xf16, #shared2, #smem> -> tensor<64x128xf32, #mma>
++        %66 = ttg.memdesc_index %arg21[%b_24] {async_task_id = array<i32: 2>} : !ttg.memdesc<4x1xi64, #shared, #smem, mutable> -> !ttg.memdesc<1xi64, #shared, #smem, mutable>
+         ttng.arrive_barrier %66, 128 {async_task_id = array<i32: 2>} : !ttg.memdesc<1xi64, #shared, #smem, mutable>
+-        %acc_28 = ttng.warp_group_dot %63, %acc_27, %arg25 {async_task_id = array<i32: 2>, inputPrecision = 0 : i32} : !ttg.memdesc<64x64xf16, #shared1, #smem> * !ttg.memdesc<64x128xf16, #shared2, #smem> -> tensor<64x128xf32, #mma>
+-        %67 = ttg.memdesc_index %arg21[%b_24] {async_task_id = array<i32: 2>} : !ttg.memdesc<4x1xi64, #shared, #smem, mutable> -> !ttg.memdesc<1xi64, #shared, #smem, mutable>
++        %67 = ttg.memdesc_index %arg23[%b_24] {async_task_id = array<i32: 2>} : !ttg.memdesc<4x1xi64, #shared, #smem, mutable> -> !ttg.memdesc<1xi64, #shared, #smem, mutable>
+         ttng.arrive_barrier %67, 128 {async_task_id = array<i32: 2>} : !ttg.memdesc<1xi64, #shared, #smem, mutable>
+         %acc_29 = arith.addi %acc_21, %c1_i64_11 {async_task_id = array<i32: 2>} : i64

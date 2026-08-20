@@ -1,0 +1,84 @@
+{
+ "name": "gen:triton_red_fused_cumsum_elu_0_ca612596",
+ "fn_name": "triton_red_fused_cumsum_elu_0_ca612596",
+ "file": "corpus/gen/triton_red_fused_cumsum_elu_0_ca612596.py",
+ "grid": [
+  1,
+  1,
+  1
+ ],
+ "meta": {
+  "struct_sig": "8c324238df82946a",
+  "seed": 4153,
+  "program": "corpus/programs/p_4153.py",
+  "heuristic": "reduction",
+  "inductor_name": "triton_red_fused_cumsum_elu_0",
+  "slot_elems": 4114,
+  "align_mode": "byte",
+  "numels": {},
+  "blocks": {
+   "XBLOCK": 32,
+   "R0_BLOCK": 64
+  }
+ },
+ "patch": {},
+ "ptr_off": [
+  2,
+  3
+ ],
+ "cfg": {
+  "num_warps": 4,
+  "num_ctas": 1,
+  "num_stages": 6,
+  "maxnreg": 96,
+  "default_dot_input_precision": "tf32",
+  "launch_cooperative_grid": false,
+  "launch_pdl": false,
+  "sanitize_overflow": false,
+  "enable_fp_fusion": false
+ },
+ "args": [
+  {
+   "name": "in_out_ptr0",
+   "kind": "ptr",
+   "ty": "*fp32",
+   "value": null
+  },
+  {
+   "name": "out_ptr0",
+   "kind": "ptr",
+   "ty": "*fp32",
+   "value": null
+  },
+  {
+   "name": "ks0",
+   "kind": "int",
+   "ty": "i64",
+   "value": 63
+  },
+  {
+   "name": "xnumel",
+   "kind": "int",
+   "ty": "i32",
+   "value": 16
+  },
+  {
+   "name": "r0_numel",
+   "kind": "int",
+   "ty": "i32",
+   "value": 128
+  },
+  {
+   "name": "XBLOCK",
+   "kind": "constexpr",
+   "ty": "constexpr",
+   "value": 32
+  },
+  {
+   "name": "R0_BLOCK",
+   "kind": "constexpr",
+   "ty": "constexpr",
+   "value": 64
+  }
+ ]
+}
