@@ -1,0 +1,100 @@
+##R4-STAGE frontend
+<unknown>:0: error: 'arith.cmpf' op operand #0 must be floating-point-like, but got 'i8'
+#loc = loc(unknown)
+#loc1 = loc("inp")
+#loc2 = loc("mid_value")
+#loc3 = loc("mid_index")
+#loc4 = loc("M")
+#loc5 = loc("input")
+#loc6 = loc("value1")
+#loc7 = loc("index1")
+#loc8 = loc("value2")
+#loc9 = loc("index2")
+"builtin.module"() ({
+  "tt.func"() <{arg_attrs = [{}, {tt.divisibility = 16 : i32}, {tt.divisibility = 16 : i32}, {}], function_type = (!tt.ptr<i8>, !tt.ptr<f16>, !tt.ptr<i64>, i32) -> (), sym_name = "argmin_kernel_1_60cfa9bd", sym_visibility = "public"}> ({
+  ^bb0(%inp: !tt.ptr<i8> loc("inp"), %mid_value: !tt.ptr<f16> loc("mid_value"), %mid_index: !tt.ptr<i64> loc("mid_index"), %M: i32 loc("M")):
+    %20 = "tt.call"() <{callee = @"fz.corpus.install_flag_gems_stub.<locals>.program_id__c0"}> : () -> i64 loc(#loc)
+    %21 = "arith.constant"() <{value = 64 : i32}> : () -> i32 loc(#loc)
+    %22 = "arith.constant"() <{value = 64 : i64}> : () -> i64 loc(#loc)
+    %23 = "arith.muli"(%20, %22) <{overflowFlags = #arith.overflow<none>}> : (i64, i64) -> i64 loc(#loc)
+    %24 = "tt.make_range"() <{end = 64 : i32, start = 0 : i32}> : () -> tensor<64xi32> loc(#loc)
+    %25 = "arith.extsi"(%24) : (tensor<64xi32>) -> tensor<64xi64> loc(#loc)
+    %26 = "tt.splat"(%23) : (i64) -> tensor<64xi64> loc(#loc)
+    %27 = "arith.addi"(%26, %25) <{overflowFlags = #arith.overflow<none>}> : (tensor<64xi64>, tensor<64xi64>) -> tensor<64xi64> loc(#loc)
+    %28 = "tt.splat"(%inp) : (!tt.ptr<i8>) -> tensor<64x!tt.ptr<i8>> loc(#loc)
+    %29 = "tt.addptr"(%28, %27) : (tensor<64x!tt.ptr<i8>>, tensor<64xi64>) -> tensor<64x!tt.ptr<i8>> loc(#loc)
+    %30 = "arith.extsi"(%M) : (i32) -> i64 loc(#loc)
+    %31 = "tt.splat"(%30) : (i64) -> tensor<64xi64> loc(#loc)
+    %32 = "arith.cmpi"(%27, %31) <{predicate = 2 : i64}> : (tensor<64xi64>, tensor<64xi64>) -> tensor<64xi1> loc(#loc)
+    "tt.call"() <{callee = @_r4_corpus_bench.get_dtype_max_60cfa9bd__cfp8e4b15}> : () -> () loc(#loc)
+    %33 = "arith.constant"() <{value = 0x7F800000 : f32}> : () -> f32 loc(#loc)
+    %34 = "arith.constant"() <{value = dense<0x7F800000> : tensor<64xf32>}> : () -> tensor<64xf32> loc(#loc)
+    %35 = "tt.fp_to_fp"(%34) <{rounding = 0 : i32}> : (tensor<64xf32>) -> tensor<64xf16> loc(#loc)
+    %36 = "tt.elementwise_inline_asm"(%35) <{asm_string = "{\0A            .reg .pred p<4>;\0A            .reg .b32 a<2>, b<2>;\0A            .reg .b16 c<4>;\0A            .reg .b16 max_val_f16;\0A            .reg .b32 max_val_f16x2;\0A            mov.b16 max_val_f16,   0x3F00;\0A            mov.b32 max_val_f16x2, 0x3F003F00;\0A            and.b32 a0, $1, 0x7fff7fff;\0A            and.b32 a1, $2, 0x7fff7fff;min.f16x2 a0, a0, max_val_f16x2;\0A                  min.f16x2 a1, a1, max_val_f16x2;mad.lo.u32 a0, a0, 2, 0x00800080;\0A              mad.lo.u32 a1, a1, 2, 0x00800080;\0A              lop3.b32 b0, $1, 0x80008000, a0, 0xea;\0A              lop3.b32 b1, $2, 0x80008000, a1, 0xea;\0A              prmt.b32 $0, b0, b1, 0x7531;\0A              }", constraints = "=r,r,r", packed_element = 4 : i32, pure = true}> : (tensor<64xf16>) -> tensor<64xi8> loc(#loc)
+    %37 = "tt.load"(%29, %32, %36) <{cache = 1 : i32, evict = 1 : i32, isVolatile = false, operandSegmentSizes = array<i32: 1, 1, 1>}> : (tensor<64x!tt.ptr<i8>>, tensor<64xi1>, tensor<64xi8>) -> tensor<64xi8> loc(#loc)
+    %38:2 = "tt.call"(%37) <{callee = @triton.language.standard.min__fp8e4b15S64S_c0_cTrue_cTrue_cFalse}> : (tensor<64xi8>) -> (i8, i32) loc(#loc)
+    %39 = "arith.constant"() <{value = 64 : i32}> : () -> i32 loc(#loc)
+    %40 = "arith.constant"() <{value = 64 : i64}> : () -> i64 loc(#loc)
+    %41 = "arith.muli"(%20, %40) <{overflowFlags = #arith.overflow<none>}> : (i64, i64) -> i64 loc(#loc)
+    %42 = "arith.extsi"(%38#1) : (i32) -> i64 loc(#loc)
+    %43 = "arith.addi"(%42, %41) <{overflowFlags = #arith.overflow<none>}> : (i64, i64) -> i64 loc(#loc)
+    %44 = "tt.addptr"(%mid_value, %20) : (!tt.ptr<f16>, i64) -> !tt.ptr<f16> loc(#loc)
+    %45 = "tt.addptr"(%mid_index, %20) : (!tt.ptr<i64>, i64) -> !tt.ptr<i64> loc(#loc)
+    %46 = "tt.elementwise_inline_asm"(%38#0) <{asm_string = "{                                      \0A.reg .b32 a<2>, b<2>;                  \0Aprmt.b32 a0, 0, $2, 0x5746;            \0Aand.b32 b0, a0, 0x7f007f00;            \0Aand.b32 b1, a0, 0x00ff00ff;            \0Aand.b32 a1, a0, 0x00800080;            \0Ashr.b32  b0, b0, 1;                    \0Aadd.u32 b1, b1, a1;                    \0Alop3.b32 $0, b0, 0x80008000, a0, 0xf8; \0Ashl.b32 $1, b1, 7;                     \0A}                                      \0A", constraints = "=r,=r,r", packed_element = 4 : i32, pure = true}> : (i8) -> f16 loc(#loc)
+    "tt.store"(%44, %46) <{cache = 1 : i32, evict = 1 : i32}> : (!tt.ptr<f16>, f16) -> () loc(#loc)
+    "tt.store"(%45, %43) <{cache = 1 : i32, evict = 1 : i32}> : (!tt.ptr<i64>, i64) -> () loc(#loc)
+    "tt.return"() : () -> () loc(#loc)
+  }) {noinline = false} : () -> () loc(#loc)
+  "tt.func"() <{function_type = () -> i64, sym_name = "fz.corpus.install_flag_gems_stub.<locals>.program_id__c0", sym_visibility = "private"}> ({
+    %17 = "tt.get_program_id"() <{axis = 0 : i32}> : () -> i32 loc(#loc)
+    %18 = "arith.extsi"(%17) : (i32) -> i64 loc(#loc)
+    "tt.return"(%18) : (i64) -> () loc(#loc)
+  ^bb1:  // no predecessors
+    %19 = "ub.poison"() <{value = #ub.poison}> : () -> i64 loc(#loc)
+    "tt.return"(%19) : (i64) -> () loc(#loc)
+  }) {noinline = false} : () -> () loc(#loc)
+  "tt.func"() <{function_type = () -> (), sym_name = "_r4_corpus_bench.get_dtype_max_60cfa9bd__cfp8e4b15", sym_visibility = "private"}> ({
+    "tt.return"() : () -> () loc(#loc)
+  ^bb1:  // no predecessors
+    "tt.return"() : () -> () loc(#loc)
+  }) {noinline = false} : () -> () loc(#loc)
+  "tt.func"() <{function_type = (tensor<64xi8>) -> (i8, i32), sym_name = "triton.language.standard.min__fp8e4b15S64S_c0_cTrue_cTrue_cFalse", sym_visibility = "private"}> ({
+  ^bb0(%input: tensor<64xi8> loc("input")):
+    %12 = "tt.make_range"() <{end = 64 : i32, start = 0 : i32}> : () -> tensor<64xi32> loc(#loc)
+    %13:2 = "tt.reduce"(%input, %12) <{axis = 0 : i32}> ({
+    ^bb0(%arg9: i8 loc(unknown), %arg10: i32 loc(unknown), %arg11: i8 loc(unknown), %arg12: i32 loc(unknown)):
+      %16:2 = "tt.call"(%arg9, %arg10, %arg11, %arg12) <{callee = @triton.language.standard._argmin_combine_tie_break_left__fp8e4b15_i32_fp8e4b15_i32}> : (i8, i32, i8, i32) -> (i8, i32) loc(#loc)
+      "tt.reduce.return"(%16#0, %16#1) : (i8, i32) -> () loc(#loc)
+    }) : (tensor<64xi8>, tensor<64xi32>) -> (i8, i32) loc(#loc)
+    "tt.return"(%13#0, %13#1) : (i8, i32) -> () loc(#loc)
+  ^bb1:  // no predecessors
+    %14 = "ub.poison"() <{value = #ub.poison}> : () -> i8 loc(#loc)
+    %15 = "ub.poison"() <{value = #ub.poison}> : () -> i32 loc(#loc)
+    "tt.return"(%14, %15) : (i8, i32) -> () loc(#loc)
+  }) {noinline = false} : () -> () loc(#loc)
+  "tt.func"() <{function_type = (i8, i32, i8, i32) -> (i8, i32), sym_name = "triton.language.standard._argmin_combine_tie_break_left__fp8e4b15_i32_fp8e4b15_i32", sym_visibility = "private"}> ({
+  ^bb0(%value1: i8 loc("value1"), %index1: i32 loc("index1"), %value2: i8 loc("value2"), %index2: i32 loc("index2")):
+    %9:2 = "tt.call"(%value1, %index1, %value2, %index2) <{callee = @triton.language.standard._argmin_combine__fp8e4b15_i32_fp8e4b15_i32_cTrue}> : (i8, i32, i8, i32) -> (i8, i32) loc(#loc)
+    "tt.return"(%9#0, %9#1) : (i8, i32) -> () loc(#loc)
+  ^bb1:  // no predecessors
+    %10 = "ub.poison"() <{value = #ub.poison}> : () -> i8 loc(#loc)
+    %11 = "ub.poison"() <{value = #ub.poison}> : () -> i32 loc(#loc)
+    "tt.return"(%10, %11) : (i8, i32) -> () loc(#loc)
+  }) {noinline = false} : () -> () loc(#loc)
+  "tt.func"() <{function_type = (i8, i32, i8, i32) -> (i8, i32), sym_name = "triton.language.standard._argmin_combine__fp8e4b15_i32_fp8e4b15_i32_cTrue", sym_visibility = "private"}> ({
+  ^bb0(%value1: i8 loc("value1"), %index1: i32 loc("index1"), %value2: i8 loc("value2"), %index2: i32 loc("index2")):
+    %0 = "arith.cmpf"(%value1, %value2) <{fastmath = #arith.fastmath<none>, predicate = 1 : i64}> : (i8, i8) -> i1 loc(#loc)
+    %1 = "arith.cmpi"(%index1, %index2) <{predicate = 2 : i64}> : (i32, i32) -> i1 loc(#loc)
+    %2 = "arith.andi"(%0, %1) : (i1, i1) -> i1 loc(#loc)
+    %3 = "arith.cmpf"(%value1, %value2) <{fastmath = #arith.fastmath<none>, predicate = 4 : i64}> : (i8, i8) -> i1 loc(#loc)
+    %4 = "arith.ori"(%3, %2) : (i1, i1) -> i1 loc(#loc)
+    %5 = "arith.select"(%4, %value1, %value2) : (i1, i8, i8) -> i8 loc(#loc)
+    %6 = "arith.select"(%4, %index1, %index2) : (i1, i32, i32) -> i32 loc(#loc)
+    "tt.return"(%5, %6) : (i8, i32) -> () loc(#loc)
+  ^bb1:  // no predecessors
+    %7 = "ub.poison"() <{value = #ub.poison}> : () -> i8 loc(#loc)
+    %8 = "ub.poison"() <{value = #ub.poison}> : () -> i32 loc(#loc)
+    "tt.return"(%7, %8) : (i8, i32) -> () loc(#loc)
+  }) {noinline = false} : () -> () loc(#loc)
+}) : () -> () loc(#loc)
+
