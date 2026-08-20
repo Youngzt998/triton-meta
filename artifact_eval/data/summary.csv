@@ -1,27 +1,461 @@
-experiment,group,best,byte_identical,configs_bit_exact,configs_ran,declined,draws_compared,draws_identical,geomean_speedup,median_K,n_cases,n_comparisons,n_shapes,ours_over_cublas,price_of_constraint,shapes_with_a_differing_draw,wins,worst
-gemm.bitmatch,all,,91523,,,1118,,,,,,926990,92699,,,58,,
-gemm.bitmatch,differing/mode=split,,,,,,,,,226256,,,58,,,,,
-gemm.bitmatch,identical/mode=plain,,,,,,,,,,,,27548,,,,,
-gemm.bitmatch,identical/mode=split,,,,,,,,,,,,20547,,,,,
-gemm.bitmatch,identical/mode=splitk_groups,,,,,,,,,,,,20146,,,,,
-gemm.bitmatch,identical/mode=gemv13,,,,,,,,,,,,8859,,,,,
-gemm.bitmatch,identical/mode=k_per_dot,,,,,,,,,,,,8026,,,,,
-gemm.bitmatch,identical/mode=gemmsn,,,,,,,,,,,,2836,,,,,
-gemm.bitmatch,identical/mode=gemv14,,,,,,,,,,,,2519,,,,,
-gemm.bitmatch,identical/mode=gemv_cslice,,,,,,,,,,,,1042,,,,,
-gemm.perf,all,,,672,672,,,,,,,,8,0.7385,0.948,,,
-gemm.fusion.dense,fp8q,1.057,,,,,630,630,0.9284,,63,,,,,,8,0.808
-gemm.fusion.dense,lmhead,1.023,,,,,80,80,0.9976,,8,,,,,,2,0.974
-gemm.fusion.dense,lora,1.801,,,,,1550,1550,1.2561,,155,,,,,,105,0.807
-gemm.fusion.dense,resid,1.0,,,,,170,170,0.8614,,17,,,,,,0,0.789
-gemm.fusion.dense,swiglu,1.0,,,,,170,170,0.8571,,17,,,,,,0,0.775
-gemm.fusion.dense,ALL,1.801,,,,,2600,2600,1.103,,260,,,,,,115,0.775
-gemm.fusion.moe,attn,1.121,,,,,610,610,0.9127,,61,,,,,,12,0.709
-gemm.fusion.moe,lmhead,1.155,,,,,490,490,1.0392,,49,,,,,,41,0.98
-gemm.fusion.moe,lora,1.805,,,,,1680,1680,1.3817,,168,,,,,,157,0.809
-gemm.fusion.moe,moe_down,1.2,,,,,720,720,0.9517,,72,,,,,,14,0.84
-gemm.fusion.moe,moe_up,1.028,,,,,510,510,0.8244,,51,,,,,,1,0.653
-gemm.fusion.moe,ALL,1.805,,,,,4010,4010,1.0973,,401,,,,,,225,0.653
-gemm.fusion.oracle,inductor_over_ours,1.317,,,,,,,1.189,,4,,,,,,4,1.09
-gemm.fusion.oracle,inductor_tuned_over_ours,1.314,,,,,,,1.1195,,4,,,,,,3,1.0
-gemm.fusion.oracle,eager_unfused_over_ours,1.789,,,,,,,1.4968,,4,,,,,,4,1.326
+experiment,group,metric,value,n,attempted,note
+gemm.bitmatch,all,shapes_compared,153606,153606,155310,"this table is the UNION of every run, not one run. The runs behind this commit used different shape-regime code and are not comparable shape for shape"
+gemm.bitmatch,all,shapes_with_a_differing_draw,92,153606,153606,"expected to be non-zero and to be entirely mode=split at deep K: that is cuBLAS's own k-tail defect, which gemm.cublas-bug reproduces standalone"
+gemm.bitmatch,all,draws_compared,1536060,153606,153606,
+gemm.bitmatch,all,draws_byte_identical,1535140,153606,153606,
+gemm.bitmatch,all,shapes_declined,1704,155310,155310,"out of scope, or cuBLAS returned no algorithm; no comparison was made"
+gemm.bitmatch,all,shapes_with_an_error,0,155310,155310,
+gemm.bitmatch,mode=plain,shapes_compared,46147,46147,46147,
+gemm.bitmatch,mode=plain,shapes_with_a_differing_draw,0,46147,46147,
+gemm.bitmatch,mode=k_per_dot,shapes_compared,13660,13660,13660,
+gemm.bitmatch,mode=k_per_dot,shapes_with_a_differing_draw,0,13660,13660,
+gemm.bitmatch,mode=split,shapes_compared,34544,34544,34544,
+gemm.bitmatch,mode=split,shapes_with_a_differing_draw,92,34544,34544,
+gemm.bitmatch,mode=split_blocks,shapes_compared,0,0,0,unreachable on sm_103: no arch profile lists a block-level key for it
+gemm.bitmatch,mode=split_blocks,shapes_with_a_differing_draw,0,0,0,
+gemm.bitmatch,mode=splitk_groups,shapes_compared,33677,33677,33677,
+gemm.bitmatch,mode=splitk_groups,shapes_with_a_differing_draw,0,33677,33677,
+gemm.bitmatch,mode=gemmsn,shapes_compared,4731,4731,4731,
+gemm.bitmatch,mode=gemmsn,shapes_with_a_differing_draw,0,4731,4731,
+gemm.bitmatch,mode=gemv13,shapes_compared,14897,14897,14897,
+gemm.bitmatch,mode=gemv13,shapes_with_a_differing_draw,0,14897,14897,
+gemm.bitmatch,mode=gemv_cslice,shapes_compared,1722,1722,1722,
+gemm.bitmatch,mode=gemv_cslice,shapes_with_a_differing_draw,0,1722,1722,
+gemm.bitmatch,mode=gemv14,shapes_compared,4228,4228,4228,
+gemm.bitmatch,mode=gemv14,shapes_with_a_differing_draw,0,4228,4228,
+gemm.perf.random,all,shapes_measured,876,876,1400,PARTIAL. the full sweep at PERF_RANDOM_PER_CELL=100 is 1400 shapes; read run_perf_random.txt for the run's own coverage line before quoting a partial group
+gemm.perf.random,all,torch_auto_over_cublas_geomean,0.8951,542,876,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.random,all,torch_triton_over_cublas_geomean,0.8953,537,876,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.random,all,bitequiv_autotuning_over_cublas_geomean,0.4907,650,876,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.random,all,gb300_accelerated_over_cublas_geomean,0.7567,650,876,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.random,all,gb300_accelerated_draws_byte_identical,6500,6500,6500,"MUST equal the total: this arm is bit-equivalent to cuBLAS by construction, and a short count means its times are not a measurement"
+gemm.perf.random,all,bitequiv_autotuning_draws_byte_identical,6500,6500,6500,"MUST equal the total: this arm is bit-equivalent to cuBLAS by construction, and a short count means its times are not a measurement"
+gemm.perf.random,all,torch_auto_draws_byte_identical,2854,5420,5420,"unconstrained arm, not expected to match"
+gemm.perf.random,all,shapes_with_a_near_floor_arm,44,876,876,"under three times the replay floor, so every ratio on them is pulled toward 1"
+gemm.perf.random,aligned/fp16,shapes_measured,100,100,100,
+gemm.perf.random,aligned/fp16,torch_auto_over_cublas_geomean,0.5511,100,100,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.random,aligned/fp16,torch_triton_over_cublas_geomean,0.5534,100,100,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.random,aligned/fp16,bitequiv_autotuning_over_cublas_geomean,0.5942,100,100,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.random,aligned/fp16,gb300_accelerated_over_cublas_geomean,0.6893,100,100,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.random,aligned/fp16,gb300_accelerated_draws_byte_identical,1000,1000,1000,"MUST equal the total: this arm is bit-equivalent to cuBLAS by construction, and a short count means its times are not a measurement"
+gemm.perf.random,aligned/fp16,bitequiv_autotuning_draws_byte_identical,1000,1000,1000,"MUST equal the total: this arm is bit-equivalent to cuBLAS by construction, and a short count means its times are not a measurement"
+gemm.perf.random,aligned/fp16,torch_auto_draws_byte_identical,910,1000,1000,"unconstrained arm, not expected to match"
+gemm.perf.random,aligned/fp16,shapes_with_a_near_floor_arm,0,100,100,"under three times the replay floor, so every ratio on them is pulled toward 1"
+gemm.perf.random,aligned/fp8,shapes_measured,100,100,100,
+gemm.perf.random,aligned/fp8,torch_auto_over_cublas_geomean,0.5621,100,100,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.random,aligned/fp8,torch_triton_over_cublas_geomean,0.562,100,100,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.random,aligned/fp8,bitequiv_autotuning_over_cublas_geomean,0.2666,100,100,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.random,aligned/fp8,gb300_accelerated_over_cublas_geomean,0.5731,100,100,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.random,aligned/fp8,gb300_accelerated_draws_byte_identical,1000,1000,1000,"MUST equal the total: this arm is bit-equivalent to cuBLAS by construction, and a short count means its times are not a measurement"
+gemm.perf.random,aligned/fp8,bitequiv_autotuning_draws_byte_identical,1000,1000,1000,"MUST equal the total: this arm is bit-equivalent to cuBLAS by construction, and a short count means its times are not a measurement"
+gemm.perf.random,aligned/fp8,torch_auto_draws_byte_identical,935,1000,1000,"unconstrained arm, not expected to match"
+gemm.perf.random,aligned/fp8,shapes_with_a_near_floor_arm,3,100,100,"under three times the replay floor, so every ratio on them is pulled toward 1"
+gemm.perf.random,any/fp16,shapes_measured,100,100,100,
+gemm.perf.random,any/fp16,torch_auto_over_cublas_geomean,1.0622,100,100,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.random,any/fp16,torch_triton_over_cublas_geomean,1.0638,99,100,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.random,any/fp16,bitequiv_autotuning_over_cublas_geomean,0.7296,98,100,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.random,any/fp16,gb300_accelerated_over_cublas_geomean,0.8079,98,100,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.random,any/fp16,gb300_accelerated_draws_byte_identical,980,980,980,"MUST equal the total: this arm is bit-equivalent to cuBLAS by construction, and a short count means its times are not a measurement"
+gemm.perf.random,any/fp16,bitequiv_autotuning_draws_byte_identical,980,980,980,"MUST equal the total: this arm is bit-equivalent to cuBLAS by construction, and a short count means its times are not a measurement"
+gemm.perf.random,any/fp16,torch_auto_draws_byte_identical,446,1000,1000,"unconstrained arm, not expected to match"
+gemm.perf.random,any/fp16,shapes_with_a_near_floor_arm,35,100,100,"under three times the replay floor, so every ratio on them is pulled toward 1"
+gemm.perf.random,any/fp8,shapes_measured,100,100,100,
+gemm.perf.random,any/fp8,torch_auto_over_cublas_geomean,0.6198,9,100,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.random,any/fp8,torch_triton_over_cublas_geomean,0.5416,7,100,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.random,any/fp8,bitequiv_autotuning_over_cublas_geomean,0.6701,62,100,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.random,any/fp8,gb300_accelerated_over_cublas_geomean,0.6562,62,100,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.random,any/fp8,gb300_accelerated_draws_byte_identical,620,620,620,"MUST equal the total: this arm is bit-equivalent to cuBLAS by construction, and a short count means its times are not a measurement"
+gemm.perf.random,any/fp8,bitequiv_autotuning_draws_byte_identical,620,620,620,"MUST equal the total: this arm is bit-equivalent to cuBLAS by construction, and a short count means its times are not a measurement"
+gemm.perf.random,any/fp8,torch_auto_draws_byte_identical,76,90,90,"unconstrained arm, not expected to match"
+gemm.perf.random,any/fp8,shapes_with_a_near_floor_arm,6,100,100,"under three times the replay floor, so every ratio on them is pulled toward 1"
+gemm.perf.random,decode/fp16,shapes_measured,36,36,36,
+gemm.perf.random,decode/fp16,torch_auto_over_cublas_geomean,0.9202,36,36,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.random,decode/fp16,torch_triton_over_cublas_geomean,0.921,36,36,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.random,decode/fp16,bitequiv_autotuning_over_cublas_geomean,0.9719,36,36,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.random,decode/fp16,gb300_accelerated_over_cublas_geomean,0.9131,36,36,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.random,decode/fp16,gb300_accelerated_draws_byte_identical,360,360,360,"MUST equal the total: this arm is bit-equivalent to cuBLAS by construction, and a short count means its times are not a measurement"
+gemm.perf.random,decode/fp16,bitequiv_autotuning_draws_byte_identical,360,360,360,"MUST equal the total: this arm is bit-equivalent to cuBLAS by construction, and a short count means its times are not a measurement"
+gemm.perf.random,decode/fp16,torch_auto_draws_byte_identical,200,360,360,"unconstrained arm, not expected to match"
+gemm.perf.random,decode/fp16,shapes_with_a_near_floor_arm,0,36,36,"under three times the replay floor, so every ratio on them is pulled toward 1"
+gemm.perf.random,decode/fp8,shapes_measured,35,35,35,
+gemm.perf.random,decode/fp8,torch_auto_over_cublas_geomean,0.9337,35,35,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.random,decode/fp8,torch_triton_over_cublas_geomean,0.9343,35,35,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.random,decode/fp8,bitequiv_autotuning_over_cublas_geomean,0.0555,35,35,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.random,decode/fp8,gb300_accelerated_over_cublas_geomean,0.7785,35,35,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.random,decode/fp8,gb300_accelerated_draws_byte_identical,350,350,350,"MUST equal the total: this arm is bit-equivalent to cuBLAS by construction, and a short count means its times are not a measurement"
+gemm.perf.random,decode/fp8,bitequiv_autotuning_draws_byte_identical,350,350,350,"MUST equal the total: this arm is bit-equivalent to cuBLAS by construction, and a short count means its times are not a measurement"
+gemm.perf.random,decode/fp8,torch_auto_draws_byte_identical,175,350,350,"unconstrained arm, not expected to match"
+gemm.perf.random,decode/fp8,shapes_with_a_near_floor_arm,0,35,35,"under three times the replay floor, so every ratio on them is pulled toward 1"
+gemm.perf.random,deepk/fp16,shapes_measured,34,34,34,
+gemm.perf.random,deepk/fp16,torch_auto_over_cublas_geomean,0.6528,34,34,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.random,deepk/fp16,torch_triton_over_cublas_geomean,0.6372,32,34,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.random,deepk/fp16,bitequiv_autotuning_over_cublas_geomean,0.432,34,34,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.random,deepk/fp16,gb300_accelerated_over_cublas_geomean,0.5145,34,34,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.random,deepk/fp16,gb300_accelerated_draws_byte_identical,340,340,340,"MUST equal the total: this arm is bit-equivalent to cuBLAS by construction, and a short count means its times are not a measurement"
+gemm.perf.random,deepk/fp16,bitequiv_autotuning_draws_byte_identical,340,340,340,"MUST equal the total: this arm is bit-equivalent to cuBLAS by construction, and a short count means its times are not a measurement"
+gemm.perf.random,deepk/fp16,torch_auto_draws_byte_identical,40,340,340,"unconstrained arm, not expected to match"
+gemm.perf.random,deepk/fp16,shapes_with_a_near_floor_arm,0,34,34,"under three times the replay floor, so every ratio on them is pulled toward 1"
+gemm.perf.random,deepk/fp8,shapes_measured,80,80,80,
+gemm.perf.random,deepk/fp8,bitequiv_autotuning_over_cublas_geomean,0.1944,2,80,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.random,deepk/fp8,gb300_accelerated_over_cublas_geomean,0.316,2,80,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.random,deepk/fp8,gb300_accelerated_draws_byte_identical,20,20,20,"MUST equal the total: this arm is bit-equivalent to cuBLAS by construction, and a short count means its times are not a measurement"
+gemm.perf.random,deepk/fp8,bitequiv_autotuning_draws_byte_identical,20,20,20,"MUST equal the total: this arm is bit-equivalent to cuBLAS by construction, and a short count means its times are not a measurement"
+gemm.perf.random,deepk/fp8,shapes_with_a_near_floor_arm,0,80,80,"under three times the replay floor, so every ratio on them is pulled toward 1"
+gemm.perf.random,gemv/fp16,shapes_measured,14,14,14,
+gemm.perf.random,gemv/fp16,torch_auto_over_cublas_geomean,1.3173,14,14,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.random,gemv/fp16,torch_triton_over_cublas_geomean,1.319,14,14,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.random,gemv/fp16,bitequiv_autotuning_over_cublas_geomean,0.3158,14,14,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.random,gemv/fp16,gb300_accelerated_over_cublas_geomean,0.8245,14,14,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.random,gemv/fp16,gb300_accelerated_draws_byte_identical,140,140,140,"MUST equal the total: this arm is bit-equivalent to cuBLAS by construction, and a short count means its times are not a measurement"
+gemm.perf.random,gemv/fp16,bitequiv_autotuning_draws_byte_identical,140,140,140,"MUST equal the total: this arm is bit-equivalent to cuBLAS by construction, and a short count means its times are not a measurement"
+gemm.perf.random,gemv/fp16,torch_auto_draws_byte_identical,2,140,140,"unconstrained arm, not expected to match"
+gemm.perf.random,gemv/fp16,shapes_with_a_near_floor_arm,0,14,14,"under three times the replay floor, so every ratio on them is pulled toward 1"
+gemm.perf.random,gemv/fp8,shapes_measured,41,41,41,
+gemm.perf.random,gemv/fp8,bitequiv_autotuning_over_cublas_geomean,0.6937,12,41,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.random,gemv/fp8,gb300_accelerated_over_cublas_geomean,0.384,12,41,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.random,gemv/fp8,gb300_accelerated_draws_byte_identical,120,120,120,"MUST equal the total: this arm is bit-equivalent to cuBLAS by construction, and a short count means its times are not a measurement"
+gemm.perf.random,gemv/fp8,bitequiv_autotuning_draws_byte_identical,120,120,120,"MUST equal the total: this arm is bit-equivalent to cuBLAS by construction, and a short count means its times are not a measurement"
+gemm.perf.random,gemv/fp8,shapes_with_a_near_floor_arm,0,41,41,"under three times the replay floor, so every ratio on them is pulled toward 1"
+gemm.perf.random,smallm/fp16,shapes_measured,17,17,17,
+gemm.perf.random,smallm/fp16,torch_auto_over_cublas_geomean,1.0428,17,17,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.random,smallm/fp16,torch_triton_over_cublas_geomean,1.0439,17,17,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.random,smallm/fp16,bitequiv_autotuning_over_cublas_geomean,0.6424,17,17,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.random,smallm/fp16,gb300_accelerated_over_cublas_geomean,0.7342,17,17,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.random,smallm/fp16,gb300_accelerated_draws_byte_identical,170,170,170,"MUST equal the total: this arm is bit-equivalent to cuBLAS by construction, and a short count means its times are not a measurement"
+gemm.perf.random,smallm/fp16,bitequiv_autotuning_draws_byte_identical,170,170,170,"MUST equal the total: this arm is bit-equivalent to cuBLAS by construction, and a short count means its times are not a measurement"
+gemm.perf.random,smallm/fp16,torch_auto_draws_byte_identical,0,170,170,"unconstrained arm, not expected to match"
+gemm.perf.random,smallm/fp16,shapes_with_a_near_floor_arm,0,17,17,"under three times the replay floor, so every ratio on them is pulled toward 1"
+gemm.perf.random,smallm/fp8,shapes_measured,26,26,26,
+gemm.perf.random,smallm/fp8,bitequiv_autotuning_over_cublas_geomean,0.4277,14,26,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.random,smallm/fp8,gb300_accelerated_over_cublas_geomean,0.3223,14,26,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.random,smallm/fp8,gb300_accelerated_draws_byte_identical,140,140,140,"MUST equal the total: this arm is bit-equivalent to cuBLAS by construction, and a short count means its times are not a measurement"
+gemm.perf.random,smallm/fp8,bitequiv_autotuning_draws_byte_identical,140,140,140,"MUST equal the total: this arm is bit-equivalent to cuBLAS by construction, and a short count means its times are not a measurement"
+gemm.perf.random,smallm/fp8,shapes_with_a_near_floor_arm,0,26,26,"under three times the replay floor, so every ratio on them is pulled toward 1"
+gemm.perf.random,unaligned/fp16,shapes_measured,97,97,97,
+gemm.perf.random,unaligned/fp16,torch_auto_over_cublas_geomean,2.0737,97,97,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.random,unaligned/fp16,torch_triton_over_cublas_geomean,2.0735,97,97,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.random,unaligned/fp16,bitequiv_autotuning_over_cublas_geomean,0.7296,97,97,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.random,unaligned/fp16,gb300_accelerated_over_cublas_geomean,1.4319,97,97,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.random,unaligned/fp16,gb300_accelerated_draws_byte_identical,970,970,970,"MUST equal the total: this arm is bit-equivalent to cuBLAS by construction, and a short count means its times are not a measurement"
+gemm.perf.random,unaligned/fp16,bitequiv_autotuning_draws_byte_identical,970,970,970,"MUST equal the total: this arm is bit-equivalent to cuBLAS by construction, and a short count means its times are not a measurement"
+gemm.perf.random,unaligned/fp16,torch_auto_draws_byte_identical,70,970,970,"unconstrained arm, not expected to match"
+gemm.perf.random,unaligned/fp16,shapes_with_a_near_floor_arm,0,97,97,"under three times the replay floor, so every ratio on them is pulled toward 1"
+gemm.perf.random,unaligned/fp8,shapes_measured,96,96,96,
+gemm.perf.random,unaligned/fp8,bitequiv_autotuning_over_cublas_geomean,0.5343,29,96,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.random,unaligned/fp8,gb300_accelerated_over_cublas_geomean,0.8732,29,96,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.random,unaligned/fp8,gb300_accelerated_draws_byte_identical,290,290,290,"MUST equal the total: this arm is bit-equivalent to cuBLAS by construction, and a short count means its times are not a measurement"
+gemm.perf.random,unaligned/fp8,bitequiv_autotuning_draws_byte_identical,290,290,290,"MUST equal the total: this arm is bit-equivalent to cuBLAS by construction, and a short count means its times are not a measurement"
+gemm.perf.random,unaligned/fp8,shapes_with_a_near_floor_arm,0,96,96,"under three times the replay floor, so every ratio on them is pulled toward 1"
+gemm.perf.static,all,shapes_measured,698,698,698,"698 (model, layer, dtype) cases over 590 distinct (M, N, K, dtype) shapes"
+gemm.perf.static,all,torch_auto_over_cublas_geomean,0.655,698,698,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.static,all,torch_triton_over_cublas_geomean,0.6565,698,698,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.static,all,bitequiv_autotuning_over_cublas_geomean,0.4332,698,698,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.static,all,gb300_accelerated_over_cublas_geomean,0.6367,698,698,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.static,all,gb300_accelerated_draws_byte_identical,6980,6980,6980,"MUST equal the total: this arm is bit-equivalent to cuBLAS by construction, and a short count means its times are not a measurement"
+gemm.perf.static,all,bitequiv_autotuning_draws_byte_identical,6980,6980,6980,"MUST equal the total: this arm is bit-equivalent to cuBLAS by construction, and a short count means its times are not a measurement"
+gemm.perf.static,all,torch_auto_draws_byte_identical,6475,6980,6980,"unconstrained arm, not expected to match"
+gemm.perf.static,all,shapes_with_a_near_floor_arm,73,698,698,"under three times the replay floor, so every ratio on them is pulled toward 1"
+gemm.perf.static,attn,shapes_measured,114,114,114,
+gemm.perf.static,attn,torch_auto_over_cublas_geomean,0.6241,114,114,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.static,attn,torch_triton_over_cublas_geomean,0.6285,114,114,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.static,attn,bitequiv_autotuning_over_cublas_geomean,0.4171,114,114,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.static,attn,gb300_accelerated_over_cublas_geomean,0.6859,114,114,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.static,attn,gb300_accelerated_draws_byte_identical,1140,1140,1140,"MUST equal the total: this arm is bit-equivalent to cuBLAS by construction, and a short count means its times are not a measurement"
+gemm.perf.static,attn,bitequiv_autotuning_draws_byte_identical,1140,1140,1140,"MUST equal the total: this arm is bit-equivalent to cuBLAS by construction, and a short count means its times are not a measurement"
+gemm.perf.static,attn,torch_auto_draws_byte_identical,1140,1140,1140,"unconstrained arm, not expected to match"
+gemm.perf.static,attn,shapes_with_a_near_floor_arm,0,114,114,"under three times the replay floor, so every ratio on them is pulled toward 1"
+gemm.perf.static,lmhead,shapes_measured,56,56,56,
+gemm.perf.static,lmhead,torch_auto_over_cublas_geomean,0.8781,56,56,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.static,lmhead,torch_triton_over_cublas_geomean,0.8775,56,56,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.static,lmhead,bitequiv_autotuning_over_cublas_geomean,0.9507,56,56,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.static,lmhead,gb300_accelerated_over_cublas_geomean,0.9099,56,56,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.static,lmhead,gb300_accelerated_draws_byte_identical,560,560,560,"MUST equal the total: this arm is bit-equivalent to cuBLAS by construction, and a short count means its times are not a measurement"
+gemm.perf.static,lmhead,bitequiv_autotuning_draws_byte_identical,560,560,560,"MUST equal the total: this arm is bit-equivalent to cuBLAS by construction, and a short count means its times are not a measurement"
+gemm.perf.static,lmhead,torch_auto_draws_byte_identical,410,560,560,"unconstrained arm, not expected to match"
+gemm.perf.static,lmhead,shapes_with_a_near_floor_arm,0,56,56,"under three times the replay floor, so every ratio on them is pulled toward 1"
+gemm.perf.static,lora,shapes_measured,168,168,168,
+gemm.perf.static,lora,torch_auto_over_cublas_geomean,0.7654,168,168,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.static,lora,torch_triton_over_cublas_geomean,0.7659,168,168,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.static,lora,bitequiv_autotuning_over_cublas_geomean,0.7076,168,168,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.static,lora,gb300_accelerated_over_cublas_geomean,0.651,168,168,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.static,lora,gb300_accelerated_draws_byte_identical,1680,1680,1680,"MUST equal the total: this arm is bit-equivalent to cuBLAS by construction, and a short count means its times are not a measurement"
+gemm.perf.static,lora,bitequiv_autotuning_draws_byte_identical,1680,1680,1680,"MUST equal the total: this arm is bit-equivalent to cuBLAS by construction, and a short count means its times are not a measurement"
+gemm.perf.static,lora,torch_auto_draws_byte_identical,1680,1680,1680,"unconstrained arm, not expected to match"
+gemm.perf.static,lora,shapes_with_a_near_floor_arm,56,168,168,"under three times the replay floor, so every ratio on them is pulled toward 1"
+gemm.perf.static,mlp_down,shapes_measured,42,42,42,
+gemm.perf.static,mlp_down,torch_auto_over_cublas_geomean,0.645,42,42,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.static,mlp_down,torch_triton_over_cublas_geomean,0.647,42,42,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.static,mlp_down,bitequiv_autotuning_over_cublas_geomean,0.4184,42,42,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.static,mlp_down,gb300_accelerated_over_cublas_geomean,0.6953,42,42,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.static,mlp_down,gb300_accelerated_draws_byte_identical,420,420,420,"MUST equal the total: this arm is bit-equivalent to cuBLAS by construction, and a short count means its times are not a measurement"
+gemm.perf.static,mlp_down,bitequiv_autotuning_draws_byte_identical,420,420,420,"MUST equal the total: this arm is bit-equivalent to cuBLAS by construction, and a short count means its times are not a measurement"
+gemm.perf.static,mlp_down,torch_auto_draws_byte_identical,400,420,420,"unconstrained arm, not expected to match"
+gemm.perf.static,mlp_down,shapes_with_a_near_floor_arm,0,42,42,"under three times the replay floor, so every ratio on them is pulled toward 1"
+gemm.perf.static,mlp_up,shapes_measured,42,42,42,
+gemm.perf.static,mlp_up,torch_auto_over_cublas_geomean,0.6596,42,42,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.static,mlp_up,torch_triton_over_cublas_geomean,0.671,42,42,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.static,mlp_up,bitequiv_autotuning_over_cublas_geomean,0.4037,42,42,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.static,mlp_up,gb300_accelerated_over_cublas_geomean,0.718,42,42,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.static,mlp_up,gb300_accelerated_draws_byte_identical,420,420,420,"MUST equal the total: this arm is bit-equivalent to cuBLAS by construction, and a short count means its times are not a measurement"
+gemm.perf.static,mlp_up,bitequiv_autotuning_draws_byte_identical,420,420,420,"MUST equal the total: this arm is bit-equivalent to cuBLAS by construction, and a short count means its times are not a measurement"
+gemm.perf.static,mlp_up,torch_auto_draws_byte_identical,420,420,420,"unconstrained arm, not expected to match"
+gemm.perf.static,mlp_up,shapes_with_a_near_floor_arm,0,42,42,"under three times the replay floor, so every ratio on them is pulled toward 1"
+gemm.perf.static,moe_down,shapes_measured,144,144,144,
+gemm.perf.static,moe_down,torch_auto_over_cublas_geomean,0.5885,144,144,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.static,moe_down,torch_triton_over_cublas_geomean,0.5879,144,144,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.static,moe_down,bitequiv_autotuning_over_cublas_geomean,0.2891,144,144,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.static,moe_down,gb300_accelerated_over_cublas_geomean,0.5666,144,144,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.static,moe_down,gb300_accelerated_draws_byte_identical,1440,1440,1440,"MUST equal the total: this arm is bit-equivalent to cuBLAS by construction, and a short count means its times are not a measurement"
+gemm.perf.static,moe_down,bitequiv_autotuning_draws_byte_identical,1440,1440,1440,"MUST equal the total: this arm is bit-equivalent to cuBLAS by construction, and a short count means its times are not a measurement"
+gemm.perf.static,moe_down,torch_auto_draws_byte_identical,1315,1440,1440,"unconstrained arm, not expected to match"
+gemm.perf.static,moe_down,shapes_with_a_near_floor_arm,17,144,144,"under three times the replay floor, so every ratio on them is pulled toward 1"
+gemm.perf.static,moe_up,shapes_measured,132,132,132,
+gemm.perf.static,moe_up,torch_auto_over_cublas_geomean,0.5575,132,132,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.static,moe_up,torch_triton_over_cublas_geomean,0.5574,132,132,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.static,moe_up,bitequiv_autotuning_over_cublas_geomean,0.2759,132,132,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.static,moe_up,gb300_accelerated_over_cublas_geomean,0.53,132,132,"device_flush_ms, cuBLAS over this arm, so above 1 is faster than cuBLAS. near_floor rows are included, as everywhere in this artifact"
+gemm.perf.static,moe_up,gb300_accelerated_draws_byte_identical,1320,1320,1320,"MUST equal the total: this arm is bit-equivalent to cuBLAS by construction, and a short count means its times are not a measurement"
+gemm.perf.static,moe_up,bitequiv_autotuning_draws_byte_identical,1320,1320,1320,"MUST equal the total: this arm is bit-equivalent to cuBLAS by construction, and a short count means its times are not a measurement"
+gemm.perf.static,moe_up,torch_auto_draws_byte_identical,1110,1320,1320,"unconstrained arm, not expected to match"
+gemm.perf.static,moe_up,shapes_with_a_near_floor_arm,0,132,132,"under three times the replay floor, so every ratio on them is pulled toward 1"
+gemm.fusion,all,rows_measured,96,96,96,"48 selected cases at fp16 and bf16, out of 405 reachable model cases"
+gemm.fusion,all,torch_fused_over_cublas_unfused_geomean,0.8805,96,96,above 1 is faster than cuBLAS plus a separate epilogue kernel
+gemm.fusion,all,torch_fused_rows_beating_the_baseline,31,96,96,
+gemm.fusion,all,bitequiv_autotuner_fused_over_cublas_unfused_geomean,0.6591,96,96,above 1 is faster than cuBLAS plus a separate epilogue kernel
+gemm.fusion,all,bitequiv_autotuner_fused_rows_beating_the_baseline,8,96,96,
+gemm.fusion,all,gb300_fused_over_cublas_unfused_geomean,0.7151,96,96,above 1 is faster than cuBLAS plus a separate epilogue kernel
+gemm.fusion,all,gb300_fused_rows_beating_the_baseline,12,96,96,
+gemm.fusion,all,torch_fused_draws_byte_identical,200,960,960,"unconstrained arm, not expected to match"
+gemm.fusion,all,bitequiv_autotuner_fused_draws_byte_identical,960,960,960,MUST equal the total: this arm is bit-exact by construction
+gemm.fusion,all,gb300_fused_draws_byte_identical,960,960,960,MUST equal the total: this arm is bit-exact by construction
+gemm.fusion,mode=plain,rows_measured,62,62,62,
+gemm.fusion,mode=plain,torch_fused_over_cublas_unfused_geomean,0.9206,62,62,above 1 is faster than cuBLAS plus a separate epilogue kernel
+gemm.fusion,mode=plain,torch_fused_rows_beating_the_baseline,25,62,62,
+gemm.fusion,mode=plain,bitequiv_autotuner_fused_over_cublas_unfused_geomean,0.7332,62,62,above 1 is faster than cuBLAS plus a separate epilogue kernel
+gemm.fusion,mode=plain,bitequiv_autotuner_fused_rows_beating_the_baseline,8,62,62,
+gemm.fusion,mode=plain,gb300_fused_over_cublas_unfused_geomean,0.619,62,62,above 1 is faster than cuBLAS plus a separate epilogue kernel
+gemm.fusion,mode=plain,gb300_fused_rows_beating_the_baseline,0,62,62,
+gemm.fusion,mode=plain,torch_fused_draws_byte_identical,200,620,620,"unconstrained arm, not expected to match"
+gemm.fusion,mode=plain,bitequiv_autotuner_fused_draws_byte_identical,620,620,620,MUST equal the total: this arm is bit-exact by construction
+gemm.fusion,mode=plain,gb300_fused_draws_byte_identical,620,620,620,MUST equal the total: this arm is bit-exact by construction
+gemm.fusion,mode=split,rows_measured,34,34,34,
+gemm.fusion,mode=split,torch_fused_over_cublas_unfused_geomean,0.8118,34,34,above 1 is faster than cuBLAS plus a separate epilogue kernel
+gemm.fusion,mode=split,torch_fused_rows_beating_the_baseline,6,34,34,
+gemm.fusion,mode=split,bitequiv_autotuner_fused_over_cublas_unfused_geomean,0.5428,34,34,above 1 is faster than cuBLAS plus a separate epilogue kernel
+gemm.fusion,mode=split,bitequiv_autotuner_fused_rows_beating_the_baseline,0,34,34,
+gemm.fusion,mode=split,gb300_fused_over_cublas_unfused_geomean,0.9302,34,34,above 1 is faster than cuBLAS plus a separate epilogue kernel
+gemm.fusion,mode=split,gb300_fused_rows_beating_the_baseline,12,34,34,
+gemm.fusion,mode=split,torch_fused_draws_byte_identical,0,340,340,"unconstrained arm, not expected to match"
+gemm.fusion,mode=split,bitequiv_autotuner_fused_draws_byte_identical,340,340,340,MUST equal the total: this arm is bit-exact by construction
+gemm.fusion,mode=split,gb300_fused_draws_byte_identical,340,340,340,MUST equal the total: this arm is bit-exact by construction
+gemm.fusion,dtype=bf16,rows_measured,48,48,48,
+gemm.fusion,dtype=bf16,torch_fused_over_cublas_unfused_geomean,0.8723,48,48,above 1 is faster than cuBLAS plus a separate epilogue kernel
+gemm.fusion,dtype=bf16,torch_fused_rows_beating_the_baseline,16,48,48,
+gemm.fusion,dtype=bf16,bitequiv_autotuner_fused_over_cublas_unfused_geomean,0.6564,48,48,above 1 is faster than cuBLAS plus a separate epilogue kernel
+gemm.fusion,dtype=bf16,bitequiv_autotuner_fused_rows_beating_the_baseline,4,48,48,
+gemm.fusion,dtype=bf16,gb300_fused_over_cublas_unfused_geomean,0.7109,48,48,above 1 is faster than cuBLAS plus a separate epilogue kernel
+gemm.fusion,dtype=bf16,gb300_fused_rows_beating_the_baseline,6,48,48,
+gemm.fusion,dtype=bf16,torch_fused_draws_byte_identical,110,480,480,"unconstrained arm, not expected to match"
+gemm.fusion,dtype=bf16,bitequiv_autotuner_fused_draws_byte_identical,480,480,480,MUST equal the total: this arm is bit-exact by construction
+gemm.fusion,dtype=bf16,gb300_fused_draws_byte_identical,480,480,480,MUST equal the total: this arm is bit-exact by construction
+gemm.fusion,dtype=fp16,rows_measured,48,48,48,
+gemm.fusion,dtype=fp16,torch_fused_over_cublas_unfused_geomean,0.8887,48,48,above 1 is faster than cuBLAS plus a separate epilogue kernel
+gemm.fusion,dtype=fp16,torch_fused_rows_beating_the_baseline,15,48,48,
+gemm.fusion,dtype=fp16,bitequiv_autotuner_fused_over_cublas_unfused_geomean,0.6619,48,48,above 1 is faster than cuBLAS plus a separate epilogue kernel
+gemm.fusion,dtype=fp16,bitequiv_autotuner_fused_rows_beating_the_baseline,4,48,48,
+gemm.fusion,dtype=fp16,gb300_fused_over_cublas_unfused_geomean,0.7193,48,48,above 1 is faster than cuBLAS plus a separate epilogue kernel
+gemm.fusion,dtype=fp16,gb300_fused_rows_beating_the_baseline,6,48,48,
+gemm.fusion,dtype=fp16,torch_fused_draws_byte_identical,90,480,480,"unconstrained arm, not expected to match"
+gemm.fusion,dtype=fp16,bitequiv_autotuner_fused_draws_byte_identical,480,480,480,MUST equal the total: this arm is bit-exact by construction
+gemm.fusion,dtype=fp16,gb300_fused_draws_byte_identical,480,480,480,MUST equal the total: this arm is bit-exact by construction
+gemm.fusion,layer=attn,rows_measured,12,12,12,
+gemm.fusion,layer=attn,torch_fused_over_cublas_unfused_geomean,1.0065,12,12,above 1 is faster than cuBLAS plus a separate epilogue kernel
+gemm.fusion,layer=attn,torch_fused_rows_beating_the_baseline,10,12,12,
+gemm.fusion,layer=attn,bitequiv_autotuner_fused_over_cublas_unfused_geomean,0.8002,12,12,above 1 is faster than cuBLAS plus a separate epilogue kernel
+gemm.fusion,layer=attn,bitequiv_autotuner_fused_rows_beating_the_baseline,0,12,12,
+gemm.fusion,layer=attn,gb300_fused_over_cublas_unfused_geomean,0.8305,12,12,above 1 is faster than cuBLAS plus a separate epilogue kernel
+gemm.fusion,layer=attn,gb300_fused_rows_beating_the_baseline,0,12,12,
+gemm.fusion,layer=attn,torch_fused_draws_byte_identical,120,120,120,"unconstrained arm, not expected to match"
+gemm.fusion,layer=attn,bitequiv_autotuner_fused_draws_byte_identical,120,120,120,MUST equal the total: this arm is bit-exact by construction
+gemm.fusion,layer=attn,gb300_fused_draws_byte_identical,120,120,120,MUST equal the total: this arm is bit-exact by construction
+gemm.fusion,layer=lora,rows_measured,10,10,10,
+gemm.fusion,layer=lora,torch_fused_over_cublas_unfused_geomean,1.2731,10,10,above 1 is faster than cuBLAS plus a separate epilogue kernel
+gemm.fusion,layer=lora,torch_fused_rows_beating_the_baseline,10,10,10,
+gemm.fusion,layer=lora,bitequiv_autotuner_fused_over_cublas_unfused_geomean,1.1529,10,10,above 1 is faster than cuBLAS plus a separate epilogue kernel
+gemm.fusion,layer=lora,bitequiv_autotuner_fused_rows_beating_the_baseline,8,10,10,
+gemm.fusion,layer=lora,gb300_fused_over_cublas_unfused_geomean,0.6687,10,10,above 1 is faster than cuBLAS plus a separate epilogue kernel
+gemm.fusion,layer=lora,gb300_fused_rows_beating_the_baseline,0,10,10,
+gemm.fusion,layer=lora,torch_fused_draws_byte_identical,0,100,100,"unconstrained arm, not expected to match"
+gemm.fusion,layer=lora,bitequiv_autotuner_fused_draws_byte_identical,100,100,100,MUST equal the total: this arm is bit-exact by construction
+gemm.fusion,layer=lora,gb300_fused_draws_byte_identical,100,100,100,MUST equal the total: this arm is bit-exact by construction
+gemm.fusion,layer=mlp_down,rows_measured,10,10,10,
+gemm.fusion,layer=mlp_down,torch_fused_over_cublas_unfused_geomean,0.9537,10,10,above 1 is faster than cuBLAS plus a separate epilogue kernel
+gemm.fusion,layer=mlp_down,torch_fused_rows_beating_the_baseline,0,10,10,
+gemm.fusion,layer=mlp_down,bitequiv_autotuner_fused_over_cublas_unfused_geomean,0.691,10,10,above 1 is faster than cuBLAS plus a separate epilogue kernel
+gemm.fusion,layer=mlp_down,bitequiv_autotuner_fused_rows_beating_the_baseline,0,10,10,
+gemm.fusion,layer=mlp_down,gb300_fused_over_cublas_unfused_geomean,0.7658,10,10,above 1 is faster than cuBLAS plus a separate epilogue kernel
+gemm.fusion,layer=mlp_down,gb300_fused_rows_beating_the_baseline,0,10,10,
+gemm.fusion,layer=mlp_down,torch_fused_draws_byte_identical,60,100,100,"unconstrained arm, not expected to match"
+gemm.fusion,layer=mlp_down,bitequiv_autotuner_fused_draws_byte_identical,100,100,100,MUST equal the total: this arm is bit-exact by construction
+gemm.fusion,layer=mlp_down,gb300_fused_draws_byte_identical,100,100,100,MUST equal the total: this arm is bit-exact by construction
+gemm.fusion,layer=mlp_up,rows_measured,6,6,6,
+gemm.fusion,layer=mlp_up,torch_fused_over_cublas_unfused_geomean,0.9813,6,6,above 1 is faster than cuBLAS plus a separate epilogue kernel
+gemm.fusion,layer=mlp_up,torch_fused_rows_beating_the_baseline,2,6,6,
+gemm.fusion,layer=mlp_up,bitequiv_autotuner_fused_over_cublas_unfused_geomean,0.4345,6,6,above 1 is faster than cuBLAS plus a separate epilogue kernel
+gemm.fusion,layer=mlp_up,bitequiv_autotuner_fused_rows_beating_the_baseline,0,6,6,
+gemm.fusion,layer=mlp_up,gb300_fused_over_cublas_unfused_geomean,0.2541,6,6,above 1 is faster than cuBLAS plus a separate epilogue kernel
+gemm.fusion,layer=mlp_up,gb300_fused_rows_beating_the_baseline,0,6,6,
+gemm.fusion,layer=mlp_up,torch_fused_draws_byte_identical,0,60,60,"unconstrained arm, not expected to match"
+gemm.fusion,layer=mlp_up,bitequiv_autotuner_fused_draws_byte_identical,60,60,60,MUST equal the total: this arm is bit-exact by construction
+gemm.fusion,layer=mlp_up,gb300_fused_draws_byte_identical,60,60,60,MUST equal the total: this arm is bit-exact by construction
+gemm.fusion,layer=moe_down,rows_measured,14,14,14,
+gemm.fusion,layer=moe_down,torch_fused_over_cublas_unfused_geomean,0.8072,14,14,above 1 is faster than cuBLAS plus a separate epilogue kernel
+gemm.fusion,layer=moe_down,torch_fused_rows_beating_the_baseline,2,14,14,
+gemm.fusion,layer=moe_down,bitequiv_autotuner_fused_over_cublas_unfused_geomean,0.6998,14,14,above 1 is faster than cuBLAS plus a separate epilogue kernel
+gemm.fusion,layer=moe_down,bitequiv_autotuner_fused_rows_beating_the_baseline,0,14,14,
+gemm.fusion,layer=moe_down,gb300_fused_over_cublas_unfused_geomean,0.5756,14,14,above 1 is faster than cuBLAS plus a separate epilogue kernel
+gemm.fusion,layer=moe_down,gb300_fused_rows_beating_the_baseline,0,14,14,
+gemm.fusion,layer=moe_down,torch_fused_draws_byte_identical,20,140,140,"unconstrained arm, not expected to match"
+gemm.fusion,layer=moe_down,bitequiv_autotuner_fused_draws_byte_identical,140,140,140,MUST equal the total: this arm is bit-exact by construction
+gemm.fusion,layer=moe_down,gb300_fused_draws_byte_identical,140,140,140,MUST equal the total: this arm is bit-exact by construction
+gemm.fusion,layer=moe_up,rows_measured,44,44,44,
+gemm.fusion,layer=moe_up,torch_fused_over_cublas_unfused_geomean,0.7766,44,44,above 1 is faster than cuBLAS plus a separate epilogue kernel
+gemm.fusion,layer=moe_up,torch_fused_rows_beating_the_baseline,7,44,44,
+gemm.fusion,layer=moe_up,bitequiv_autotuner_fused_over_cublas_unfused_geomean,0.5657,44,44,above 1 is faster than cuBLAS plus a separate epilogue kernel
+gemm.fusion,layer=moe_up,bitequiv_autotuner_fused_rows_beating_the_baseline,0,44,44,
+gemm.fusion,layer=moe_up,gb300_fused_over_cublas_unfused_geomean,0.8467,44,44,above 1 is faster than cuBLAS plus a separate epilogue kernel
+gemm.fusion,layer=moe_up,gb300_fused_rows_beating_the_baseline,12,44,44,
+gemm.fusion,layer=moe_up,torch_fused_draws_byte_identical,0,440,440,"unconstrained arm, not expected to match"
+gemm.fusion,layer=moe_up,bitequiv_autotuner_fused_draws_byte_identical,440,440,440,MUST equal the total: this arm is bit-exact by construction
+gemm.fusion,layer=moe_up,gb300_fused_draws_byte_identical,440,440,440,MUST equal the total: this arm is bit-exact by construction
+gemm.fusion,epilogue=lora,rows_measured,10,10,10,
+gemm.fusion,epilogue=lora,torch_fused_over_cublas_unfused_geomean,1.2731,10,10,above 1 is faster than cuBLAS plus a separate epilogue kernel
+gemm.fusion,epilogue=lora,torch_fused_rows_beating_the_baseline,10,10,10,
+gemm.fusion,epilogue=lora,bitequiv_autotuner_fused_over_cublas_unfused_geomean,1.1529,10,10,above 1 is faster than cuBLAS plus a separate epilogue kernel
+gemm.fusion,epilogue=lora,bitequiv_autotuner_fused_rows_beating_the_baseline,8,10,10,
+gemm.fusion,epilogue=lora,gb300_fused_over_cublas_unfused_geomean,0.6687,10,10,above 1 is faster than cuBLAS plus a separate epilogue kernel
+gemm.fusion,epilogue=lora,gb300_fused_rows_beating_the_baseline,0,10,10,
+gemm.fusion,epilogue=lora,torch_fused_draws_byte_identical,0,100,100,"unconstrained arm, not expected to match"
+gemm.fusion,epilogue=lora,bitequiv_autotuner_fused_draws_byte_identical,100,100,100,MUST equal the total: this arm is bit-exact by construction
+gemm.fusion,epilogue=lora,gb300_fused_draws_byte_identical,100,100,100,MUST equal the total: this arm is bit-exact by construction
+gemm.fusion,epilogue=relu2,rows_measured,2,2,2,
+gemm.fusion,epilogue=relu2,torch_fused_over_cublas_unfused_geomean,0.756,2,2,above 1 is faster than cuBLAS plus a separate epilogue kernel
+gemm.fusion,epilogue=relu2,torch_fused_rows_beating_the_baseline,0,2,2,
+gemm.fusion,epilogue=relu2,bitequiv_autotuner_fused_over_cublas_unfused_geomean,0.5501,2,2,above 1 is faster than cuBLAS plus a separate epilogue kernel
+gemm.fusion,epilogue=relu2,bitequiv_autotuner_fused_rows_beating_the_baseline,0,2,2,
+gemm.fusion,epilogue=relu2,gb300_fused_over_cublas_unfused_geomean,0.8322,2,2,above 1 is faster than cuBLAS plus a separate epilogue kernel
+gemm.fusion,epilogue=relu2,gb300_fused_rows_beating_the_baseline,0,2,2,
+gemm.fusion,epilogue=relu2,torch_fused_draws_byte_identical,0,20,20,"unconstrained arm, not expected to match"
+gemm.fusion,epilogue=relu2,bitequiv_autotuner_fused_draws_byte_identical,20,20,20,MUST equal the total: this arm is bit-exact by construction
+gemm.fusion,epilogue=relu2,gb300_fused_draws_byte_identical,20,20,20,MUST equal the total: this arm is bit-exact by construction
+gemm.fusion,epilogue=resid,rows_measured,22,22,22,
+gemm.fusion,epilogue=resid,torch_fused_over_cublas_unfused_geomean,0.9822,22,22,above 1 is faster than cuBLAS plus a separate epilogue kernel
+gemm.fusion,epilogue=resid,torch_fused_rows_beating_the_baseline,10,22,22,
+gemm.fusion,epilogue=resid,bitequiv_autotuner_fused_over_cublas_unfused_geomean,0.7486,22,22,above 1 is faster than cuBLAS plus a separate epilogue kernel
+gemm.fusion,epilogue=resid,bitequiv_autotuner_fused_rows_beating_the_baseline,0,22,22,
+gemm.fusion,epilogue=resid,gb300_fused_over_cublas_unfused_geomean,0.8004,22,22,above 1 is faster than cuBLAS plus a separate epilogue kernel
+gemm.fusion,epilogue=resid,gb300_fused_rows_beating_the_baseline,0,22,22,
+gemm.fusion,epilogue=resid,torch_fused_draws_byte_identical,180,220,220,"unconstrained arm, not expected to match"
+gemm.fusion,epilogue=resid,bitequiv_autotuner_fused_draws_byte_identical,220,220,220,MUST equal the total: this arm is bit-exact by construction
+gemm.fusion,epilogue=resid,gb300_fused_draws_byte_identical,220,220,220,MUST equal the total: this arm is bit-exact by construction
+gemm.fusion,epilogue=rweight,rows_measured,14,14,14,
+gemm.fusion,epilogue=rweight,torch_fused_over_cublas_unfused_geomean,0.8072,14,14,above 1 is faster than cuBLAS plus a separate epilogue kernel
+gemm.fusion,epilogue=rweight,torch_fused_rows_beating_the_baseline,2,14,14,
+gemm.fusion,epilogue=rweight,bitequiv_autotuner_fused_over_cublas_unfused_geomean,0.6998,14,14,above 1 is faster than cuBLAS plus a separate epilogue kernel
+gemm.fusion,epilogue=rweight,bitequiv_autotuner_fused_rows_beating_the_baseline,0,14,14,
+gemm.fusion,epilogue=rweight,gb300_fused_over_cublas_unfused_geomean,0.5756,14,14,above 1 is faster than cuBLAS plus a separate epilogue kernel
+gemm.fusion,epilogue=rweight,gb300_fused_rows_beating_the_baseline,0,14,14,
+gemm.fusion,epilogue=rweight,torch_fused_draws_byte_identical,20,140,140,"unconstrained arm, not expected to match"
+gemm.fusion,epilogue=rweight,bitequiv_autotuner_fused_draws_byte_identical,140,140,140,MUST equal the total: this arm is bit-exact by construction
+gemm.fusion,epilogue=rweight,gb300_fused_draws_byte_identical,140,140,140,MUST equal the total: this arm is bit-exact by construction
+gemm.fusion,epilogue=swiglu,rows_measured,38,38,38,
+gemm.fusion,epilogue=swiglu,torch_fused_over_cublas_unfused_geomean,0.7985,38,38,above 1 is faster than cuBLAS plus a separate epilogue kernel
+gemm.fusion,epilogue=swiglu,torch_fused_rows_beating_the_baseline,8,38,38,
+gemm.fusion,epilogue=swiglu,bitequiv_autotuner_fused_over_cublas_unfused_geomean,0.5252,38,38,above 1 is faster than cuBLAS plus a separate epilogue kernel
+gemm.fusion,epilogue=swiglu,bitequiv_autotuner_fused_rows_beating_the_baseline,0,38,38,
+gemm.fusion,epilogue=swiglu,gb300_fused_over_cublas_unfused_geomean,0.6883,38,38,above 1 is faster than cuBLAS plus a separate epilogue kernel
+gemm.fusion,epilogue=swiglu,gb300_fused_rows_beating_the_baseline,6,38,38,
+gemm.fusion,epilogue=swiglu,torch_fused_draws_byte_identical,0,380,380,"unconstrained arm, not expected to match"
+gemm.fusion,epilogue=swiglu,bitequiv_autotuner_fused_draws_byte_identical,380,380,380,MUST equal the total: this arm is bit-exact by construction
+gemm.fusion,epilogue=swiglu,gb300_fused_draws_byte_identical,380,380,380,MUST equal the total: this arm is bit-exact by construction
+gemm.fusion,epilogue=swiglu_cw,rows_measured,10,10,10,
+gemm.fusion,epilogue=swiglu_cw,torch_fused_over_cublas_unfused_geomean,0.8083,10,10,above 1 is faster than cuBLAS plus a separate epilogue kernel
+gemm.fusion,epilogue=swiglu_cw,torch_fused_rows_beating_the_baseline,1,10,10,
+gemm.fusion,epilogue=swiglu_cw,bitequiv_autotuner_fused_over_cublas_unfused_geomean,0.644,10,10,above 1 is faster than cuBLAS plus a separate epilogue kernel
+gemm.fusion,epilogue=swiglu_cw,bitequiv_autotuner_fused_rows_beating_the_baseline,0,10,10,
+gemm.fusion,epilogue=swiglu_cw,gb300_fused_over_cublas_unfused_geomean,0.9066,10,10,above 1 is faster than cuBLAS plus a separate epilogue kernel
+gemm.fusion,epilogue=swiglu_cw,gb300_fused_rows_beating_the_baseline,6,10,10,
+gemm.fusion,epilogue=swiglu_cw,torch_fused_draws_byte_identical,0,100,100,"unconstrained arm, not expected to match"
+gemm.fusion,epilogue=swiglu_cw,bitequiv_autotuner_fused_draws_byte_identical,100,100,100,MUST equal the total: this arm is bit-exact by construction
+gemm.fusion,epilogue=swiglu_cw,gb300_fused_draws_byte_identical,100,100,100,MUST equal the total: this arm is bit-exact by construction
+gemm.fusion,above_the_replay_floor,rows_measured,96,96,96,
+gemm.fusion,above_the_replay_floor,torch_fused_over_cublas_unfused_geomean,0.8805,96,96,above 1 is faster than cuBLAS plus a separate epilogue kernel
+gemm.fusion,above_the_replay_floor,torch_fused_rows_beating_the_baseline,31,96,96,
+gemm.fusion,above_the_replay_floor,bitequiv_autotuner_fused_over_cublas_unfused_geomean,0.6591,96,96,above 1 is faster than cuBLAS plus a separate epilogue kernel
+gemm.fusion,above_the_replay_floor,bitequiv_autotuner_fused_rows_beating_the_baseline,8,96,96,
+gemm.fusion,above_the_replay_floor,gb300_fused_over_cublas_unfused_geomean,0.7151,96,96,above 1 is faster than cuBLAS plus a separate epilogue kernel
+gemm.fusion,above_the_replay_floor,gb300_fused_rows_beating_the_baseline,12,96,96,
+gemm.fusion,above_the_replay_floor,torch_fused_draws_byte_identical,200,960,960,"unconstrained arm, not expected to match"
+gemm.fusion,above_the_replay_floor,bitequiv_autotuner_fused_draws_byte_identical,960,960,960,MUST equal the total: this arm is bit-exact by construction
+gemm.fusion,above_the_replay_floor,gb300_fused_draws_byte_identical,960,960,960,MUST equal the total: this arm is bit-exact by construction
+inner_tree.bitmatch,all,cells_measured,104,104,104,"96 real and 8 control, 36 configurations swept inside each"
+inner_tree.bitmatch,all,inner_tree_cells,48,48,48,
+inner_tree.bitmatch,all,inner_tree_cells_with_a_sensitive_partner,38,48,48,"the matching unordered cell returned more than one byte pattern, so the sweep did move the bits on that kernel and an invariant inner_tree cell means something"
+inner_tree.bitmatch,all,inner_tree_cells_NOT_invariant,2,38,38,"MUST be 0; this is the claim. Non-zero on this tree and correctly so: D_masked_global_sum at f32, at both enable_fp_fusion settings, returns three byte classes split by num_warps. A real counterexample, not a broken artifact"
+inner_tree.bitmatch,all,inner_tree_cells_with_no_evidence,10,48,48,"the unordered arm did not differ either, so these prove nothing in either direction. All of them are fp8 pure sums, order-invariant by arithmetic: untested, not passing"
+inner_tree.bitmatch,all,controls_not_invariant,0,8,8,"MUST be 0: a max reduction is order-invariant by operation, so a control that moves means the harness is broken rather than the mode"
+inner_tree.bitmatch,all,configurations_compiled_and_launched,3744,104,104,
+inner_tree.bitmatch,all,configurations_that_failed_to_build,0,104,104,
+inner_tree.layout,all,rows_measured,1728,1728,1728,"17 kernels over 24 (kernel, dtype) pairs x 72 configurations"
+inner_tree.layout,all,bit_changed_configurations,0,1728,1728,MUST be 0; the hard gate. A speedup on a row whose bytes moved is not a result
+inner_tree.layout,all,bit_changed_on_the_perf_input,0,1728,1728,MUST be 0; an independent second comparison on the timing arm's own input
+inner_tree.layout,all,compile_regressions,12,1728,1728,"the baseline built and the optimized build died in ptxas. Non-zero on this tree and correctly so: all 12 are sum_2d_col_big f16 num_warps=4, sitting exactly on the register-pressure guard's boundary. A real bug in the pass; it makes the run a FAIL"
+inner_tree.layout,all,order_insensitive_rows,432,1728,1728,"the reduction does not depend on the order here, so bit_changed = 0 is vacuous, not a pass"
+inner_tree.layout,all,speedup_geomean_where_the_pass_fired,1.8838,959,1728,"baseline_ms / optimized_ms on the rows the pass actually rewrote. Seven of the 24 (kernel, dtype) pairs have no row below at all because the pass declined every configuration on them, which is a guard working rather than a gap"
+inner_tree.layout,G_plain_sum_looped/f32,speedup_geomean_where_the_pass_fired,1.0295,60,72,
+inner_tree.layout,I_bias_grad_dim0/f32,speedup_geomean_where_the_pass_fired,1.3336,60,72,
+inner_tree.layout,J_epilogue_colsum_dim0/f32,speedup_geomean_where_the_pass_fired,2.6034,48,72,
+inner_tree.layout,col_bf16/bf16,speedup_geomean_where_the_pass_fired,1.7751,60,72,
+inner_tree.layout,col_exp_sum/f16,speedup_geomean_where_the_pass_fired,1.753,60,72,
+inner_tree.layout,col_exp_sum/fp8,speedup_geomean_where_the_pass_fired,1.5098,60,72,
+inner_tree.layout,col_sum_loop/f16,speedup_geomean_where_the_pass_fired,2.1463,60,72,
+inner_tree.layout,col_sum_loop/fp8,speedup_geomean_where_the_pass_fired,1.7387,60,72,
+inner_tree.layout,layernorm_bwd_dwdb/f32,speedup_geomean_where_the_pass_fired,3.6072,48,72,
+inner_tree.layout,sum_2d_axis0/f16,speedup_geomean_where_the_pass_fired,1.6157,60,72,
+inner_tree.layout,sum_2d_axis0/fp8,speedup_geomean_where_the_pass_fired,1.3583,60,72,
+inner_tree.layout,sum_2d_col/f16,speedup_geomean_where_the_pass_fired,2.0162,60,72,
+inner_tree.layout,sum_2d_col/fp8,speedup_geomean_where_the_pass_fired,1.5571,60,72,
+inner_tree.layout,sum_2d_col_big/f16,speedup_geomean_where_the_pass_fired,2.4963,36,72,
+inner_tree.layout,sum_2d_col_big/fp8,speedup_geomean_where_the_pass_fired,1.9221,48,72,
+inner_tree.layout,sum_3d_outer/f16,speedup_geomean_where_the_pass_fired,3.6413,60,72,
+inner_tree.layout,sum_3d_outer/fp8,speedup_geomean_where_the_pass_fired,2.3864,59,72,
+checker.corpus,reduction,configurations_graded,9384,9384,9384,sum over 77 groups
+checker.corpus,reduction,checker_classes,1009,9384,9384,equivalence classes the checker proved; fewer is more tuning freedom recovered
+checker.corpus,reduction,empirical_classes,614,9384,9384,classes the recorded output bytes actually fall into
+checker.corpus,reduction,over_merges,0,9384,9384,"MUST be 0; the only hard gate here. Above 0 means the checker called two configurations equal and the hardware disagreed, which is a soundness bug"
+checker.corpus,reduction,over_splits,125586,9384,9384,"tuning freedom given up to stay safe: a trade-off, not a failure"
+checker.corpus,mma,configurations_graded,41768,41768,41768,sum over 14 groups
+checker.corpus,mma,checker_classes,11447,41768,41768,equivalence classes the checker proved; fewer is more tuning freedom recovered
+checker.corpus,mma,empirical_classes,790,41768,41768,classes the recorded output bytes actually fall into
+checker.corpus,mma,over_merges,0,41768,41768,"MUST be 0; the only hard gate here. Above 0 means the checker called two configurations equal and the hardware disagreed, which is a soundness bug"
+checker.corpus,mma,over_splits,19933722,41768,41768,"tuning freedom given up to stay safe: a trade-off, not a failure"
+checker.corpus,everything,configurations_graded,51152,51152,51152,sum over 91 groups
+checker.corpus,everything,checker_classes,12456,51152,51152,equivalence classes the checker proved; fewer is more tuning freedom recovered
+checker.corpus,everything,empirical_classes,1404,51152,51152,classes the recorded output bytes actually fall into
+checker.corpus,everything,over_merges,0,51152,51152,"MUST be 0; the only hard gate here. Above 0 means the checker called two configurations equal and the hardware disagreed, which is a soundness bug"
+checker.corpus,everything,over_splits,20059308,51152,51152,"tuning freedom given up to stay safe: a trade-off, not a failure"
+checker.corpus,all,groups_graded,93,93,93,the three totals above cover fewer than this: a group that graded 0 configurations is dropped from them rather than counted as a clean 0
+checker.corpus,all,groups_with_recovery=fail-closed,11,93,93,every configuration in its own class: the checker refusing to answer rather than answering wrongly
+checker.corpus,all,groups_with_recovery=no-configs,2,93,93,
+checker.corpus,all,groups_with_recovery=over-split,61,93,93,
+checker.corpus,all,groups_with_recovery=perfect,19,93,93,
+epilogue_swap,oracle2,cases_measured,45,45,45,"NOT one of the eight steps, and the ONLY measurement in this artifact where the bit constraint is isolated: the unconstrained arm is the kernel torch.compile emitted, and the bit-exact arm is THAT SAME SOURCE with only the epilogue arithmetic swapped -- same mainloop, tile, grid and launch. Reproduce with `python fusion_oracle/report.py oracle2`; no GPU needed"
+epilogue_swap,oracle2,cases_where_fusing_beat_the_two_kernel_baseline,38,45,45,a case counts only if fusing was already a win; otherwise there is nothing to ask about
+epilogue_swap,oracle2,cases_byte_identical_after_the_swap,45,45,45,
+epilogue_swap,oracle2,unconstrained_over_bit_exact_geomean,0.9364,38,45,"THE cost of bit-exactness, and the only number in this artifact allowed that label. Below 1 means the bit-exact spelling is slower: 0.936 is a 6.4% gap"
+epilogue_swap,oracle2,bit_exact_fused_over_cublas_unfused_geomean,1.319,38,45,the same bit-exact kernel against the two-kernel path a determinism user has today
+gemm.cublas-bug,cublaslt=13.2.2/part=one,K_terms_cublas_summed,8640,8648,8648,"A and B are all ones on sm_103, so every output element must be exactly K=8648; cuBLAS returned 8640, short by 8. Run the reproducer by hand -- it ends in an assert, so a successful reproduction exits non-zero"
+gemm.cublas-bug,cublaslt=13.2.2/part=three,K_terms_cublas_summed,11520,11528,11528,"A and B are all ones on sm_103, so every output element must be exactly K=11528; cuBLAS returned 11520, short by 8. Run the reproducer by hand -- it ends in an assert, so a successful reproduction exits non-zero"
+gemm.cublas-bug,cublaslt=13.1.1/part=one,K_terms_cublas_summed,8640,8648,8648,"A and B are all ones on sm_103, so every output element must be exactly K=8648; cuBLAS returned 8640, short by 8. Run the reproducer by hand -- it ends in an assert, so a successful reproduction exits non-zero"
+gemm.cublas-bug,cublaslt=13.1.1/part=three,K_terms_cublas_summed,11520,11528,11528,"A and B are all ones on sm_103, so every output element must be exactly K=11528; cuBLAS returned 11520, short by 8. Run the reproducer by hand -- it ends in an assert, so a successful reproduction exits non-zero"
+gemm.cublas-bug,cublaslt=12.8.5/part=two,K_terms_cublas_summed,57600,57608,57608,"A and B are all ones on sm_103, so every output element must be exactly K=57608; cuBLAS returned 57600, short by 8. Run the reproducer by hand -- it ends in an assert, so a successful reproduction exits non-zero"

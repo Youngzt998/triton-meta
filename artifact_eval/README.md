@@ -18,18 +18,56 @@ python artifact_eval/artifact.py --list                        # what can be run
 python artifact_eval/artifact.py --run gemm.bitmatch --minutes 20
 python artifact_eval/artifact.py --run gemm --minutes 20       # the whole gemm section
 python artifact_eval/artifact.py --run all --minutes 20        # every section
-python artifact_eval/artifact.py --export                      # cache/*.jsonl -> data/*.csv
+python artifact_eval/artifact.py --export                      # cache/*.jsonl -> data/
 ```
+
+`--export` needs no GPU. It rewrites every per-table CSV, then `FORMAT.md`, then `env.csv`, then
+`summary.csv` — in that order, each from the one before it, so the four cannot disagree.
 
 Records stream into `cache/` as they are produced, so interrupting a run loses at most one record
 and `--export` still works on whatever was collected. Every run also appends a line to
 `data/env.csv` recording the GPU, the cuBLASLt version, and the commit.
 
-**Not every step is written yet.** `--list` marks each one `implemented` or `PLACEHOLDER`. A
-placeholder prints the measurement it is going to make — the claim, the method, the cost, what you
-should see and how to judge it — then writes nothing and exits 0. Its table columns are already
-declared, so `data/FORMAT.md` describes the table before it has any rows. This is deliberate: a
-reviewer should see the gaps rather than wonder why a step printed nothing.
+**All eight steps are implemented.** `--list` marks each one `implemented`; none is a placeholder
+any more.
+
+```
+gemm.bitmatch        gemm.perf.random     gemm.perf.static     gemm.fusion
+gemm.cublas-bug      inner_tree.bitmatch  inner_tree.layout    checker.corpus
+```
+
+## Read this before you read a `FAIL`
+
+**Three steps report `FAIL`, or a non-zero mismatch count, and are correct to.** Each of the three
+is a finding about the thing under test, not a broken artifact. If you see one of these and stop
+there, the documentation has failed you, not the run.
+
+| step | what it reports | why that is the right answer |
+|---|---|---|
+| `inner_tree.layout` | `RESULT: FAIL`, 12 compile regressions | 12 of 1,728 rows are `sum_2d_col_big`, f16, `num_warps=4` — the optimized build dies in `ptxas` while the baseline builds. That configuration sits exactly on the register-pressure guard's boundary. A real, reproducible bug in the pass. The bit gate itself is clean: 0 bit-changed rows. |
+| `inner_tree.bitmatch` | `RESULT: FAIL`, 2 cells not invariant | `D_masked_global_sum` at f32, at **both** `enable_fp_fusion` settings, returns 3 byte classes under `inner_tree`, split by `num_warps`. That is a counterexample to the mode's own guarantee, and finding it is the point of the step. |
+| `gemm.bitmatch` | shapes with a differing draw, above 0 | 34 of 62,025 shapes on the committed 90-minute run, and 92 of 153,606 across the union of runs in `data/`. Every single one is `mode=split` at very deep `K`, and 0 of the other eight plan modes produced any. That is cuBLAS's own defect — it sums only the first `K - (K % block_k)` elements — and `gemm.cublas-bug` reproduces it standalone with no Triton in the picture. |
+
+Everything else is expected to come back clean. In particular `checker.corpus` must report
+`over_merges = 0`, and the two bit-exact arms of `gemm.perf.*` and `gemm.fusion` must be
+byte-identical on every draw. Those are the hard gates.
+
+## Naming, and what a ratio means
+
+Arms are named, never numbered. Section 1 uses `cublas`, `torch_auto`, `torch_triton`,
+`bitequiv_autotuning`, `gb300_accelerated`; `gemm.fusion` uses `cublas_unfused`, `torch_fused`,
+`bitequiv_autotuner_fused`, `gb300_fused`.
+
+**Every ratio in this artifact is taken against the baseline, and above 1 means faster.** The
+baseline is `cublas` for `gemm.perf.*` and `cublas_unfused` for `gemm.fusion`. No table reports a
+ratio between two non-baseline arms.
+
+**A ratio between one of our kernels and a torch kernel is not the price of bit-exactness.** They
+are different kernels — ours has TMA descriptors, a persistent grid and warp specialization, and
+Inductor's `mm_template` has none of them — and that difference dominates whatever the bit
+constraint costs. Read such a ratio as what a user gets by switching, and nothing more. The one
+place in this project where the bit constraint *is* cleanly isolated is described under
+[what bit-exactness costs when nothing else changes](#what-bit-exactness-costs-when-nothing-else-changes).
 
 ## Section 1 — the GEMM matches cuBLAS (`gemm.*`)
 
@@ -50,32 +88,74 @@ gaussian; odd-numbered draws spread the exponents across the dtype's usable rang
 makes a change in the *order* of the additions visible — with narrow exponents almost any
 regrouping rounds to the same bits and the check passes things it should not.
 
-**Cost.** Set by `--minutes`. Roughly 100 shapes per minute at `--reps 4`, fewer at `--reps 10`.
-Twenty minutes is enough to see the shape of the result; longer is better evidence, not a
-different one.
-
-**What you should see.** A count of shapes byte-identical to cuBLAS, and a line per mismatch
-naming the shape, the cuBLAS kernel family the plan resolved to, and which draws differed.
-
-**How to judge it.** Read `data/gemm_bitmatch.csv`; `n_differ` is zero for a byte-identical shape.
-**A mismatch is not automatically a failure of this work.** On some shapes cuBLAS itself sums only
-the first `K - (K % block_k)` elements. Mismatches concentrated on `mode=split` at very deep `K`
-are that defect; run `gemm.cublas-bug` before concluding otherwise. The script logs mismatches
-rather than adjudicating them, on purpose — the judgement is yours.
-
-### `gemm.perf.random` and `gemm.perf.static` — what a bit-exact GEMM costs
-
-**Claim.** A GEMM that must return cuBLAS's exact bytes is not slow. How much of the gap is the
-bit constraint and how much is the kernel is a separate question, and the table is laid out so
-that the two are not conflated.
-
-Five arms per shape, same inputs and same timing:
+**Cost.** Set by `--minutes`; the default is 20. This step reads no environment variables — its
+only knobs are the shared CLI flags. Measured on the two committed 90-minute runs at `--reps 10`:
+one covered 62,025 shapes and the other 91,581, so budget roughly 700 to 1,000 shapes per minute
+depending on how many of the drawn shapes cuBLAS declines outright (a decline is fast). The knob
+that shrinks it is `--minutes`; `--reps` trades draws per shape against shapes.
 
 ```
-cublas               cuBLAS through the hot closure. THE BASELINE AND THE BIT REFERENCE.
+--minutes N   wall-clock budget, default 20. The step stops cleanly at the deadline.
+--reps N      independent input draws compared per shape, default 10.
+--seed N      shape draw seed, default 20260816. The same seed gives the same shapes.
+--max-bytes N skip a shape whose three operands exceed this, default 6 GiB.
+```
+
+**What you should see.** A count of shapes byte-identical to cuBLAS, a line per mismatch naming
+the shape, the cuBLAS kernel family the plan resolved to and which draws differed, then a table of
+all nine plan modes with zeros included, then the declines by reason.
+
+**How to judge it.** Read `data/gemm_bitmatch.csv`; `n_differ` is zero for a byte-identical shape.
+
+**A failing row looks like** `n_differ` above 0, with `draws_that_differ` naming the draws. **And
+some of these are expected on this tree.** On the committed 90-minute rerun:
+
+```
+62025 shapes x 10 draws = 620250 comparisons
+byte-identical to cuBLAS       61991/62025
+shapes with any differing draw     34    all of them mode=split, K from 40,976 to 295,504
+declined (out of scope)           109
+skipped, cuBLAS had no algorithm  477
+```
+
+All 34 are `mode=split` at very deep `K`, and 0 of the other eight plan modes produced a single
+differing shape. **That concentration is the signature of cuBLAS's own defect**, not of ours: on
+those shapes cuBLAS sums only the first `K - (K % block_k)` elements. Run `gemm.cublas-bug`, which
+reproduces it standalone with all-ones operands where the exact answer is known, before concluding
+otherwise. The step logs mismatches rather than adjudicating them, on purpose — the judgement is
+yours. A mismatch on any mode **other** than `split`, or on a shallow `K`, would be a real failure
+and is not something this tree produces.
+
+`data/gemm_bitmatch.csv` is the append log of every run, so it holds more rows than any single run
+reported: at the export in this commit, 155,310 rows, being the 62,025-shape rerun plus an earlier
+91,581-shape run plus 1,704 declines, with 92 differing shapes across the two. The two runs used
+different shape-regime code and are not comparable shape for shape; the header of
+`steps/gemm_bitmatch.py` says which is which.
+
+### `gemm.perf.random` and `gemm.perf.static` — how fast a bit-exact GEMM is
+
+Two steps, one measurement. `gemm.perf.random` runs it on random shapes and groups by shape
+family; `gemm.perf.static` runs it on the fixed layer dimensions of real 2026 open-weight models.
+`gemm.perf.static` **imports** every arm, every timing and every byte check from
+`gemm.perf.random` rather than re-implementing them, so the two cannot drift apart. What differs
+is only where the shapes come from.
+
+**Claim.** A GEMM that must return cuBLAS's exact bytes is a usable kernel, not a toy: it is
+byte-identical to cuBLAS on every draw, and its time is in the same range as what an unconstrained
+`torch.compile` produces. This is a claim about **speed levels against one baseline**, not about
+what the bit constraint costs — see [the isolation
+section](#what-bit-exactness-costs-when-nothing-else-changes) for the one measurement in this
+project that does answer that.
+
+Five arms per shape, same operands, same timing method, same byte check:
+
+```
+cublas               cuBLAS through the hot closure, on the algorithm its own heuristic
+                     returns. THE BASELINE AND THE BIT REFERENCE.
 torch_auto           torch.compile(mode="max-autotune-no-cudagraphs") as its autotuner picks,
                      extern included. No numerics requirement.
-torch_triton         the same with the extern excluded, so Inductor's own Triton template.
+torch_triton         the same with the extern excluded (max_autotune_gemm_backends="TRITON"),
+                     so it is Inductor's own Triton template. No numerics requirement.
 bitequiv_autotuning  bit-equivalent: the kernel BEFORE the sm_103 rewrites, its configuration
                      chosen by a search under the bit constraint.
 gb300_accelerated    bit-equivalent: the GB300 rewrites — TMA, a persistent grid, warp
@@ -92,18 +172,153 @@ near-identical on every family, i.e. that excluding the extern changes almost no
 `gb300_accelerated` against a torch arm is **not** the price of bit-exactness. An unconstrained
 autotuner's space contains the bit-exact configurations, so that ratio could not exceed 1 if the
 two were the same kernel; it does because they are not. It is a product comparison — what a user
-gets by switching. The clean pair is the two bit-equivalent arms: both carry the same constraint
-and differ in the kernel and in how its configuration is chosen.
+gets by switching. Even the pair of bit-equivalent arms is not a clean isolation: they differ in
+the kernel **and** in how its configuration is chosen, two things at once.
 
-`gemm.perf.random` runs this on random shapes and groups by shape family; `gemm.perf.static` runs
-it on the fixed layer dimensions of real 2026 open-weight models. Run either step for the full
-design.
-
-These two replace an earlier `gemm.perf`, whose unconstrained arm was a Triton configuration sweep
-we had written ourselves. A ceiling built out of our own kernel is only as good as the
+These two steps replace an earlier `gemm.perf`, whose unconstrained arm was a Triton configuration
+sweep we had written ourselves. A ceiling built out of our own kernel is only as good as the
 configuration space we happened to type in, and a reviewer has no reason to trust it. What
 `torch.compile` picks with max-autotune is the honest stand-in for what a user gets when they ask
 for speed and nothing else.
+
+**Method, and what is pinned.** `bitequiv_autotuning`'s search space follows one rule: *anything
+that is part of the cuBLAS plan is pinned, because it defines the answer; launch parameters are
+searched.* Pinned are `k_chunk`/`nsplit`, `k_per_dot`, the residue position, `merge_scheme`,
+`gemmsn`'s `(S, B)`, `gemv`'s `(V, W, CC, count-down)` and `SPLITK_NUM`. Searched are `BM`, `BN`,
+`BK`, `num_warps`, `num_stages`, and `BE` for the gemv families. The winner is then verified
+byte-identical over the same draws as the other arms — the pruner is not trusted — and if the
+fastest configuration fails the byte check the fastest passing one is used and `fallback` is set
+on the row. Three knobs named in the design are *not* searchable because there is no constexpr for
+them in the original kernels (`GROUP_M`, the index width, and `G` outside the modes where `BK` is
+`G`); the step's own docstring says so at length, and that gap is part of the result.
+
+Five timings are kept raw on every row and none of them is thrown away:
+`device_flush_ms` (the headline), `device_warm_ms`, `e2e_ms`, `host_ms`, `floor_ms`. `e2e_ms` and
+`host_ms` matter because device time flatters us: the TMA path spends about 100 microseconds of
+host time per call building tensor descriptors, which graph replay captures once and a real caller
+pays every time.
+
+**Cost.**
+
+*`gemm.perf.random`*: 1,400 shapes at the default — seven sampling families × two dtypes ×
+`PERF_RANDOM_PER_CELL` (default 100). Each shape pays a configuration search bounded by
+`PERF_RANDOM_SEARCH_S` (default 150 seconds) plus two `torch.compile` autotunes, and the first
+shape of each kind pays Triton compilation that later shapes get free from the on-disk cache. On
+this box, three workers on three GB300s covered 751 of the 1,400 shapes in the first 22 minutes
+with that cache already warm; a single GPU starting cold should be given many hours. Three knobs
+decide whether this is a twenty-minute run or an overnight one:
+
+| knob | what it does |
+|---|---|
+| `PERF_RANDOM_PER_CELL` | shapes per (family, dtype) cell, default 100 → 1,400 shapes. Set it to 10 and you measure 140 shapes, a tenth of the work. |
+| `PERF_RANDOM_FAMILIES` | comma-separated subset of `any,aligned,unaligned,deepk,smallm,gemv,decode`. One family is a fourteenth of the sweep. |
+| `PERF_RANDOM_REPORT_ONLY=1` | print the whole table from the records already in `cache/` and exit. Launches no kernel, measures nothing, costs seconds. This is how you look at a run in progress or re-read a finished one. |
+
+*`gemm.perf.static`*: 698 (model, layer, dtype) cases over 590 distinct (M, N, K, dtype) shapes.
+Same per-shape cost as `gemm.perf.random`, so the same knobs apply under `PERF_STATIC_` names. The
+committed table was assembled over four invocations between 00:48 and 05:02, two of which were
+deliberate re-takes (`PERF_STATIC_REDO_UNBATCHED`, `PERF_STATIC_REDO_CONTENDED`).
+`PERF_STATIC_DTYPES=fp16` drops the fp8 half, which is 199 of the 590 shapes.
+
+Both steps accept `--minutes N` as a wall-clock cap and `--minutes 0` to run to completion. Both
+claim work one shape at a time through a lock file with a lease, so **extra workers can be started
+on other free GPUs at any time** and a worker can be killed without losing or repeating a shape.
+
+**Options.** Neither step has flags of its own — `artifact.py`'s CLI is shared by every step — so
+everything is an environment variable. `gemm.perf.random` reads twelve:
+
+| variable | default | what it does |
+|---|---|---|
+| `PERF_RANDOM_PER_CELL` | 100 | shapes drawn per (family, dtype) cell; 14 cells, so 1,400 shapes. **The main cost knob.** |
+| `PERF_RANDOM_FAMILIES` | all seven | comma-separated subset of the sampling families, for a validation slice. **A cost knob.** |
+| `PERF_RANDOM_REPORT_ONLY` | unset | `1` = print the table from `cache/` and exit without measuring. **A cost knob: seconds instead of hours.** |
+| `PERF_RANDOM_SEARCH_S` | 150 | seconds of configuration search per shape for `bitequiv_autotuning`. The row's `space`, `searched` and `budget_hit` say whether the budget bit. |
+| `PERF_RANDOM_MAX_CONFIGS` | 0 (no cap) | hard cap on that search space. A non-zero value is recorded on every row it touched, so a bounded run cannot later be read as full coverage. |
+| `PERF_RANDOM_REFINE` | 16 | how many screened configurations are re-timed with a real CUDA-graph replay. |
+| `PERF_RANDOM_ROUNDS` | 3 | measurement rounds, best of. |
+| `PERF_RANDOM_CUBLASLT` | `13.1.1` | which cuBLAS version's rules to match. The paper's number. Set it to your own only if you know why. |
+| `PERF_RANDOM_LIMIT` | 0 (none) | stop after this many shapes **in this process**; the run itself is not finished. |
+| `PERF_RANDOM_LEASE_MIN` | 45 | minutes before another worker may steal a claim whose owner has gone quiet. |
+| `PERF_RANDOM_REPORT_TXT` | unset | also write the report to this path. `run_perf_random.txt` is what this produced. |
+| `PERF_RANDOM_INDUCTOR_LOG` | unset | `1` = keep Inductor's per-shape candidate list. Off by default because 1,400 shapes of it is tens of megabytes that says nothing the records do not carry. Changes nothing measured. |
+
+`gemm.perf.static` reads thirteen, eight of them the same idea under a different prefix:
+
+| variable | default | what it does |
+|---|---|---|
+| `PERF_STATIC_DTYPES` | `fp16,fp8` | which dtypes to run. `fp16` alone drops 199 of the 590 shapes. **A cost knob.** |
+| `PERF_STATIC_PAIRINGS` | all | comma-separated subset of `moe_up,moe_down,mlp_up,mlp_down,lora,lmhead,attn`. **A cost knob.** |
+| `PERF_STATIC_REPORT_ONLY` | unset | `1` = print the table from `cache/` and exit. **A cost knob.** |
+| `PERF_STATIC_SEARCH_S` | whatever `gemm.perf.random` uses | search budget per shape. Changing it makes the two steps incomparable. |
+| `PERF_STATIC_REFINE` | whatever `gemm.perf.random` uses | configurations re-timed with a graph replay. Same warning. |
+| `PERF_STATIC_MAX_CONFIGS` | 0 (no cap) | cap on the search space, recorded on every row it touched. |
+| `PERF_STATIC_ROUNDS` | 3 | measurement rounds, best of. |
+| `PERF_STATIC_CUBLASLT` | `13.1.1` | which cuBLAS version's rules to match. |
+| `PERF_STATIC_LIMIT` | 0 (none) | stop after this many shapes in this process. |
+| `PERF_STATIC_LEASE_MIN` | 45 | minutes before a stale claim may be stolen. |
+| `PERF_STATIC_REDO_UNBATCHED` | unset | `1` = re-measure the shapes taken one call per graph, before batching existed, whose own recorded floor says a batch would move them. Idempotent, so it can be left on across a resumed run. |
+| `PERF_STATIC_REDO_CONTENDED` | unset | `1` = re-measure the shapes whose latest rows record `contended`, i.e. another process was on the GPU while they were timed. Also idempotent. |
+| `PERF_STATIC_REPORT_TXT` | unset | also write the report to this path. |
+
+**What you should see.** For each step: a per-shape (or per-case) table with all five arms in
+microseconds per call and four ratios against `cublas`, then aggregate blocks — by sampling family
+and by resolved cuBLAS plan mode for `gemm.perf.random`, by layer group and by (layer group,
+dtype) for `gemm.perf.static`. Each aggregate row carries the geometric mean, `[p25 med p75]`,
+worst and best with the shape named, a geometric mean of the raw microseconds, a
+`byte-identical` fraction, a `near floor` count and an `uncaptured` count.
+
+`gemm.perf.static` finished: 698 cases, 590 shapes, 5,345 arm records. Per layer group, against
+`cublas`, above 1 faster:
+
+| layer group | cases | `torch_auto` | `torch_triton` | `bitequiv_autotuning` | `gb300_accelerated` |
+|---|---|---|---|---|---|
+| `moe_up` | 132 | 0.558 | 0.557 | 0.276 | 0.530 |
+| `moe_down` | 144 | 0.589 | 0.588 | 0.289 | 0.567 |
+| `mlp_up` | 42 | 0.660 | 0.671 | 0.404 | 0.718 |
+| `mlp_down` | 42 | 0.645 | 0.647 | 0.418 | 0.695 |
+| `lora` | 168 | 0.765 | 0.766 | 0.708 | 0.651 |
+| `lmhead` | 56 | 0.878 | 0.878 | 0.951 | 0.910 |
+| `attn` | 114 | 0.624 | 0.629 | 0.417 | 0.686 |
+
+Read the spread, not one number: on `lmhead`, where `K` is 7,168 or more and the GEMM is real
+work, every arm is within 10% of cuBLAS and `bitequiv_autotuning` is the closest at 0.951. On the
+small MoE expert GEMMs every arm is around half of cuBLAS, and `bitequiv_autotuning`'s fp8 rows
+collapse to about 0.15 because the pre-sm_103 kernel makes a `_kcontig` copy of the whole weight
+matrix — which is exactly the "it needed new code" gap the `gb300_accelerated` arm exists to show.
+`torch_auto` and `torch_triton` agree to within 0.01 on every group, so excluding the extern
+changes nothing.
+
+`gemm.perf.random` was being re-measured when this commit was made and its table is partial.
+`run_perf_random.txt` is written by the step itself and carries its own coverage line — read that
+line before its numbers. Do not read a partial family as a family.
+
+**How to judge it.** In this order.
+
+1. **`byte-identical` must equal the total for `bitequiv_autotuning` and `gb300_accelerated`, on
+   every group.** Those two arms are bit-equivalent by construction, so a short count is a bug
+   report and their times mean nothing until it is fixed. On the committed `gemm.perf.static` run
+   both read full on every layer group — `1320/1320`, `1440/1440`, `420/420`, `420/420`,
+   `1680/1680`, `560/560`, `1140/1140`, counted per case, or 5,900 of 5,900 counted once per
+   distinct shape. `torch_auto` is unconstrained and is expected to be short (5,470 of 5,900);
+   how short is itself a result.
+2. **`near floor` and the `F` flag.** A row whose time is under three times `floor_ms` is mostly
+   launch overhead and every ratio on it is pulled toward 1. The count is per arm: on
+   `gemm.perf.static`'s `lora` group it is 56 of 168 for `cublas`, 31 for the two torch arms, 38
+   for `bitequiv_autotuning` and 0 for `gb300_accelerated`. `lmhead` and `attn` carry none at all.
+   These rows stay in the geometric means; they are flagged, not dropped.
+3. **`batch_n`.** A row with no `batch_n` was taken before calls were batched into one graph, and
+   on a small shape it is *not* comparable with a batched row — it reads slower. The `-` entries
+   under `calls per graph` count them.
+4. **`uncaptured`, `declined`, `error`.** An arm the CUDA graph would not capture, a shape
+   `cublas_equivalent_gemm` refuses, or a shape that failed, contributes no time and therefore no
+   ratio. Every one is counted and named at the end of the report rather than dropped silently.
+
+**A failing row looks like** an arm whose `bit_ok` is below its `bit_total` in the last two
+positions, or a `cublas` time so small the shape reads at hundreds of teraflops. The second is a
+measurement failure, not a result: it means the `cublasLtMatmul` call returned non-zero and did
+nothing, and the fix is described under [how the timings are
+taken](#how-the-timings-are-taken-and-why). **No failing row of either kind is expected on this
+tree**, and neither step reports `FAIL` today.
 
 ### `gemm.fusion` — fusing an epilogue cuBLAS cannot express
 
@@ -144,11 +359,18 @@ python artifact_eval/artifact.py --run gemm.fusion
 ```
 
 `--minutes` does not apply: the cost is fixed by the case list. Options are environment variables,
-because `artifact.py`'s CLI is shared: `FUSION_DTYPES` (default `fp16,bf16`), `FUSION_MAX_PLAIN`
-(default 35, the cap on the `plain` half of the selection — it does not bind today),
-`FUSION_DRAWS` (default 10), `FUSION_SEARCH_S` (default 45, seconds of configuration search per
-row), `FUSION_ROUNDS` (default 3), `FUSION_ONLY` (a substring of `"<model> <layer>"`, to run one
-case), `FUSION_SKIP` (arms to leave out), `FUSION_REDO=1` (re-measure rows already in `cache/`).
+because `artifact.py`'s CLI is shared by every step. There are eight:
+
+| variable | default | what it does |
+|---|---|---|
+| `FUSION_ONLY` | unset | a substring of `"<model> <layer>"`; runs just the cases that match. **The way to look at one case in a minute instead of the whole list in an hour.** |
+| `FUSION_DTYPES` | `fp16,bf16` | which dtypes to run. `fp16` alone halves the 96 rows. **A cost knob.** |
+| `FUSION_SEARCH_S` | 45 | seconds of configuration search per row for `bitequiv_autotuner_fused`. **The largest single term in the cost.** `search_space` and `search_seen` on the row say how much of the space that bought. |
+| `FUSION_DRAWS` | 10 | input draws per row for the byte check. |
+| `FUSION_ROUNDS` | 3 | measurement rounds, best of. |
+| `FUSION_MAX_PLAIN` | 35 | cap on the `plain` half of the case selection. Does not bind today: the rule picks 31. |
+| `FUSION_SKIP` | unset | comma-separated arm names to leave out of the run. |
+| `FUSION_REDO` | 0 | `1` = re-measure rows already in `cache/gemm.fusion.jsonl` instead of resuming past them. |
 
 **Method.** What makes a fused arm equal to the baseline is where it rounds. The unfused path
 writes the GEMM's output to memory in the output dtype and reads it back, so the fused kernel has
@@ -208,10 +430,13 @@ between replays, `batch_n` calls per graph each on its own operand copy. Five ti
 per arm and `batch_n` and `floor_ms` are on every row. A row with `others_on_gpu` other than 0 was
 taken beside another process and is not a measurement.
 
-**Cost.** Fixed by the case list, about an hour and a half on an idle GB300 at the defaults. Most
-of it is compilation — Inductor's autotune for `torch_fused` and the configuration search for
-`bitequiv_autotuner_fused` — not running kernels, so a second run over the same cases is far
-faster. Records stream to `cache/gemm.fusion.jsonl` and the run resumes from them.
+**Cost.** Fixed by the case list; `--minutes` does not apply. The committed run took **one hour
+nineteen minutes** on an idle GB300 for all 96 rows — its own log stamps the first case at 03:04:14
+and the last at 04:23:11. Most of that is compilation — Inductor's autotune for `torch_fused` and
+the configuration search for `bitequiv_autotuner_fused` — not running kernels, so a second run over
+the same cases is far faster. Records stream to `cache/gemm.fusion.jsonl` and the run resumes from
+them. The knobs that shrink it are `FUSION_ONLY` (one case), `FUSION_DTYPES=fp16` (halves the
+rows), and `FUSION_SEARCH_S` (45 seconds per row is the largest single term).
 
 **What you should see.** One row per (case, dtype), each with all four arms in it, then geometric
 means by plan mode, dtype, layer group and epilogue, all computed at print time from the rows on
@@ -238,10 +463,11 @@ concrete reason the two bit-exact arms exist.
 `bitequiv_autotuner_fused` 0.659, `gb300_fused` 0.715. **Fusing a bit-exact epilogue does not, in
 general, beat cuBLAS plus a separate kernel on a GB300** — an arm beat the baseline on 31, 8 and 12
 of the 96 rows respectively. Two places it does pay: the LoRA merge, where `K` is the rank and the
-GEMM is almost nothing (searched arm 1.15x geometric mean over 10 rows, 1.48x at its best), and the
+GEMM is almost nothing (searched arm 1.153 geometric mean over 10 rows, 1.475 at its best), and the
 split MoE `up_proj` shapes (`gb300_fused` beats the baseline on 12 of the 34 split rows, up to
-1.15x). The worst case is the dense `mlp.up_proj` with a SwiGLU gate at 16384 tokens, 0.254 — there
-the epilogue's extra `[M, N]` gate read costs more than skipping one round trip saves. Two caveats
+1.147). The worst case is a dense `mlp.up_proj` with a SwiGLU gate at 16384 tokens — GLM-4.7-Flash
+16384x10240x2048, where `gb300_fused` reads 0.178 at bf16 and 0.190 at fp16 — because there the
+epilogue's extra `[M, N]` gate read costs more than skipping one round trip saves. Two caveats
 belong with these numbers: the shipped GB300 tile does not fit a fused kernel on 52 of the 62
 `plain` rows and was stepped down a pipeline stage or more (the row's `gb300_cfg` says so), and the
 search covered a median 42% of its space inside the 45-second budget (`search_space` and
@@ -256,6 +482,48 @@ it is not byte-identical to cuBLAS on essentially any draw. Then read
 A `*` on a row marks a baseline under three times the replay floor, where every ratio is
 compressed toward 1 and small differences mean nothing.
 
+**A failing row looks like** an `x` in the second or third `bits` position. **No such row is
+expected on this tree** and the committed run has none: 960 of 960 draws on both bit-exact arms.
+An `x` in the *first* position is normal and expected — 760 of the 960 `torch_fused` draws differ.
+
+### What bit-exactness costs when nothing else changes
+
+Every number in the two sections above is a comparison between **different kernels**. That is the
+honest reading of them, and it is why none of them is labelled the price of the bit constraint:
+the kernel difference is much larger than the constraint, and a ratio cannot be split into the two
+after the fact.
+
+There is exactly one measurement in this project where the constraint is isolated, and it is not
+one of the eight steps. It lives in `fusion_oracle/three_way.py` and it works like this:
+
+```
+the unconstrained arm   the kernel torch.compile emits for GEMM + epilogue under
+                        max-autotune, taken verbatim out of its own output_code.py
+the bit-exact arm       THAT SAME SOURCE with only the epilogue arithmetic replaced by the
+                        rounding torch eager does. Same mainloop, same tile, same grid,
+                        same launch, same number of kernels.
+```
+
+Because only the epilogue text differs, the ratio between them is the constraint and nothing else.
+Over the 45 cases of the `oracle2` run — every one of which Inductor really did fuse into one
+template, and on every one of which the swapped kernel came back byte-identical to the eager
+reference on all draws — the unconstrained kernel over the bit-exact one has a **geometric mean of
+0.936 on the 38 cases where fusing beat the two-kernel baseline in the first place**, that is, the
+bit-exact spelling sits **6.4% below** the unconstrained one. Its range is 0.695 to 1.225, and it
+is above 1.0 on 15 of the 38.
+
+Reproduce it with `python fusion_oracle/report.py oracle2`, which prints the whole table from
+`fusion_oracle/three_way.jsonl` and needs no GPU. Look for the block headed *THE COST OF
+BYTE-EXACTNESS* and the line
+
+```
+1/3  bit-exact fused vs unconstrained fused  geomean 0.936  min 0.695  p25 0.766
+     median 1.000  p75 1.081  max 1.225   15/38 above 1.0
+```
+
+**6.4% is the only number in this artifact allowed to wear that label.** Any other ratio between
+one of our kernels and somebody else's is a product comparison.
+
 ### `gemm.cublas-bug` — some mismatches are cuBLAS's own
 
 **Claim.** cuBLAS itself returns a wrong answer on some shapes, so a disagreement is not
@@ -267,9 +535,26 @@ unchanged. Run it yourself, once per library you want to test. `A` and `B` are a
 element of the result must be exactly `K`; nothing rounds, because the products are exact and the
 output is fp32.
 
+**Cost.** The step itself prints and exits in under a second. It reads no environment variables
+and ignores every CLI flag. The reproducer it points at is three GEMMs and takes seconds; it is
+`bitequiv/cublas_match/cublas_gemm_bug_reproduce.py` and takes one variable, `CUBLASLT=`, the path
+to the library you want to test.
+
 **What you should see.** On an sm_103 GPU with cuBLASLt 13.1.1 or 13.2.2, part one (`K = 8648`)
 comes back as 8640 — eight terms of `1 * 1` missing, which is not a rounding error of any size.
-The script ends in an assertion, so a successful reproduction exits non-zero.
+The step prints the three (library, part, `K`) triples observed on this machine:
+
+```
+13.2.2   part one    K =  8648 -> 8640   short by 8
+         part three  K = 11528 -> 11520  short by 8
+13.1.1   part one    K =  8648 -> 8640   short by 8
+         part three  K = 11528 -> 11520  short by 8
+12.8.5   part two    K = 57608 -> 57600  short by 8
+```
+
+**A "failing" run here is a successful reproduction.** The script ends in an assertion, so it
+exits non-zero when the defect fires. That is the intended outcome and the reason the step does
+not run it for you.
 
 **How to judge it.** The trigger is not "K is large". The loss happens only where cuBLASLt decides
 to split `K` across threadblocks, and that decision moves with both the architecture and the
@@ -286,9 +571,10 @@ is the measurement: asking whether the guarantee holds bit for bit across the co
 autotuner would actually try, and what the layout pass built on top of it,
 `tritongpu-optimize-reduction-layout` (PR #2312), costs and buys.
 
-Both steps are implemented. `inner_tree.bitmatch` asks whether the guarantee holds;
-`inner_tree.layout` asks what an optimization built on top of it costs and buys, and is the
-longest single step in the artifact.
+`inner_tree.bitmatch` asks whether the guarantee holds; `inner_tree.layout` asks what an
+optimization built on top of it costs and buys, and is the longest single step in the artifact.
+**Both come back `RESULT: FAIL` on this tree, and both are right to** — read each step's
+*failures that are expected on this tree* block before reporting either as broken.
 
 ### `inner_tree.bitmatch` — does the enforced order actually hold?
 
@@ -346,17 +632,30 @@ python artifact_eval/artifact.py --run inner_tree.bitmatch --minutes 600
 
 Nothing else has to be set, and the GPU does **not** have to be idle: nothing in this step is
 timed, so a neighbour on the same device changes no number. Options are environment variables,
-because `artifact.py`'s CLI is shared by every step: `INNER_TREE_BITMATCH_PREFLIGHT=1`
-(self-checks, the cell table and the counts, one cell pair, writes nothing),
-`INNER_TREE_BITMATCH_KERNELS`, `INNER_TREE_BITMATCH_DTYPES`, `INNER_TREE_BITMATCH_SEEDS`
-(default 5), `INNER_TREE_BITMATCH_WARPS`, `INNER_TREE_BITMATCH_STAGES`.
+because `artifact.py`'s CLI is shared by every step. There are six:
 
-**Cost.** 104 cells × 36 configurations = 3,744 compiles and 18,720 launches; about forty minutes
-on a GB300, nearly all of it compiling, because `TRITON_ALWAYS_COMPILE=1` means no build is served
+| variable | default | what it does |
+|---|---|---|
+| `INNER_TREE_BITMATCH_PREFLIGHT` | unset | `1` = run the self-checks, print the cell table and the counts, do one cell pair, write nothing, exit. **About a minute instead of about twenty-five.** |
+| `INNER_TREE_BITMATCH_KERNELS` | all 26 pairs | comma-separated kernel names. **A cost knob: one kernel is 4 cells instead of 104.** |
+| `INNER_TREE_BITMATCH_DTYPES` | all | comma-separated dtypes. **A cost knob.** |
+| `INNER_TREE_BITMATCH_WARPS` | `1,2,4,8,16,32` | the swept `num_warps` values. Narrowing it narrows the claim; the report prints the space it actually covered. |
+| `INNER_TREE_BITMATCH_STAGES` | `1,2,3,4,5,6` | the swept `num_stages` values. Same warning. |
+| `INNER_TREE_BITMATCH_SEEDS` | 5 | input draws per configuration. A cell recorded at a different seed count is redone, not reused. |
+
+The step also sets `TRITON_ALWAYS_COMPILE=1` for itself. It does **not** rely on
+`TRITON_STRICT_REDUCTION_ORDERING`: that variable does nothing for a kernel that takes
+`reduction_ordering` as a constexpr, which all of these do, so the ordering is passed explicitly on
+every build instead. The report says which of the two it saw.
+
+**Cost.** 104 cells × 36 configurations = 3,744 compiles and 18,720 launches. **About 25 minutes
+on a GB300** — the committed run's header is stamped 23:16:29 and its last record landed at
+23:41:56 — nearly all of it compiling, because `TRITON_ALWAYS_COMPILE=1` means no build is served
 from the disk cache. `--minutes` is a resumable budget, not a sample size: cells stream to
 `cache/inner_tree.bitmatch.jsonl` one at a time and a second invocation continues where the first
 stopped, so a short run repeated gives the same table as one long run. A cell recorded with a
 different seed count or a different swept space is redone rather than reused.
+`INNER_TREE_BITMATCH_PREFLIGHT=1` is the knob for a first look.
 
 **What you should see.** Three self-checks, all `YES`; a determinism sweep over all 26 of this
 step's (kernel, dtype) pairs; the cell table; then one line per (kernel, dtype, `enable_fp_fusion`)
@@ -394,12 +693,53 @@ as *no evidence* rather than as a pass.
    harness is broken — a partly written output buffer, say — not that the mode failed, and it fails
    the run on its own.
 
+**Failures that are expected on this tree, and are not defects.**
+
+*The run ends in `RESULT: FAIL`, and the two cells that cause it are the point of the step.* The
+committed gate reads:
+
+```
+cells measured                     104   (96 real, 8 control)
+cache defeat verified on every row 1
+inner_tree cells                   48
+of those, with a sensitive partner 38
+of those, NOT invariant            2     (must be 0; this is the claim)
+inner_tree cells with no evidence  10
+cells where fewer than 2 ran       0
+controls not invariant             0
+```
+
+The two are `D_masked_global_sum` at f32, one at `enable_fp_fusion=off` and one at `on`. Each
+returns **3** byte classes of sizes 24, 6, 6 over its 36 configurations, `split_axes = num_warps`,
+with `num_warps=1 num_stages=1` against `num_warps=16 num_stages=1` given as the disagreeing pair.
+The matching `unordered` cells split the same way, so this is not a case where the sweep failed to
+move anything — the layout genuinely moves the bits there and `inner_tree` does not stop it.
+`D_masked_global_sum` is a TorchInductor MSE-loss tail: 608 live elements zero-padded into a 1024
+tile and summed down to one scalar. **This is a real counterexample to the guarantee the mode
+documents, on a kernel that came out of `torch.compile`, and reporting it is what the step is
+for.** A reviewer should check that the two failing cells are these two and no others.
+
+*Ten cells report `no evidence`.* All ten are fp8 pure sums (`col_sum_loop`, `sum_2d_axis0`,
+`sum_2d_col`, `sum_2d_col_big`, `sum_3d_outer`, at both `enable_fp_fusion` settings). An fp8 e4m3
+value carries a four-bit significand, so the exact sum of a few hundred of them still fits inside
+an f32 mantissa and every order gives the same answer. The step measures this rather than
+asserting it: on the same draws the kernels use, 200 of 200 fp8 draws sum exactly in f32 and 0 of
+200 differ between a sequential sum and a pairwise tree, against 0 of 200 and 85 of 200 for f16.
+So those cells are **untested, not passing**, and the gate counts them separately.
+
+*`col_dot` at f16 reports up to 20% of its output NaN or Inf.* The wide-range draw squared
+overflows f16. Those cells are still order-sensitive, so the check is weakened rather than vacuous,
+and the gate prints the saturated fraction per kernel.
+
 **The headline, and what it does not say.** The last lines read *N cells, of which M were
 `inner_tree` cells whose matching `unordered` cell actually differed; K of those M were not
 invariant*, followed by the space in full: the axis values, the draws per point, and how many
-configurations compiled, failed and were attempted. The phrasing is deliberate. This is a universal
-claim, and a pass over these kernels and these axes says only that nothing moved *here*. Read the
-space before generalising, and read the *no evidence* cells as untested rather than as passing.
+configurations compiled, failed and were attempted. On the committed run that is *104 cells, of
+which 38 ... ; 2 of those 38 were not invariant*, over `num_warps=1,2,4,8,16,32` ×
+`num_stages=1..6`, 5 draws per point, 3,744 configurations compiled with 0 build failures. The
+phrasing is deliberate. This is a universal claim, and a pass over these kernels and these axes
+says only that nothing moved *here*. Read the space before generalising, and read the *no evidence*
+cells as untested rather than as passing.
 
 ### `inner_tree.layout` — is the layout pass bit-safe, and what does it buy?
 
@@ -423,13 +763,21 @@ python artifact_eval/artifact.py --run inner_tree.layout --minutes 600
 ```
 
 Nothing else has to be set. Options are environment variables, because `artifact.py`'s CLI is
-shared by every step: `INNER_TREE_LAYOUT_PREFLIGHT=1` (self-checks, the kernel table, a timing
-projection; minutes, writes nothing), `INNER_TREE_LAYOUT_KERNELS`, `INNER_TREE_LAYOUT_DTYPES`,
-`INNER_TREE_LAYOUT_SEEDS` (default 10), `INNER_TREE_LAYOUT_BENCH_REPS` (default 3),
-`INNER_TREE_LAYOUT_PATIENCE_MIN` (default 45, see below), `INNER_TREE_LAYOUT_REPORT_ONLY=1`
-(rebuild the table from the records already in `cache/`; launches no kernel and changes no
-number), `INNER_TREE_LAYOUT_FORCE_TIMING=1` (time even on a busy card — for debugging the code
-path only, the numbers are not measurements).
+shared by every step. There are eight — seven you might want, and one you should not use:
+
+| variable | default | what it does |
+|---|---|---|
+| `INNER_TREE_LAYOUT_PREFLIGHT` | unset | `1` = self-checks, the kernel table and a projection of the full run's cost, from one configuration per kernel. Writes nothing. **About a minute instead of about a hundred.** |
+| `INNER_TREE_LAYOUT_REPORT_ONLY` | unset | `1` = rebuild the whole table from the records already in `cache/`. Launches no kernel, changes no number, needs no free GPU. **Seconds.** |
+| `INNER_TREE_LAYOUT_KERNELS` | all 17 | comma-separated kernel names. **A cost knob: one kernel is 72 rows instead of 1,728.** |
+| `INNER_TREE_LAYOUT_DTYPES` | all | comma-separated dtypes. **A cost knob.** |
+| `INNER_TREE_LAYOUT_SEEDS` | 10 | order-sensitive input draws per row for the bit check. |
+| `INNER_TREE_LAYOUT_BENCH_REPS` | 3 | `do_bench` medians per arm; the minimum of them is kept. Lowering it is the cheapest way to trade timing quality for wall clock. |
+| `INNER_TREE_LAYOUT_PATIENCE_MIN` | 45 | minutes the step will wait for a neighbour to leave the GPU before giving up. See *a busy GPU* below. |
+
+`INNER_TREE_LAYOUT_FORCE_TIMING=1` also exists. **Do not use it for a result**: it times even on a
+busy card, which is for debugging the code path only, and the numbers it produces are not
+measurements.
 
 **Method.** Three arms per kernel, per dtype, per configuration:
 
@@ -487,9 +835,20 @@ kernel in about a minute and projects the rest.
 **What you should see.** Four self-checks, all `YES`; a determinism sweep over all 24 (kernel,
 dtype) pairs; the kernel table; then a row per (kernel, dtype, `num_warps`) beside the earlier
 H100 number, the same medians broken out over all six `num_warps` values, and a gate. The
-speedups on the strided-axis kernels are large — `sum_3d_outer` above 4x, `J_epilogue_colsum_dim0`
-around 3x on the earlier run — and `gap_closed` sits near 1, meaning the pass reaches roughly
-where dropping the ordering constraint entirely would land.
+speedups on the strided-axis kernels are large — on the committed run `sum_3d_outer` f16 is 4.36x
+at `num_warps=4`, `layernorm_bwd_dwdb` f32 is 3.36x and `J_epilogue_colsum_dim0` f32 is 2.62x —
+and `gap_closed` sits near 1, meaning the pass reaches roughly where dropping the ordering
+constraint entirely would land. The committed gate reads:
+
+```
+rows measured                 1728
+bit-changed configurations       0   (must be 0)
+bit-changed on the perf input    0   (must be 0; an independent second check)
+compile regressions             12   (must be 0: baseline built, optimized did not)
+baseline did not compile         0
+rows carrying an error          12   (the compile regressions above carry theirs)
+order-INSENSITIVE rows         432   (25.0% of rows -- the bit check is vacuous on these)
+```
 
 **How to judge it.** In this order.
 
@@ -607,15 +966,28 @@ export CHECKER_CORPUS=$HOME/bitwise-equiv/local_evaluation/corpus
 python artifact_eval/artifact.py --run checker.corpus
 ```
 
-No GPU is needed to run the step: the checker reads text. Knobs are environment variables rather
-than flags, because `artifact.py`'s CLI is shared by every step — `CHECKER_CORPUS_CAP` (per-group
-configuration limit, 0 = all), `CHECKER_CORPUS_KERNELS`, `CHECKER_CORPUS_WORKERS`,
-`CHECKER_CORPUS_CHECKER`, `CHECKER_CORPUS_FRESH`. Rows are written as each group finishes, and a
-re-run skips groups already recorded at the same cap, so a killed run resumes.
+No GPU is needed to run the step: the checker reads text. `--minutes` does not apply. Knobs are
+environment variables rather than flags, because `artifact.py`'s CLI is shared by every step.
+There are eight:
 
-**Cost.** Tens of minutes for the full corpus at 16 workers, CPU only. Flash attention dominates:
-roughly 2 seconds per configuration against 0.05 for everything else. To see the shape of the
-result in a couple of minutes, cap it or pick a few kernels:
+| variable | default | what it does |
+|---|---|---|
+| `CHECKER_CORPUS` | `~/bitwise-equiv/local_evaluation/corpus` | where the corpus is. Without a corpus the step prints how to build one and exits 0. |
+| `CHECKER_CORPUS_KERNELS` | all | comma-separated kernel names. **A cost knob: five small kernels finish in a couple of minutes.** |
+| `CHECKER_CORPUS_CAP` | 0 (no cap) | configurations per group, taken as a strided sample. **A cost knob, and it changes the meaning of the answer:** class counts are then for the sample, not for the space. The cap is recorded on every row and named in every note. The prior table was taken with no cap. |
+| `CHECKER_CORPUS_WORKERS` | 16 | checker process pool size. CPU only. |
+| `CHECKER_CORPUS_CHECKER` | `bitequiv.ptx.forward.interp:forward_module_descriptor` | `module:function` of the checker being graded. Point it at another one to grade that instead. |
+| `CHECKER_CORPUS_FRESH` | unset | `1` = re-grade groups already in `cache/checker.corpus.jsonl` instead of resuming past them. |
+| `CHECKER_CORPUS_RECYCLE` | 5000 | files graded before the worker pool is replaced. A guard against a worker leaking memory over a long run. |
+| `CHECKER_CORPUS_STALL` | 600 | seconds without a result before a group's pool is declared dead. It is then reported, not waited on, so one stuck group cannot hang the run. |
+
+Rows are written as each group finishes, and a re-run skips groups already recorded at the same
+cap, so a killed run resumes.
+
+**Cost.** Tens of minutes for the full corpus at 16 workers, CPU only; the committed table was
+assembled over several resumed invocations. Flash attention dominates: roughly 2 seconds per
+configuration against 0.05 for everything else, and it is 9,580 of the 51,152 configurations. To
+see the shape of the result in a couple of minutes, cap it or pick a few kernels:
 
 ```
 CHECKER_CORPUS_KERNELS=softmax,col_max,sum,dot,layernorm python artifact_eval/artifact.py --run checker.corpus
@@ -625,11 +997,24 @@ CHECKER_CORPUS_KERNELS=softmax,col_max,sum,dot,layernorm python artifact_eval/ar
 and a printed line per group. The columns to read are `checker_cls` (classes the checker proved),
 `empirical_cls` (classes the recorded bytes actually fall into) and `over_merges`. Compare
 `checker_cls` against the `after` column of the prior table and `empirical_cls` against its
-`empirical` column.
+`empirical` column. The committed run's three summed rows:
+
+```
+TOTAL reduction   configs= 9384  checker= 1009  empirical= 614  over_merges=0   (77 groups)
+TOTAL mma         configs=41768  checker=11447  empirical= 790  over_merges=0   (14 groups)
+TOTAL everything  configs=51152  checker=12456  empirical=1404  over_merges=0   (91 groups)
+```
+
+93 groups were graded; the totals cover 91 because two of them — `col_exp_sum` at bf16 and at f16
+— graded 0 configurations. All 144 configurations in each of those two failed to build when the
+corpus was made, so they are counted as `infeasible` and there was nothing for the checker to
+read. A group with `configs = 0` is dropped from the totals rather than counted as a clean 0.
 
 **How to judge it.** **`over_merges` = 0 is the gate**, and it is the only hard one. Anything else
 means the checker certified two configurations as identical and the bytes they returned were not,
 which is a soundness bug and not a tuning trade-off. The step prints the offending groups by name.
+**A failing row looks like** `over_merges` above 0 on any group. **No such row is expected on this
+tree**, and the committed run has none: 0 over-merges in every one of the 93 groups.
 
 `checker_cls` against `empirical_cls` is the other direction and is a trade-off, not a failure.
 Equal means nothing is left to recover. Above means the checker is safe but conservative: those
@@ -674,13 +1059,26 @@ steps/             one file per evaluation step; the file name is the step name 
                    runs and times them; a step-private helper, not shared machinery
   gemm_bitmatch.py ... one module per step, each declaring its own table columns
 corpus_builder/    the scripts that build `checker.corpus`'s input; the corpus itself never ships
+fusion_oracle/     the epilogue-swap experiment and its verified epilogue spellings; `report.py`
+                   prints the 6.4% isolation from saved records with no GPU
+fusion_moe/        `models_2026.py`, the model layer table `gemm.perf.static` and `gemm.fusion`
+                   draw their shapes from
 prior_results.txt
-                   the checker tables from the diffs, verbatim; what section 3 is compared against
+                   the checker tables from the earlier work, verbatim; what section 3 is
+                   compared against
+run_*.txt          captured output of one run, so a reviewer can read a result before spending a
+                   GPU on it: run_bitmatch, run_perf_random, run_perf_static, run_fusion,
+                   run_inner_tree_layout, run_checker_corpus. Each is what its own step printed
+                   and each carries its own coverage line -- read that line first, because a
+                   partial run and a complete one look alike once averaged. Regenerate one by
+                   re-running its step; do not hand-edit it
 README.md          this file
 AGENTS.md          operational notes for an AI agent driving the artifact; CLAUDE.md points here
 data/              committed. Results only, as CSV.
-  FORMAT.md        every column of every table, generated from the same declaration as the CSVs
-  summary.csv      the headline numbers, one row per experiment and group
+  FORMAT.md        every column of every table, plus the rules for recomputing a table from the
+                   rows; generated from the same declaration as the CSVs
+  summary.csv      the headline numbers, one row per (experiment, group, metric), each carrying
+                   its own `n` against `attempted` so a partial group cannot read as a whole one
   env.csv          the machine and library versions each run was taken on
 cache/             not committed. Streaming records. Regenerated, not archived.
 ```
@@ -693,20 +1091,38 @@ Bulk data — PTX dumps, full configuration sweeps, per-draw tensors — is deli
 committed. The script regenerates it; only results are kept. The large per-row CSVs are generated
 too, and `summary.csv` is what ships.
 
+**The CSVs in `data/` are append logs, not tables.** A shape measured twice is in there twice, and
+a step's own report keeps only the last record per key. `data/FORMAT.md` states that rule and the
+others a reader needs to get the same numbers back out; read it before recomputing anything.
+
 ## Machine and versions
 
 ```
 GPU        NVIDIA GB300, compute capability 10.3 (sm_103)
-cuBLASLt   13.1.1
-Triton     3.8.0+fb, this repository at commit 8f24688b9
+cuBLASLt   13.2.2 as loaded at run time, on all 82 invocations recorded in data/env.csv
+           13.1.1 is what the arch profile was FITTED against, so every run prints a warning
+Triton     3.8.0+fb, this repository, branch artifact-eval-submission
 PyTorch    2.12.0+cu130
 Python     3.12
 ```
 
 `artifact.py` prints the architecture and cuBLASLt version it actually ran against and warns when
-either differs. **This matters more than it usually does.** Which kernel cuBLAS picks is a function
-of the architecture *and* the library version, and the bits it returns follow from that choice, so
-a row is only comparable to another row with the same two.
+either differs from the fitted pair. **This matters more than it usually does.** Which kernel
+cuBLAS picks is a function of the architecture *and* the library version, and the bits it returns
+follow from that choice, so a row is only comparable to another row with the same two.
+
+**So you will see a cuBLASLt warning on every run in this artifact, and it is expected.** The box
+carries 13.2.2 and the recipe in `bitequiv/cublas_match/arch.py` was measured on 13.1.1. The
+warning says the pair was not measured, not that the result is wrong — and in fact the bits still
+came out identical: `gemm.perf.static` was byte-identical on 5,900 of 5,900 draws on each of its
+two bit-exact arms, over 590 distinct shapes, and `gemm.fusion` on 960 of 960. Silencing it would
+mean adding a
+`((10, 3), (13, 2))` entry to that file's registry, which nobody should do on the strength of one
+box. `data/env.csv` records the loaded version for every invocation, so no row is ambiguous.
+
+Each run also records the exact repository commit it ran at; the runs behind this commit span
+several, because steps were being finished while others were measuring. `data/env.csv` has the
+list.
 
 ## Building
 
