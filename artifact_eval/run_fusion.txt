@@ -1,0 +1,855 @@
+artifact evaluation
+  device      NVIDIA GB300  (sm_103)
+  cuBLASLt    13.2.2
+  triton      3.8.0+fb   torch 2.12.0+cu130   commit 50cf85ef37d1
+  WARNING: the paper's numbers used cuBLASLt 13.1.1; this is 13.2.2. cuBLAS may pick a
+           different algorithm, which changes the bits it returns and what we must reproduce.
+
+[gemm.fusion] fusing an epilogue cuBLAS cannot express, on real model layer dimensions
+  dtypes fp16,bf16   draws 10   search 45s/row   rounds 3
+  cuBLAS plan modes over 405 reachable cases x 2 dtypes, resolved in 0.2s
+    plain 722   declined 54   split 34
+  selected 48 cases: 17 split (every one of them) and 31 plain -- see fusion_oracle/fusion_cases.py for the rule
+  96 of 96 (case, dtype) rows still to do
+
+        03:04:14  Qwen3.8-2.4T-A moe_up 320x2048x8192 fp16  mode split, building the fused kernel
+        03:04:20  Qwen3.8-2.4T-A moe_up 320x2048x8192 fp16  searching the pre-sm_103 configuration space
+        03:04:35  Qwen3.8-2.4T-A moe_up 320x2048x8192 fp16  fitting the GB300 launch
+        03:04:35  Qwen3.8-2.4T-A moe_up 320x2048x8192 fp16  torch.compile max-autotune
+        03:04:43  Qwen3.8-2.4T-A moe_up 320x2048x8192 fp16  byte check, 10 draws
+        03:04:44  Qwen3.8-2.4T-A moe_up 320x2048x8192 fp16  timing the four arms
+  [  1/96] Qwen3.8-2.4T-A95B  expert.up_proj T16k/eve 320x2048x8192    fp16  split  gb300 0.844x   31.7s  eta  50.2m
+        03:04:46  Qwen3.8-2.4T-A moe_up 320x2048x8192 bf16  mode split, building the fused kernel
+        03:04:46  Qwen3.8-2.4T-A moe_up 320x2048x8192 bf16  searching the pre-sm_103 configuration space
+        03:05:00  Qwen3.8-2.4T-A moe_up 320x2048x8192 bf16  fitting the GB300 launch
+        03:05:01  Qwen3.8-2.4T-A moe_up 320x2048x8192 bf16  torch.compile max-autotune
+        03:05:18  Qwen3.8-2.4T-A moe_up 320x2048x8192 bf16  byte check, 10 draws
+        03:05:21  Qwen3.8-2.4T-A moe_up 320x2048x8192 bf16  timing the four arms
+  [  2/96] Qwen3.8-2.4T-A95B  expert.up_proj T16k/eve 320x2048x8192    bf16  split  gb300 0.844x   36.5s  eta  53.4m
+        03:05:23  Qwen3.8-2.4T-A moe_up 80x2048x8192 fp16  mode split, building the fused kernel
+        03:05:23  Qwen3.8-2.4T-A moe_up 80x2048x8192 fp16  searching the pre-sm_103 configuration space
+        03:05:23  Qwen3.8-2.4T-A moe_up 80x2048x8192 fp16  fitting the GB300 launch
+        03:05:24  Qwen3.8-2.4T-A moe_up 80x2048x8192 fp16  torch.compile max-autotune
+        03:05:29  Qwen3.8-2.4T-A moe_up 80x2048x8192 fp16  byte check, 10 draws
+        03:05:31  Qwen3.8-2.4T-A moe_up 80x2048x8192 fp16  timing the four arms
+  [  3/96] Qwen3.8-2.4T-A95B  expert.up_proj T16k/col 80x2048x8192    fp16  split  gb300 0.832x   11.2s  eta  41.1m
+        03:05:34  Qwen3.8-2.4T-A moe_up 80x2048x8192 bf16  mode split, building the fused kernel
+        03:05:34  Qwen3.8-2.4T-A moe_up 80x2048x8192 bf16  searching the pre-sm_103 configuration space
+        03:05:34  Qwen3.8-2.4T-A moe_up 80x2048x8192 bf16  fitting the GB300 launch
+        03:05:35  Qwen3.8-2.4T-A moe_up 80x2048x8192 bf16  torch.compile max-autotune
+        03:05:49  Qwen3.8-2.4T-A moe_up 80x2048x8192 bf16  byte check, 10 draws
+        03:05:51  Qwen3.8-2.4T-A moe_up 80x2048x8192 bf16  timing the four arms
+  [  4/96] Qwen3.8-2.4T-A95B  expert.up_proj T16k/col 80x2048x8192    bf16  split  gb300 0.828x   20.2s  eta  38.2m
+        03:05:54  Qwen3.8-2.4T-A moe_up 80x2048x8192 fp16  mode split, building the fused kernel
+        03:05:54  Qwen3.8-2.4T-A moe_up 80x2048x8192 fp16  searching the pre-sm_103 configuration space
+        03:05:54  Qwen3.8-2.4T-A moe_up 80x2048x8192 fp16  fitting the GB300 launch
+        03:05:54  Qwen3.8-2.4T-A moe_up 80x2048x8192 fp16  torch.compile max-autotune
+        03:05:54  Qwen3.8-2.4T-A moe_up 80x2048x8192 fp16  byte check, 10 draws
+        03:05:57  Qwen3.8-2.4T-A moe_up 80x2048x8192 fp16  timing the four arms
+  [  5/96] Qwen3.8-2.4T-A95B  expert.up_proj T4k/even 80x2048x8192    fp16  split  gb300 0.829x    4.8s  eta  31.7m
+        03:05:59  Qwen3.8-2.4T-A moe_up 80x2048x8192 bf16  mode split, building the fused kernel
+        03:05:59  Qwen3.8-2.4T-A moe_up 80x2048x8192 bf16  searching the pre-sm_103 configuration space
+        03:05:59  Qwen3.8-2.4T-A moe_up 80x2048x8192 bf16  fitting the GB300 launch
+        03:05:59  Qwen3.8-2.4T-A moe_up 80x2048x8192 bf16  torch.compile max-autotune
+        03:05:59  Qwen3.8-2.4T-A moe_up 80x2048x8192 bf16  byte check, 10 draws
+        03:06:01  Qwen3.8-2.4T-A moe_up 80x2048x8192 bf16  timing the four arms
+  [  6/96] Qwen3.8-2.4T-A95B  expert.up_proj T4k/even 80x2048x8192    bf16  split  gb300 0.825x    6.4s  eta  27.7m
+        03:06:05  Qwen3.8-2.4T-A moe_up 20x2048x8192 fp16  mode split, building the fused kernel
+        03:06:05  Qwen3.8-2.4T-A moe_up 20x2048x8192 fp16  searching the pre-sm_103 configuration space
+        03:06:17  Qwen3.8-2.4T-A moe_up 20x2048x8192 fp16  fitting the GB300 launch
+        03:06:18  Qwen3.8-2.4T-A moe_up 20x2048x8192 fp16  torch.compile max-autotune
+        03:06:22  Qwen3.8-2.4T-A moe_up 20x2048x8192 fp16  byte check, 10 draws
+        03:06:25  Qwen3.8-2.4T-A moe_up 20x2048x8192 fp16  timing the four arms
+  [  7/96] Qwen3.8-2.4T-A95B  expert.up_proj T4k/cold 20x2048x8192    fp16  split  gb300 0.810x   24.1s  eta  28.6m
+        03:06:29  Qwen3.8-2.4T-A moe_up 20x2048x8192 bf16  mode split, building the fused kernel
+        03:06:30  Qwen3.8-2.4T-A moe_up 20x2048x8192 bf16  searching the pre-sm_103 configuration space
+        03:06:41  Qwen3.8-2.4T-A moe_up 20x2048x8192 bf16  fitting the GB300 launch
+        03:06:42  Qwen3.8-2.4T-A moe_up 20x2048x8192 bf16  torch.compile max-autotune
+        03:06:57  Qwen3.8-2.4T-A moe_up 20x2048x8192 bf16  byte check, 10 draws
+        03:07:01  Qwen3.8-2.4T-A moe_up 20x2048x8192 bf16  timing the four arms
+  [  8/96] Qwen3.8-2.4T-A95B  expert.up_proj T4k/cold 20x2048x8192    bf16  split  gb300 0.773x   38.1s  eta  31.7m
+        03:07:07  DeepSeek-V4-Pr moe_up 64x3072x7168 fp16  mode split, building the fused kernel
+        03:07:08  DeepSeek-V4-Pr moe_up 64x3072x7168 fp16  searching the pre-sm_103 configuration space
+        03:07:28  DeepSeek-V4-Pr moe_up 64x3072x7168 fp16  fitting the GB300 launch
+        03:07:28  DeepSeek-V4-Pr moe_up 64x3072x7168 fp16  torch.compile max-autotune
+        03:07:33  DeepSeek-V4-Pr moe_up 64x3072x7168 fp16  byte check, 10 draws
+        03:07:37  DeepSeek-V4-Pr moe_up 64x3072x7168 fp16  timing the four arms
+  [  9/96] DeepSeek-V4-Pro    expert.up_proj T16k/col 64x3072x7168    fp16  split  gb300 1.141x   32.7s  eta  33.1m
+        03:07:40  DeepSeek-V4-Pr moe_up 64x3072x7168 bf16  mode split, building the fused kernel
+        03:07:40  DeepSeek-V4-Pr moe_up 64x3072x7168 bf16  searching the pre-sm_103 configuration space
+        03:07:57  DeepSeek-V4-Pr moe_up 64x3072x7168 bf16  fitting the GB300 launch
+        03:07:57  DeepSeek-V4-Pr moe_up 64x3072x7168 bf16  torch.compile max-autotune
+        03:08:14  DeepSeek-V4-Pr moe_up 64x3072x7168 bf16  byte check, 10 draws
+        03:08:18  DeepSeek-V4-Pr moe_up 64x3072x7168 bf16  timing the four arms
+  [ 10/96] DeepSeek-V4-Pro    expert.up_proj T16k/col 64x3072x7168    bf16  split  gb300 1.146x   41.5s  eta  35.4m
+        03:08:22  DeepSeek-V4-Pr moe_up 64x3072x7168 fp16  mode split, building the fused kernel
+        03:08:22  DeepSeek-V4-Pr moe_up 64x3072x7168 fp16  searching the pre-sm_103 configuration space
+        03:08:22  DeepSeek-V4-Pr moe_up 64x3072x7168 fp16  fitting the GB300 launch
+        03:08:22  DeepSeek-V4-Pr moe_up 64x3072x7168 fp16  torch.compile max-autotune
+        03:08:22  DeepSeek-V4-Pr moe_up 64x3072x7168 fp16  byte check, 10 draws
+        03:08:26  DeepSeek-V4-Pr moe_up 64x3072x7168 fp16  timing the four arms
+  [ 11/96] DeepSeek-V4-Pro    expert.up_proj T4k/even 64x3072x7168    fp16  split  gb300 1.126x    7.6s  eta  32.8m
+        03:08:29  DeepSeek-V4-Pr moe_up 64x3072x7168 bf16  mode split, building the fused kernel
+        03:08:29  DeepSeek-V4-Pr moe_up 64x3072x7168 bf16  searching the pre-sm_103 configuration space
+        03:08:30  DeepSeek-V4-Pr moe_up 64x3072x7168 bf16  fitting the GB300 launch
+        03:08:30  DeepSeek-V4-Pr moe_up 64x3072x7168 bf16  torch.compile max-autotune
+        03:08:30  DeepSeek-V4-Pr moe_up 64x3072x7168 bf16  byte check, 10 draws
+        03:08:33  DeepSeek-V4-Pr moe_up 64x3072x7168 bf16  timing the four arms
+  [ 12/96] DeepSeek-V4-Pro    expert.up_proj T4k/even 64x3072x7168    bf16  split  gb300 1.147x    7.4s  eta  30.6m
+        03:08:36  DeepSeek-V4-Pr moe_up 16x3072x7168 fp16  mode split, building the fused kernel
+        03:08:37  DeepSeek-V4-Pr moe_up 16x3072x7168 fp16  searching the pre-sm_103 configuration space
+        03:08:42  DeepSeek-V4-Pr moe_up 16x3072x7168 fp16  fitting the GB300 launch
+        03:08:42  DeepSeek-V4-Pr moe_up 16x3072x7168 fp16  torch.compile max-autotune
+        03:08:45  DeepSeek-V4-Pr moe_up 16x3072x7168 fp16  byte check, 10 draws
+        03:08:48  DeepSeek-V4-Pr moe_up 16x3072x7168 fp16  timing the four arms
+  [ 13/96] DeepSeek-V4-Pro    expert.up_proj T4k/cold 16x3072x7168    fp16  split  gb300 1.057x   15.4s  eta  29.5m
+        03:08:52  DeepSeek-V4-Pr moe_up 16x3072x7168 bf16  mode split, building the fused kernel
+        03:08:52  DeepSeek-V4-Pr moe_up 16x3072x7168 bf16  searching the pre-sm_103 configuration space
+        03:09:00  DeepSeek-V4-Pr moe_up 16x3072x7168 bf16  fitting the GB300 launch
+        03:09:00  DeepSeek-V4-Pr moe_up 16x3072x7168 bf16  torch.compile max-autotune
+        03:09:10  DeepSeek-V4-Pr moe_up 16x3072x7168 bf16  byte check, 10 draws
+        03:09:13  DeepSeek-V4-Pr moe_up 16x3072x7168 bf16  timing the four arms
+  [ 14/96] DeepSeek-V4-Pro    expert.up_proj T4k/cold 16x3072x7168    bf16  split  gb300 1.090x   24.7s  eta  29.5m
+        03:09:17  GLM-5.2 moe_up 32x2048x6144 fp16  mode split, building the fused kernel
+        03:09:17  GLM-5.2 moe_up 32x2048x6144 fp16  searching the pre-sm_103 configuration space
+        03:09:26  GLM-5.2 moe_up 32x2048x6144 fp16  fitting the GB300 launch
+        03:09:27  GLM-5.2 moe_up 32x2048x6144 fp16  torch.compile max-autotune
+        03:09:30  GLM-5.2 moe_up 32x2048x6144 fp16  byte check, 10 draws
+        03:09:33  GLM-5.2 moe_up 32x2048x6144 fp16  timing the four arms
+  [ 15/96] GLM-5.2            expert.up_proj T4k/cold 32x2048x6144    fp16  split  gb300 0.987x   20.2s  eta  29.0m
+        03:09:37  GLM-5.2 moe_up 32x2048x6144 bf16  mode split, building the fused kernel
+        03:09:37  GLM-5.2 moe_up 32x2048x6144 bf16  searching the pre-sm_103 configuration space
+        03:09:46  GLM-5.2 moe_up 32x2048x6144 bf16  fitting the GB300 launch
+        03:09:47  GLM-5.2 moe_up 32x2048x6144 bf16  torch.compile max-autotune
+        03:09:59  GLM-5.2 moe_up 32x2048x6144 bf16  byte check, 10 draws
+        03:10:01  GLM-5.2 moe_up 32x2048x6144 bf16  timing the four arms
+  [ 16/96] GLM-5.2            expert.up_proj T4k/cold 32x2048x6144    bf16  split  gb300 0.993x   27.1s  eta  29.1m
+        03:10:04  Kimi-K2.6 moe_up 85x2048x7168 fp16  mode split, building the fused kernel
+        03:10:04  Kimi-K2.6 moe_up 85x2048x7168 fp16  searching the pre-sm_103 configuration space
+        03:10:21  Kimi-K2.6 moe_up 85x2048x7168 fp16  fitting the GB300 launch
+        03:10:22  Kimi-K2.6 moe_up 85x2048x7168 fp16  torch.compile max-autotune
+        03:10:27  Kimi-K2.6 moe_up 85x2048x7168 fp16  byte check, 10 draws
+        03:10:30  Kimi-K2.6 moe_up 85x2048x7168 fp16  timing the four arms
+  [ 17/96] Kimi-K2.6          expert.up_proj T16k/col 85x2048x7168    fp16  split  gb300 0.860x   29.0s  eta  29.3m
+        03:10:33  Kimi-K2.6 moe_up 85x2048x7168 bf16  mode split, building the fused kernel
+        03:10:33  Kimi-K2.6 moe_up 85x2048x7168 bf16  searching the pre-sm_103 configuration space
+        03:10:47  Kimi-K2.6 moe_up 85x2048x7168 bf16  fitting the GB300 launch
+        03:10:48  Kimi-K2.6 moe_up 85x2048x7168 bf16  torch.compile max-autotune
+        03:11:06  Kimi-K2.6 moe_up 85x2048x7168 bf16  byte check, 10 draws
+        03:11:09  Kimi-K2.6 moe_up 85x2048x7168 bf16  timing the four arms
+  [ 18/96] Kimi-K2.6          expert.up_proj T16k/col 85x2048x7168    bf16  split  gb300 0.854x   39.4s  eta  30.2m
+        03:11:12  Kimi-K2.6 moe_up 85x2048x7168 fp16  mode split, building the fused kernel
+        03:11:12  Kimi-K2.6 moe_up 85x2048x7168 fp16  searching the pre-sm_103 configuration space
+        03:11:13  Kimi-K2.6 moe_up 85x2048x7168 fp16  fitting the GB300 launch
+        03:11:13  Kimi-K2.6 moe_up 85x2048x7168 fp16  torch.compile max-autotune
+        03:11:13  Kimi-K2.6 moe_up 85x2048x7168 fp16  byte check, 10 draws
+        03:11:15  Kimi-K2.6 moe_up 85x2048x7168 fp16  timing the four arms
+  [ 19/96] Kimi-K2.6          expert.up_proj T4k/even 85x2048x7168    fp16  split  gb300 0.847x    5.8s  eta  28.6m
+        03:11:18  Kimi-K2.6 moe_up 85x2048x7168 bf16  mode split, building the fused kernel
+        03:11:18  Kimi-K2.6 moe_up 85x2048x7168 bf16  searching the pre-sm_103 configuration space
+        03:11:19  Kimi-K2.6 moe_up 85x2048x7168 bf16  fitting the GB300 launch
+        03:11:19  Kimi-K2.6 moe_up 85x2048x7168 bf16  torch.compile max-autotune
+        03:11:19  Kimi-K2.6 moe_up 85x2048x7168 bf16  byte check, 10 draws
+        03:11:21  Kimi-K2.6 moe_up 85x2048x7168 bf16  timing the four arms
+  [ 20/96] Kimi-K2.6          expert.up_proj T4k/even 85x2048x7168    bf16  split  gb300 0.851x    7.0s  eta  27.3m
+        03:11:25  Kimi-K2.6 moe_up 21x2048x7168 fp16  mode split, building the fused kernel
+        03:11:26  Kimi-K2.6 moe_up 21x2048x7168 fp16  searching the pre-sm_103 configuration space
+        03:11:26  Kimi-K2.6 moe_up 21x2048x7168 fp16  fitting the GB300 launch
+        03:11:26  Kimi-K2.6 moe_up 21x2048x7168 fp16  torch.compile max-autotune
+        03:11:29  Kimi-K2.6 moe_up 21x2048x7168 fp16  byte check, 10 draws
+        03:11:32  Kimi-K2.6 moe_up 21x2048x7168 fp16  timing the four arms
+  [ 21/96] Kimi-K2.6          expert.up_proj T4k/cold 21x2048x7168    fp16  split  gb300 0.821x   10.7s  eta  26.3m
+        03:11:36  Kimi-K2.6 moe_up 21x2048x7168 bf16  mode split, building the fused kernel
+        03:11:36  Kimi-K2.6 moe_up 21x2048x7168 bf16  searching the pre-sm_103 configuration space
+        03:11:36  Kimi-K2.6 moe_up 21x2048x7168 bf16  fitting the GB300 launch
+        03:11:36  Kimi-K2.6 moe_up 21x2048x7168 bf16  torch.compile max-autotune
+        03:11:47  Kimi-K2.6 moe_up 21x2048x7168 bf16  byte check, 10 draws
+        03:11:49  Kimi-K2.6 moe_up 21x2048x7168 bf16  timing the four arms
+  [ 22/96] Kimi-K2.6          expert.up_proj T4k/cold 21x2048x7168    bf16  split  gb300 0.807x   17.8s  eta  25.7m
+        03:11:54  Ling-3.0-flash moe_up 64x768x2560 fp16  mode split, building the fused kernel
+        03:11:54  Ling-3.0-flash moe_up 64x768x2560 fp16  searching the pre-sm_103 configuration space
+        03:11:54  Ling-3.0-flash moe_up 64x768x2560 fp16  fitting the GB300 launch
+        03:11:55  Ling-3.0-flash moe_up 64x768x2560 fp16  torch.compile max-autotune
+        03:11:55  Ling-3.0-flash moe_up 64x768x2560 fp16  byte check, 10 draws
+        03:11:58  Ling-3.0-flash moe_up 64x768x2560 fp16  timing the four arms
+  [ 23/96] Ling-3.0-flash     expert.up_proj T16k/col 64x768x2560    fp16  split  gb300 0.989x    9.5s  eta  24.8m
+        03:12:03  Ling-3.0-flash moe_up 64x768x2560 bf16  mode split, building the fused kernel
+        03:12:03  Ling-3.0-flash moe_up 64x768x2560 bf16  searching the pre-sm_103 configuration space
+        03:12:03  Ling-3.0-flash moe_up 64x768x2560 bf16  fitting the GB300 launch
+        03:12:04  Ling-3.0-flash moe_up 64x768x2560 bf16  torch.compile max-autotune
+        03:12:23  Ling-3.0-flash moe_up 64x768x2560 bf16  byte check, 10 draws
+        03:12:25  Ling-3.0-flash moe_up 64x768x2560 bf16  timing the four arms
+  [ 24/96] Ling-3.0-flash     expert.up_proj T16k/col 64x768x2560    bf16  split  gb300 0.993x   26.9s  eta  24.8m
+        03:12:30  Ling-3.0-flash moe_up 64x768x2560 fp16  mode split, building the fused kernel
+        03:12:30  Ling-3.0-flash moe_up 64x768x2560 fp16  searching the pre-sm_103 configuration space
+        03:12:30  Ling-3.0-flash moe_up 64x768x2560 fp16  fitting the GB300 launch
+        03:12:30  Ling-3.0-flash moe_up 64x768x2560 fp16  torch.compile max-autotune
+        03:12:30  Ling-3.0-flash moe_up 64x768x2560 fp16  byte check, 10 draws
+        03:12:33  Ling-3.0-flash moe_up 64x768x2560 fp16  timing the four arms
+  [ 25/96] Ling-3.0-flash     expert.up_proj T4k/even 64x768x2560    fp16  split  gb300 1.000x    7.2s  eta  23.8m
+        03:12:37  Ling-3.0-flash moe_up 64x768x2560 bf16  mode split, building the fused kernel
+        03:12:37  Ling-3.0-flash moe_up 64x768x2560 bf16  searching the pre-sm_103 configuration space
+        03:12:37  Ling-3.0-flash moe_up 64x768x2560 bf16  fitting the GB300 launch
+        03:12:37  Ling-3.0-flash moe_up 64x768x2560 bf16  torch.compile max-autotune
+        03:12:38  Ling-3.0-flash moe_up 64x768x2560 bf16  byte check, 10 draws
+        03:12:40  Ling-3.0-flash moe_up 64x768x2560 bf16  timing the four arms
+  [ 26/96] Ling-3.0-flash     expert.up_proj T4k/even 64x768x2560    bf16  split  gb300 1.010x    8.2s  eta  22.9m
+        03:12:45  Ling-3.0-flash moe_up 16x768x2560 fp16  mode split, building the fused kernel
+        03:12:45  Ling-3.0-flash moe_up 16x768x2560 fp16  searching the pre-sm_103 configuration space
+        03:12:46  Ling-3.0-flash moe_up 16x768x2560 fp16  fitting the GB300 launch
+        03:12:46  Ling-3.0-flash moe_up 16x768x2560 fp16  torch.compile max-autotune
+        03:12:49  Ling-3.0-flash moe_up 16x768x2560 fp16  byte check, 10 draws
+        03:12:51  Ling-3.0-flash moe_up 16x768x2560 fp16  timing the four arms
+  [ 27/96] Ling-3.0-flash     expert.up_proj T4k/cold 16x768x2560    fp16  split  gb300 1.082x   11.8s  eta  22.3m
+        03:12:57  Ling-3.0-flash moe_up 16x768x2560 bf16  mode split, building the fused kernel
+        03:12:57  Ling-3.0-flash moe_up 16x768x2560 bf16  searching the pre-sm_103 configuration space
+        03:12:58  Ling-3.0-flash moe_up 16x768x2560 bf16  fitting the GB300 launch
+        03:12:58  Ling-3.0-flash moe_up 16x768x2560 bf16  torch.compile max-autotune
+        03:13:10  Ling-3.0-flash moe_up 16x768x2560 bf16  byte check, 10 draws
+        03:13:13  Ling-3.0-flash moe_up 16x768x2560 bf16  timing the four arms
+  [ 28/96] Ling-3.0-flash     expert.up_proj T4k/cold 16x768x2560    bf16  split  gb300 1.081x   22.2s  eta  22.1m
+        03:13:19  Qwen3.6-35B-A3 moe_up 32x512x2048 fp16  mode split, building the fused kernel
+        03:13:20  Qwen3.6-35B-A3 moe_up 32x512x2048 fp16  searching the pre-sm_103 configuration space
+        03:13:20  Qwen3.6-35B-A3 moe_up 32x512x2048 fp16  fitting the GB300 launch
+        03:13:20  Qwen3.6-35B-A3 moe_up 32x512x2048 fp16  torch.compile max-autotune
+        03:13:25  Qwen3.6-35B-A3 moe_up 32x512x2048 fp16  byte check, 10 draws
+        03:13:28  Qwen3.6-35B-A3 moe_up 32x512x2048 fp16  timing the four arms
+  [ 29/96] Qwen3.6-35B-A3B    expert.up_proj T4k/cold 32x512x2048    fp16  split  gb300 1.098x   15.5s  eta  21.6m
+        03:13:35  Qwen3.6-35B-A3 moe_up 32x512x2048 bf16  mode split, building the fused kernel
+        03:13:35  Qwen3.6-35B-A3 moe_up 32x512x2048 bf16  searching the pre-sm_103 configuration space
+        03:13:35  Qwen3.6-35B-A3 moe_up 32x512x2048 bf16  fitting the GB300 launch
+        03:13:35  Qwen3.6-35B-A3 moe_up 32x512x2048 bf16  torch.compile max-autotune
+        03:13:47  Qwen3.6-35B-A3 moe_up 32x512x2048 bf16  byte check, 10 draws
+        03:13:49  Qwen3.6-35B-A3 moe_up 32x512x2048 bf16  timing the four arms
+  [ 30/96] Qwen3.6-35B-A3B    expert.up_proj T4k/cold 32x512x2048    bf16  split  gb300 1.093x   25.9s  eta  21.5m
+        03:14:01  GLM-4.7-Flash mlp_down 256x2048x10240 fp16  mode split, building the fused kernel
+        03:14:01  GLM-4.7-Flash mlp_down 256x2048x10240 fp16  searching the pre-sm_103 configuration space
+        03:14:03  GLM-4.7-Flash mlp_down 256x2048x10240 fp16  fitting the GB300 launch
+        03:14:04  GLM-4.7-Flash mlp_down 256x2048x10240 fp16  torch.compile max-autotune
+        03:14:17  GLM-4.7-Flash mlp_down 256x2048x10240 fp16  byte check, 10 draws
+        03:14:19  GLM-4.7-Flash mlp_down 256x2048x10240 fp16  timing the four arms
+  [ 31/96] GLM-4.7-Flash      mlp.down_proj 1/47L     256x2048x10240   fp16  split  gb300 0.842x   19.8s  eta  21.2m
+        03:14:20  GLM-4.7-Flash mlp_down 256x2048x10240 bf16  mode split, building the fused kernel
+        03:14:21  GLM-4.7-Flash mlp_down 256x2048x10240 bf16  searching the pre-sm_103 configuration space
+        03:14:23  GLM-4.7-Flash mlp_down 256x2048x10240 bf16  fitting the GB300 launch
+        03:14:24  GLM-4.7-Flash mlp_down 256x2048x10240 bf16  torch.compile max-autotune
+        03:14:39  GLM-4.7-Flash mlp_down 256x2048x10240 bf16  byte check, 10 draws
+        03:14:40  GLM-4.7-Flash mlp_down 256x2048x10240 bf16  timing the four arms
+  [ 32/96] GLM-4.7-Flash      mlp.down_proj 1/47L     256x2048x10240   bf16  split  gb300 0.844x   20.5s  eta  20.9m
+        03:14:41  Kimi-K3 mlp_down 256x7168x33792 fp16  mode split, building the fused kernel
+        03:14:41  Kimi-K3 mlp_down 256x7168x33792 fp16  searching the pre-sm_103 configuration space
+        03:14:41  Kimi-K3 mlp_down 256x7168x33792 fp16  fitting the GB300 launch
+        03:14:42  Kimi-K3 mlp_down 256x7168x33792 fp16  torch.compile max-autotune
+        03:14:55  Kimi-K3 mlp_down 256x7168x33792 fp16  byte check, 10 draws
+        03:14:56  Kimi-K3 mlp_down 256x7168x33792 fp16  timing the four arms
+  [ 33/96] Kimi-K3            mlp.down_proj 1/93L     256x7168x33792   fp16  split  gb300 0.793x   16.0s  eta  20.4m
+        03:14:57  Kimi-K3 mlp_down 256x7168x33792 bf16  mode split, building the fused kernel
+        03:14:57  Kimi-K3 mlp_down 256x7168x33792 bf16  searching the pre-sm_103 configuration space
+        03:14:57  Kimi-K3 mlp_down 256x7168x33792 bf16  fitting the GB300 launch
+        03:14:58  Kimi-K3 mlp_down 256x7168x33792 bf16  torch.compile max-autotune
+        03:15:13  Kimi-K3 mlp_down 256x7168x33792 bf16  byte check, 10 draws
+        03:15:14  Kimi-K3 mlp_down 256x7168x33792 bf16  timing the four arms
+  [ 34/96] Kimi-K3            mlp.down_proj 1/93L     256x7168x33792   bf16  split  gb300 0.775x   17.4s  eta  20.1m
+        03:15:14  Qwen3.8-2.4T-A moe_up 960x2048x8192 fp16  mode plain, building the fused kernel
+        03:15:15  Qwen3.8-2.4T-A moe_up 960x2048x8192 fp16  searching the pre-sm_103 configuration space
+        03:16:00  Qwen3.8-2.4T-A moe_up 960x2048x8192 fp16  fitting the GB300 launch
+        03:16:09  Qwen3.8-2.4T-A moe_up 960x2048x8192 fp16  torch.compile max-autotune
+        03:16:27  Qwen3.8-2.4T-A moe_up 960x2048x8192 fp16  byte check, 10 draws
+        03:16:30  Qwen3.8-2.4T-A moe_up 960x2048x8192 fp16  timing the four arms
+  [ 35/96] Qwen3.8-2.4T-A95B  expert.up_proj T16k/hot 960x2048x8192    fp16  plain  gb300 0.536x   76.8s  eta  21.4m
+        03:16:31  Qwen3.8-2.4T-A moe_up 960x2048x8192 bf16  mode plain, building the fused kernel
+        03:16:32  Qwen3.8-2.4T-A moe_up 960x2048x8192 bf16  searching the pre-sm_103 configuration space
+        03:17:17  Qwen3.8-2.4T-A moe_up 960x2048x8192 bf16  fitting the GB300 launch
+        03:17:29  Qwen3.8-2.4T-A moe_up 960x2048x8192 bf16  torch.compile max-autotune
+        03:17:48  Qwen3.8-2.4T-A moe_up 960x2048x8192 bf16  byte check, 10 draws
+        03:17:50  Qwen3.8-2.4T-A moe_up 960x2048x8192 bf16  timing the four arms
+  [ 36/96] Qwen3.8-2.4T-A95B  expert.up_proj T16k/hot 960x2048x8192    bf16  plain  gb300 0.524x   79.7s  eta  22.7m
+        03:17:51  Qwen3.8-2.4T-A moe_down 320x8192x2048 fp16  mode plain, building the fused kernel
+        03:17:51  Qwen3.8-2.4T-A moe_down 320x8192x2048 fp16  searching the pre-sm_103 configuration space
+        03:18:37  Qwen3.8-2.4T-A moe_down 320x8192x2048 fp16  fitting the GB300 launch
+        03:18:47  Qwen3.8-2.4T-A moe_down 320x8192x2048 fp16  torch.compile max-autotune
+        03:18:50  Qwen3.8-2.4T-A moe_down 320x8192x2048 fp16  byte check, 10 draws
+        03:18:52  Qwen3.8-2.4T-A moe_down 320x8192x2048 fp16  timing the four arms
+  [ 37/96] Qwen3.8-2.4T-A95B  expert.down_proj T16k/e 320x8192x2048    fp16  plain  gb300 0.466x   62.3s  eta  23.4m
+        03:18:53  Qwen3.8-2.4T-A moe_down 320x8192x2048 bf16  mode plain, building the fused kernel
+        03:18:53  Qwen3.8-2.4T-A moe_down 320x8192x2048 bf16  searching the pre-sm_103 configuration space
+        03:19:40  Qwen3.8-2.4T-A moe_down 320x8192x2048 bf16  fitting the GB300 launch
+        03:19:51  Qwen3.8-2.4T-A moe_down 320x8192x2048 bf16  torch.compile max-autotune
+        03:20:12  Qwen3.8-2.4T-A moe_down 320x8192x2048 bf16  byte check, 10 draws
+        03:20:14  Qwen3.8-2.4T-A moe_down 320x8192x2048 bf16  timing the four arms
+  [ 38/96] Qwen3.8-2.4T-A95B  expert.down_proj T16k/e 320x8192x2048    bf16  plain  gb300 0.457x   81.7s  eta  24.4m
+        03:20:15  Qwen3.8-2.4T-A attn 16384x8192x16384 fp16  mode plain, building the fused kernel
+        03:20:15  Qwen3.8-2.4T-A attn 16384x8192x16384 fp16  searching the pre-sm_103 configuration space
+        03:21:02  Qwen3.8-2.4T-A attn 16384x8192x16384 fp16  fitting the GB300 launch
+        03:21:14  Qwen3.8-2.4T-A attn 16384x8192x16384 fp16  torch.compile max-autotune
+        03:21:33  Qwen3.8-2.4T-A attn 16384x8192x16384 fp16  byte check, 10 draws
+        03:21:36  Qwen3.8-2.4T-A attn 16384x8192x16384 fp16  timing the four arms
+  [ 39/96] Qwen3.8-2.4T-A95B  o_proj                  16384x8192x16384   fp16  plain  gb300 0.722x   83.3s  eta  25.4m
+        03:21:38  Qwen3.8-2.4T-A attn 16384x8192x16384 bf16  mode plain, building the fused kernel
+        03:21:39  Qwen3.8-2.4T-A attn 16384x8192x16384 bf16  searching the pre-sm_103 configuration space
+        03:22:25  Qwen3.8-2.4T-A attn 16384x8192x16384 bf16  fitting the GB300 launch
+        03:22:40  Qwen3.8-2.4T-A attn 16384x8192x16384 bf16  torch.compile max-autotune
+        03:22:59  Qwen3.8-2.4T-A attn 16384x8192x16384 bf16  byte check, 10 draws
+        03:23:01  Qwen3.8-2.4T-A attn 16384x8192x16384 bf16  timing the four arms
+  [ 40/96] Qwen3.8-2.4T-A95B  o_proj                  16384x8192x16384   bf16  plain  gb300 0.715x   84.6s  eta  26.3m
+        03:23:03  Qwen3.8-2.4T-A lora 16384x8192x8 fp16  mode plain, building the fused kernel
+        03:23:03  Qwen3.8-2.4T-A lora 16384x8192x8 fp16  searching the pre-sm_103 configuration space
+        03:23:50  Qwen3.8-2.4T-A lora 16384x8192x8 fp16  fitting the GB300 launch
+        03:24:02  Qwen3.8-2.4T-A lora 16384x8192x8 fp16  torch.compile max-autotune
+        03:24:18  Qwen3.8-2.4T-A lora 16384x8192x8 fp16  byte check, 10 draws
+        03:24:20  Qwen3.8-2.4T-A lora 16384x8192x8 fp16  timing the four arms
+  [ 41/96] Qwen3.8-2.4T-A95B  o_proj.lora_B r=8       16384x8192x8       fp16  plain  gb300 0.685x   77.8s  eta  27.0m
+        03:24:21  Qwen3.8-2.4T-A lora 16384x8192x8 bf16  mode plain, building the fused kernel
+        03:24:21  Qwen3.8-2.4T-A lora 16384x8192x8 bf16  searching the pre-sm_103 configuration space
+        03:25:06  Qwen3.8-2.4T-A lora 16384x8192x8 bf16  fitting the GB300 launch
+        03:25:19  Qwen3.8-2.4T-A lora 16384x8192x8 bf16  torch.compile max-autotune
+        03:25:30  Qwen3.8-2.4T-A lora 16384x8192x8 bf16  byte check, 10 draws
+        03:25:32  Qwen3.8-2.4T-A lora 16384x8192x8 bf16  timing the four arms
+  [ 42/96] Qwen3.8-2.4T-A95B  o_proj.lora_B r=8       16384x8192x8       bf16  plain  gb300 0.685x   71.3s  eta  27.4m
+        03:25:32  Nemotron-3.5-L moe_up 768x1856x2688 fp16  mode plain, building the fused kernel
+        03:25:32  Nemotron-3.5-L moe_up 768x1856x2688 fp16  searching the pre-sm_103 configuration space
+        03:26:18  Nemotron-3.5-L moe_up 768x1856x2688 fp16  fitting the GB300 launch
+        03:26:19  Nemotron-3.5-L moe_up 768x1856x2688 fp16  torch.compile max-autotune
+        03:26:22  Nemotron-3.5-L moe_up 768x1856x2688 fp16  byte check, 10 draws
+        03:26:23  Nemotron-3.5-L moe_up 768x1856x2688 fp16  timing the four arms
+  [ 43/96] Nemotron-3.5-L-30B expert.up_proj T16k/eve 768x1856x2688    fp16  plain  gb300 0.842x   52.2s  eta  27.3m
+        03:26:24  Nemotron-3.5-L moe_up 768x1856x2688 bf16  mode plain, building the fused kernel
+        03:26:24  Nemotron-3.5-L moe_up 768x1856x2688 bf16  searching the pre-sm_103 configuration space
+        03:27:10  Nemotron-3.5-L moe_up 768x1856x2688 bf16  fitting the GB300 launch
+        03:27:10  Nemotron-3.5-L moe_up 768x1856x2688 bf16  torch.compile max-autotune
+        03:27:23  Nemotron-3.5-L moe_up 768x1856x2688 bf16  byte check, 10 draws
+        03:27:24  Nemotron-3.5-L moe_up 768x1856x2688 bf16  timing the four arms
+  [ 44/96] Nemotron-3.5-L-30B expert.up_proj T16k/eve 768x1856x2688    bf16  plain  gb300 0.823x   61.5s  eta  27.4m
+        03:27:26  Nemotron-3.5-L moe_down 768x2688x1856 fp16  mode plain, building the fused kernel
+        03:27:26  Nemotron-3.5-L moe_down 768x2688x1856 fp16  searching the pre-sm_103 configuration space
+        03:28:12  Nemotron-3.5-L moe_down 768x2688x1856 fp16  fitting the GB300 launch
+        03:28:17  Nemotron-3.5-L moe_down 768x2688x1856 fp16  torch.compile max-autotune
+        03:28:21  Nemotron-3.5-L moe_down 768x2688x1856 fp16  byte check, 10 draws
+        03:28:22  Nemotron-3.5-L moe_down 768x2688x1856 fp16  timing the four arms
+  [ 45/96] Nemotron-3.5-L-30B expert.down_proj T16k/e 768x2688x1856    fp16  plain  gb300 0.683x   59.4s  eta  27.4m
+        03:28:25  Nemotron-3.5-L moe_down 768x2688x1856 bf16  mode plain, building the fused kernel
+        03:28:25  Nemotron-3.5-L moe_down 768x2688x1856 bf16  searching the pre-sm_103 configuration space
+        03:29:11  Nemotron-3.5-L moe_down 768x2688x1856 bf16  fitting the GB300 launch
+        03:29:16  Nemotron-3.5-L moe_down 768x2688x1856 bf16  torch.compile max-autotune
+        03:29:34  Nemotron-3.5-L moe_down 768x2688x1856 bf16  byte check, 10 draws
+        03:29:35  Nemotron-3.5-L moe_down 768x2688x1856 bf16  timing the four arms
+  [ 46/96] Nemotron-3.5-L-30B expert.down_proj T16k/e 768x2688x1856    bf16  plain  gb300 0.677x   71.5s  eta  27.6m
+        03:29:37  Nemotron-3.5-L attn 16384x2688x4096 fp16  mode plain, building the fused kernel
+        03:29:37  Nemotron-3.5-L attn 16384x2688x4096 fp16  searching the pre-sm_103 configuration space
+        03:30:22  Nemotron-3.5-L attn 16384x2688x4096 fp16  fitting the GB300 launch
+        03:30:22  Nemotron-3.5-L attn 16384x2688x4096 fp16  torch.compile max-autotune
+        03:30:39  Nemotron-3.5-L attn 16384x2688x4096 fp16  byte check, 10 draws
+        03:30:40  Nemotron-3.5-L attn 16384x2688x4096 fp16  timing the four arms
+  [ 47/96] Nemotron-3.5-L-30B o_proj                  16384x2688x4096    fp16  plain  gb300 0.863x   64.0s  eta  27.6m
+        03:30:41  Nemotron-3.5-L attn 16384x2688x4096 bf16  mode plain, building the fused kernel
+        03:30:41  Nemotron-3.5-L attn 16384x2688x4096 bf16  searching the pre-sm_103 configuration space
+        03:31:27  Nemotron-3.5-L attn 16384x2688x4096 bf16  fitting the GB300 launch
+        03:31:27  Nemotron-3.5-L attn 16384x2688x4096 bf16  torch.compile max-autotune
+        03:31:44  Nemotron-3.5-L attn 16384x2688x4096 bf16  byte check, 10 draws
+        03:31:46  Nemotron-3.5-L attn 16384x2688x4096 bf16  timing the four arms
+  [ 48/96] Nemotron-3.5-L-30B o_proj                  16384x2688x4096    bf16  plain  gb300 0.831x   66.1s  eta  27.5m
+        03:31:47  gpt-oss-20b moe_down 2048x2880x2880 fp16  mode plain, building the fused kernel
+        03:31:47  gpt-oss-20b moe_down 2048x2880x2880 fp16  searching the pre-sm_103 configuration space
+        03:32:35  gpt-oss-20b moe_down 2048x2880x2880 fp16  fitting the GB300 launch
+        03:32:46  gpt-oss-20b moe_down 2048x2880x2880 fp16  torch.compile max-autotune
+        03:33:00  gpt-oss-20b moe_down 2048x2880x2880 fp16  byte check, 10 draws
+        03:33:01  gpt-oss-20b moe_down 2048x2880x2880 fp16  timing the four arms
+  [ 49/96] gpt-oss-20b        expert.down_proj T16k/e 2048x2880x2880    fp16  plain  gb300 0.498x   75.3s  eta  27.6m
+        03:33:02  gpt-oss-20b moe_down 2048x2880x2880 bf16  mode plain, building the fused kernel
+        03:33:02  gpt-oss-20b moe_down 2048x2880x2880 bf16  searching the pre-sm_103 configuration space
+        03:33:48  gpt-oss-20b moe_down 2048x2880x2880 bf16  fitting the GB300 launch
+        03:33:58  gpt-oss-20b moe_down 2048x2880x2880 bf16  torch.compile max-autotune
+        03:34:11  gpt-oss-20b moe_down 2048x2880x2880 bf16  byte check, 10 draws
+        03:34:12  gpt-oss-20b moe_down 2048x2880x2880 bf16  timing the four arms
+  [ 50/96] gpt-oss-20b        expert.down_proj T16k/e 2048x2880x2880    bf16  plain  gb300 0.489x   70.9s  eta  27.6m
+        03:34:13  gpt-oss-20b attn 16384x2880x4096 fp16  mode plain, building the fused kernel
+        03:34:13  gpt-oss-20b attn 16384x2880x4096 fp16  searching the pre-sm_103 configuration space
+        03:34:59  gpt-oss-20b attn 16384x2880x4096 fp16  fitting the GB300 launch
+        03:34:59  gpt-oss-20b attn 16384x2880x4096 fp16  torch.compile max-autotune
+        03:35:14  gpt-oss-20b attn 16384x2880x4096 fp16  byte check, 10 draws
+        03:35:15  gpt-oss-20b attn 16384x2880x4096 fp16  timing the four arms
+  [ 51/96] gpt-oss-20b        o_proj                  16384x2880x4096    fp16  plain  gb300 0.885x   63.0s  eta  27.4m
+        03:35:16  gpt-oss-20b attn 16384x2880x4096 bf16  mode plain, building the fused kernel
+        03:35:16  gpt-oss-20b attn 16384x2880x4096 bf16  searching the pre-sm_103 configuration space
+        03:36:02  gpt-oss-20b attn 16384x2880x4096 bf16  fitting the GB300 launch
+        03:36:02  gpt-oss-20b attn 16384x2880x4096 bf16  torch.compile max-autotune
+        03:36:18  gpt-oss-20b attn 16384x2880x4096 bf16  byte check, 10 draws
+        03:36:19  gpt-oss-20b attn 16384x2880x4096 bf16  timing the four arms
+  [ 52/96] gpt-oss-20b        o_proj                  16384x2880x4096    bf16  plain  gb300 0.875x   64.0s  eta  27.2m
+        03:36:20  gpt-oss-120b moe_down 512x2880x2880 fp16  mode plain, building the fused kernel
+        03:36:20  gpt-oss-120b moe_down 512x2880x2880 fp16  searching the pre-sm_103 configuration space
+        03:37:27  gpt-oss-120b moe_down 512x2880x2880 fp16  fitting the GB300 launch
+        03:37:33  gpt-oss-120b moe_down 512x2880x2880 fp16  torch.compile max-autotune
+        03:37:38  gpt-oss-120b moe_down 512x2880x2880 fp16  byte check, 10 draws
+        03:37:40  gpt-oss-120b moe_down 512x2880x2880 fp16  timing the four arms
+  [ 53/96] gpt-oss-120b       expert.down_proj T16k/e 512x2880x2880    fp16  plain  gb300 0.629x   81.8s  eta  27.1m
+        03:37:42  gpt-oss-120b moe_down 512x2880x2880 bf16  mode plain, building the fused kernel
+        03:37:42  gpt-oss-120b moe_down 512x2880x2880 bf16  searching the pre-sm_103 configuration space
+        03:38:27  gpt-oss-120b moe_down 512x2880x2880 bf16  fitting the GB300 launch
+        03:38:32  gpt-oss-120b moe_down 512x2880x2880 bf16  torch.compile max-autotune
+        03:38:50  gpt-oss-120b moe_down 512x2880x2880 bf16  byte check, 10 draws
+        03:38:52  gpt-oss-120b moe_down 512x2880x2880 bf16  timing the four arms
+  [ 54/96] gpt-oss-120b       expert.down_proj T16k/e 512x2880x2880    bf16  plain  gb300 0.629x   72.4s  eta  27.0m
+        03:38:54  gpt-oss-120b attn 16384x2880x4096 fp16  mode plain, building the fused kernel
+        03:38:54  gpt-oss-120b attn 16384x2880x4096 fp16  searching the pre-sm_103 configuration space
+        03:39:40  gpt-oss-120b attn 16384x2880x4096 fp16  fitting the GB300 launch
+        03:39:40  gpt-oss-120b attn 16384x2880x4096 fp16  torch.compile max-autotune
+        03:39:40  gpt-oss-120b attn 16384x2880x4096 fp16  byte check, 10 draws
+        03:39:41  gpt-oss-120b attn 16384x2880x4096 fp16  timing the four arms
+  [ 55/96] gpt-oss-120b       o_proj                  16384x2880x4096    fp16  plain  gb300 0.898x   47.5s  eta  26.4m
+        03:39:42  gpt-oss-120b attn 16384x2880x4096 bf16  mode plain, building the fused kernel
+        03:39:42  gpt-oss-120b attn 16384x2880x4096 bf16  searching the pre-sm_103 configuration space
+        03:40:27  gpt-oss-120b attn 16384x2880x4096 bf16  fitting the GB300 launch
+        03:40:27  gpt-oss-120b attn 16384x2880x4096 bf16  torch.compile max-autotune
+        03:40:27  gpt-oss-120b attn 16384x2880x4096 bf16  byte check, 10 draws
+        03:40:28  gpt-oss-120b attn 16384x2880x4096 bf16  timing the four arms
+  [ 56/96] gpt-oss-120b       o_proj                  16384x2880x4096    bf16  plain  gb300 0.878x   47.0s  eta  25.9m
+        03:40:28  gpt-oss-120b lora 16384x2880x8 fp16  mode plain, building the fused kernel
+        03:40:29  gpt-oss-120b lora 16384x2880x8 fp16  searching the pre-sm_103 configuration space
+        03:41:14  gpt-oss-120b lora 16384x2880x8 fp16  fitting the GB300 launch
+        03:41:14  gpt-oss-120b lora 16384x2880x8 fp16  torch.compile max-autotune
+        03:41:22  gpt-oss-120b lora 16384x2880x8 fp16  byte check, 10 draws
+        03:41:23  gpt-oss-120b lora 16384x2880x8 fp16  timing the four arms
+  [ 57/96] gpt-oss-120b       o_proj.lora_B r=8       16384x2880x8       fp16  plain  gb300 0.667x   55.6s  eta  25.4m
+        03:41:24  gpt-oss-120b lora 16384x2880x8 bf16  mode plain, building the fused kernel
+        03:41:24  gpt-oss-120b lora 16384x2880x8 bf16  searching the pre-sm_103 configuration space
+        03:42:10  gpt-oss-120b lora 16384x2880x8 bf16  fitting the GB300 launch
+        03:42:10  gpt-oss-120b lora 16384x2880x8 bf16  torch.compile max-autotune
+        03:42:19  gpt-oss-120b lora 16384x2880x8 bf16  byte check, 10 draws
+        03:42:20  gpt-oss-120b lora 16384x2880x8 bf16  timing the four arms
+  [ 58/96] gpt-oss-120b       o_proj.lora_B r=8       16384x2880x8       bf16  plain  gb300 0.664x   56.9s  eta  25.0m
+        03:42:21  granite-4.1-8b mlp_up 16384x12800x4096 fp16  mode plain, building the fused kernel
+        03:42:21  granite-4.1-8b mlp_up 16384x12800x4096 fp16  searching the pre-sm_103 configuration space
+        03:43:16  granite-4.1-8b mlp_up 16384x12800x4096 fp16  fitting the GB300 launch
+        03:43:58  granite-4.1-8b mlp_up 16384x12800x4096 fp16  torch.compile max-autotune
+        03:44:01  granite-4.1-8b mlp_up 16384x12800x4096 fp16  byte check, 10 draws
+        03:44:03  granite-4.1-8b mlp_up 16384x12800x4096 fp16  timing the four arms
+  [ 59/96] granite-4.1-8b     mlp.up_proj 40/40L      16384x12800x4096    fp16  plain  gb300 0.282x  104.5s  eta  25.0m
+        03:44:05  granite-4.1-8b mlp_up 16384x12800x4096 bf16  mode plain, building the fused kernel
+        03:44:06  granite-4.1-8b mlp_up 16384x12800x4096 bf16  searching the pre-sm_103 configuration space
+        03:44:58  granite-4.1-8b mlp_up 16384x12800x4096 bf16  fitting the GB300 launch
+        03:45:41  granite-4.1-8b mlp_up 16384x12800x4096 bf16  torch.compile max-autotune
+        03:45:59  granite-4.1-8b mlp_up 16384x12800x4096 bf16  byte check, 10 draws
+        03:46:03  granite-4.1-8b mlp_up 16384x12800x4096 bf16  timing the four arms
+  [ 60/96] granite-4.1-8b     mlp.up_proj 40/40L      16384x12800x4096    bf16  plain  gb300 0.265x  119.4s  eta  25.1m
+        03:46:05  granite-4.1-8b mlp_down 16384x4096x12800 fp16  mode plain, building the fused kernel
+        03:46:05  granite-4.1-8b mlp_down 16384x4096x12800 fp16  searching the pre-sm_103 configuration space
+        03:46:51  granite-4.1-8b mlp_down 16384x4096x12800 fp16  fitting the GB300 launch
+        03:46:51  granite-4.1-8b mlp_down 16384x4096x12800 fp16  torch.compile max-autotune
+        03:47:06  granite-4.1-8b mlp_down 16384x4096x12800 fp16  byte check, 10 draws
+        03:47:07  granite-4.1-8b mlp_down 16384x4096x12800 fp16  timing the four arms
+  [ 61/96] granite-4.1-8b     mlp.down_proj 40/40L    16384x4096x12800   fp16  plain  gb300 0.712x   63.5s  eta  24.6m
+        03:47:08  granite-4.1-8b mlp_down 16384x4096x12800 bf16  mode plain, building the fused kernel
+        03:47:09  granite-4.1-8b mlp_down 16384x4096x12800 bf16  searching the pre-sm_103 configuration space
+        03:47:54  granite-4.1-8b mlp_down 16384x4096x12800 bf16  fitting the GB300 launch
+        03:47:54  granite-4.1-8b mlp_down 16384x4096x12800 bf16  torch.compile max-autotune
+        03:48:07  granite-4.1-8b mlp_down 16384x4096x12800 bf16  byte check, 10 draws
+        03:48:08  granite-4.1-8b mlp_down 16384x4096x12800 bf16  timing the four arms
+  [ 62/96] granite-4.1-8b     mlp.down_proj 40/40L    16384x4096x12800   bf16  plain  gb300 0.698x   61.0s  eta  24.1m
+        03:48:09  granite-4.1-8b attn 16384x4096x4096 fp16  mode plain, building the fused kernel
+        03:48:09  granite-4.1-8b attn 16384x4096x4096 fp16  searching the pre-sm_103 configuration space
+        03:48:55  granite-4.1-8b attn 16384x4096x4096 fp16  fitting the GB300 launch
+        03:48:55  granite-4.1-8b attn 16384x4096x4096 fp16  torch.compile max-autotune
+        03:49:07  granite-4.1-8b attn 16384x4096x4096 fp16  byte check, 10 draws
+        03:49:08  granite-4.1-8b attn 16384x4096x4096 fp16  timing the four arms
+  [ 63/96] granite-4.1-8b     o_proj                  16384x4096x4096    fp16  plain  gb300 0.812x   59.0s  eta  23.5m
+        03:49:08  granite-4.1-8b attn 16384x4096x4096 bf16  mode plain, building the fused kernel
+        03:49:08  granite-4.1-8b attn 16384x4096x4096 bf16  searching the pre-sm_103 configuration space
+        03:49:54  granite-4.1-8b attn 16384x4096x4096 bf16  fitting the GB300 launch
+        03:49:54  granite-4.1-8b attn 16384x4096x4096 bf16  torch.compile max-autotune
+        03:50:06  granite-4.1-8b attn 16384x4096x4096 bf16  byte check, 10 draws
+        03:50:06  granite-4.1-8b attn 16384x4096x4096 bf16  timing the four arms
+  [ 64/96] granite-4.1-8b     o_proj                  16384x4096x4096    bf16  plain  gb300 0.788x   58.5s  eta  22.9m
+        03:50:07  GLM-5.2 moe_up 512x2048x6144 fp16  mode plain, building the fused kernel
+        03:50:07  GLM-5.2 moe_up 512x2048x6144 fp16  searching the pre-sm_103 configuration space
+        03:50:53  GLM-5.2 moe_up 512x2048x6144 fp16  fitting the GB300 launch
+        03:50:55  GLM-5.2 moe_up 512x2048x6144 fp16  torch.compile max-autotune
+        03:50:58  GLM-5.2 moe_up 512x2048x6144 fp16  byte check, 10 draws
+        03:51:01  GLM-5.2 moe_up 512x2048x6144 fp16  timing the four arms
+  [ 65/96] GLM-5.2            expert.up_proj T16k/eve 512x2048x6144    fp16  plain  gb300 0.803x   56.2s  eta  22.3m
+        03:51:03  GLM-5.2 moe_up 512x2048x6144 bf16  mode plain, building the fused kernel
+        03:51:03  GLM-5.2 moe_up 512x2048x6144 bf16  searching the pre-sm_103 configuration space
+        03:51:49  GLM-5.2 moe_up 512x2048x6144 bf16  fitting the GB300 launch
+        03:51:50  GLM-5.2 moe_up 512x2048x6144 bf16  torch.compile max-autotune
+        03:52:10  GLM-5.2 moe_up 512x2048x6144 bf16  byte check, 10 draws
+        03:52:13  GLM-5.2 moe_up 512x2048x6144 bf16  timing the four arms
+  [ 66/96] GLM-5.2            expert.up_proj T16k/eve 512x2048x6144    bf16  plain  gb300 0.801x   72.1s  eta  21.8m
+        03:52:15  GLM-5.2 moe_down 512x6144x2048 fp16  mode plain, building the fused kernel
+        03:52:15  GLM-5.2 moe_down 512x6144x2048 fp16  searching the pre-sm_103 configuration space
+        03:53:01  GLM-5.2 moe_down 512x6144x2048 fp16  fitting the GB300 launch
+        03:53:01  GLM-5.2 moe_down 512x6144x2048 fp16  torch.compile max-autotune
+        03:53:04  GLM-5.2 moe_down 512x6144x2048 fp16  byte check, 10 draws
+        03:53:05  GLM-5.2 moe_down 512x6144x2048 fp16  timing the four arms
+  [ 67/96] GLM-5.2            expert.down_proj T16k/e 512x6144x2048    fp16  plain  gb300 0.498x   51.2s  eta  21.2m
+        03:53:07  GLM-5.2 moe_down 512x6144x2048 bf16  mode plain, building the fused kernel
+        03:53:07  GLM-5.2 moe_down 512x6144x2048 bf16  searching the pre-sm_103 configuration space
+        03:53:52  GLM-5.2 moe_down 512x6144x2048 bf16  fitting the GB300 launch
+        03:53:52  GLM-5.2 moe_down 512x6144x2048 bf16  torch.compile max-autotune
+        03:54:07  GLM-5.2 moe_down 512x6144x2048 bf16  byte check, 10 draws
+        03:54:09  GLM-5.2 moe_down 512x6144x2048 bf16  timing the four arms
+  [ 68/96] GLM-5.2            expert.down_proj T16k/e 512x6144x2048    bf16  plain  gb300 0.491x   63.6s  eta  20.6m
+        03:54:10  GLM-5.2 mlp_up 16384x12288x6144 fp16  mode plain, building the fused kernel
+        03:54:10  GLM-5.2 mlp_up 16384x12288x6144 fp16  searching the pre-sm_103 configuration space
+        03:54:58  GLM-5.2 mlp_up 16384x12288x6144 fp16  fitting the GB300 launch
+        03:54:58  GLM-5.2 mlp_up 16384x12288x6144 fp16  torch.compile max-autotune
+        03:55:03  GLM-5.2 mlp_up 16384x12288x6144 fp16  byte check, 10 draws
+        03:55:06  GLM-5.2 mlp_up 16384x12288x6144 fp16  timing the four arms
+  [ 69/96] GLM-5.2            mlp.up_proj 3/78L       16384x12288x6144    fp16  plain  gb300 0.336x   58.4s  eta  19.9m
+        03:55:09  GLM-5.2 mlp_up 16384x12288x6144 bf16  mode plain, building the fused kernel
+        03:55:09  GLM-5.2 mlp_up 16384x12288x6144 bf16  searching the pre-sm_103 configuration space
+        03:55:56  GLM-5.2 mlp_up 16384x12288x6144 bf16  fitting the GB300 launch
+        03:55:56  GLM-5.2 mlp_up 16384x12288x6144 bf16  torch.compile max-autotune
+        03:56:15  GLM-5.2 mlp_up 16384x12288x6144 bf16  byte check, 10 draws
+        03:56:18  GLM-5.2 mlp_up 16384x12288x6144 bf16  timing the four arms
+  [ 70/96] GLM-5.2            mlp.up_proj 3/78L       16384x12288x6144    bf16  plain  gb300 0.317x   71.5s  eta  19.3m
+        03:56:20  GLM-5.2 mlp_down 16384x6144x12288 fp16  mode plain, building the fused kernel
+        03:56:20  GLM-5.2 mlp_down 16384x6144x12288 fp16  searching the pre-sm_103 configuration space
+        03:57:06  GLM-5.2 mlp_down 16384x6144x12288 fp16  fitting the GB300 launch
+        03:57:06  GLM-5.2 mlp_down 16384x6144x12288 fp16  torch.compile max-autotune
+        03:57:18  GLM-5.2 mlp_down 16384x6144x12288 fp16  byte check, 10 draws
+        03:57:19  GLM-5.2 mlp_down 16384x6144x12288 fp16  timing the four arms
+  [ 71/96] GLM-5.2            mlp.down_proj 3/78L     16384x6144x12288   fp16  plain  gb300 0.694x   60.4s  eta  18.7m
+        03:57:20  GLM-5.2 mlp_down 16384x6144x12288 bf16  mode plain, building the fused kernel
+        03:57:21  GLM-5.2 mlp_down 16384x6144x12288 bf16  searching the pre-sm_103 configuration space
+        03:58:06  GLM-5.2 mlp_down 16384x6144x12288 bf16  fitting the GB300 launch
+        03:58:06  GLM-5.2 mlp_down 16384x6144x12288 bf16  torch.compile max-autotune
+        03:58:18  GLM-5.2 mlp_down 16384x6144x12288 bf16  byte check, 10 draws
+        03:58:19  GLM-5.2 mlp_down 16384x6144x12288 bf16  timing the four arms
+  [ 72/96] GLM-5.2            mlp.down_proj 3/78L     16384x6144x12288   bf16  plain  gb300 0.684x   59.6s  eta  18.0m
+        03:58:20  GLM-5.2 lora 16384x6144x8 fp16  mode plain, building the fused kernel
+        03:58:20  GLM-5.2 lora 16384x6144x8 fp16  searching the pre-sm_103 configuration space
+        03:59:06  GLM-5.2 lora 16384x6144x8 fp16  fitting the GB300 launch
+        03:59:06  GLM-5.2 lora 16384x6144x8 fp16  torch.compile max-autotune
+        03:59:17  GLM-5.2 lora 16384x6144x8 fp16  byte check, 10 draws
+        03:59:18  GLM-5.2 lora 16384x6144x8 fp16  timing the four arms
+  [ 73/96] GLM-5.2            o_proj.lora_B r=8       16384x6144x8       fp16  plain  gb300 0.678x   58.9s  eta  17.4m
+        03:59:19  GLM-5.2 lora 16384x6144x8 bf16  mode plain, building the fused kernel
+        03:59:19  GLM-5.2 lora 16384x6144x8 bf16  searching the pre-sm_103 configuration space
+        04:00:05  GLM-5.2 lora 16384x6144x8 bf16  fitting the GB300 launch
+        04:00:05  GLM-5.2 lora 16384x6144x8 bf16  torch.compile max-autotune
+        04:00:17  GLM-5.2 lora 16384x6144x8 bf16  byte check, 10 draws
+        04:00:18  GLM-5.2 lora 16384x6144x8 bf16  timing the four arms
+  [ 74/96] GLM-5.2            o_proj.lora_B r=8       16384x6144x8       bf16  plain  gb300 0.679x   59.5s  eta  16.7m
+        04:00:19  Qwen3-30B-A3B moe_up 1024x768x2048 fp16  mode plain, building the fused kernel
+        04:00:19  Qwen3-30B-A3B moe_up 1024x768x2048 fp16  searching the pre-sm_103 configuration space
+        04:01:05  Qwen3-30B-A3B moe_up 1024x768x2048 fp16  fitting the GB300 launch
+        04:01:07  Qwen3-30B-A3B moe_up 1024x768x2048 fp16  torch.compile max-autotune
+        04:01:13  Qwen3-30B-A3B moe_up 1024x768x2048 fp16  byte check, 10 draws
+        04:01:16  Qwen3-30B-A3B moe_up 1024x768x2048 fp16  timing the four arms
+  [ 75/96] Qwen3-30B-A3B      expert.up_proj T16k/eve 1024x768x2048    fp16  plain  gb300 0.702x   64.7s  eta  16.0m
+        04:01:23  Qwen3-30B-A3B moe_up 1024x768x2048 bf16  mode plain, building the fused kernel
+        04:01:23  Qwen3-30B-A3B moe_up 1024x768x2048 bf16  searching the pre-sm_103 configuration space
+        04:02:09  Qwen3-30B-A3B moe_up 1024x768x2048 bf16  fitting the GB300 launch
+        04:02:11  Qwen3-30B-A3B moe_up 1024x768x2048 bf16  torch.compile max-autotune
+        04:02:30  Qwen3-30B-A3B moe_up 1024x768x2048 bf16  byte check, 10 draws
+        04:02:33  Qwen3-30B-A3B moe_up 1024x768x2048 bf16  timing the four arms
+  [ 76/96] Qwen3-30B-A3B      expert.up_proj T16k/eve 1024x768x2048    bf16  plain  gb300 0.701x   76.5s  eta  15.4m
+        04:02:40  Qwen3-30B-A3B moe_down 1024x2048x768 fp16  mode plain, building the fused kernel
+        04:02:40  Qwen3-30B-A3B moe_down 1024x2048x768 fp16  searching the pre-sm_103 configuration space
+        04:03:25  Qwen3-30B-A3B moe_down 1024x2048x768 fp16  fitting the GB300 launch
+        04:03:29  Qwen3-30B-A3B moe_down 1024x2048x768 fp16  torch.compile max-autotune
+        04:03:29  Qwen3-30B-A3B moe_down 1024x2048x768 fp16  byte check, 10 draws
+        04:03:30  Qwen3-30B-A3B moe_down 1024x2048x768 fp16  timing the four arms
+  [ 77/96] Qwen3-30B-A3B      expert.down_proj T16k/e 1024x2048x768     fp16  plain  gb300 0.651x   52.6s  eta  14.6m
+        04:03:32  Qwen3-30B-A3B moe_down 1024x2048x768 bf16  mode plain, building the fused kernel
+        04:03:32  Qwen3-30B-A3B moe_down 1024x2048x768 bf16  searching the pre-sm_103 configuration space
+        04:04:18  Qwen3-30B-A3B moe_down 1024x2048x768 bf16  fitting the GB300 launch
+        04:04:22  Qwen3-30B-A3B moe_down 1024x2048x768 bf16  torch.compile max-autotune
+        04:04:22  Qwen3-30B-A3B moe_down 1024x2048x768 bf16  byte check, 10 draws
+        04:04:23  Qwen3-30B-A3B moe_down 1024x2048x768 bf16  timing the four arms
+  [ 78/96] Qwen3-30B-A3B      expert.down_proj T16k/e 1024x2048x768     bf16  plain  gb300 0.646x   53.1s  eta  13.9m
+        04:04:25  Qwen3-30B-A3B attn 16384x2048x4096 fp16  mode plain, building the fused kernel
+        04:04:26  Qwen3-30B-A3B attn 16384x2048x4096 fp16  searching the pre-sm_103 configuration space
+        04:05:11  Qwen3-30B-A3B attn 16384x2048x4096 fp16  fitting the GB300 launch
+        04:05:11  Qwen3-30B-A3B attn 16384x2048x4096 fp16  torch.compile max-autotune
+        04:05:23  Qwen3-30B-A3B attn 16384x2048x4096 fp16  byte check, 10 draws
+        04:05:24  Qwen3-30B-A3B attn 16384x2048x4096 fp16  timing the four arms
+  [ 79/96] Qwen3-30B-A3B      o_proj                  16384x2048x4096    fp16  plain  gb300 0.873x   59.0s  eta  13.2m
+        04:05:24  Qwen3-30B-A3B attn 16384x2048x4096 bf16  mode plain, building the fused kernel
+        04:05:25  Qwen3-30B-A3B attn 16384x2048x4096 bf16  searching the pre-sm_103 configuration space
+        04:06:07  Qwen3-30B-A3B attn 16384x2048x4096 bf16  fitting the GB300 launch
+        04:06:07  Qwen3-30B-A3B attn 16384x2048x4096 bf16  torch.compile max-autotune
+        04:06:19  Qwen3-30B-A3B attn 16384x2048x4096 bf16  byte check, 10 draws
+        04:06:20  Qwen3-30B-A3B attn 16384x2048x4096 bf16  timing the four arms
+  [ 80/96] Qwen3-30B-A3B      o_proj                  16384x2048x4096    bf16  plain  gb300 0.852x   55.8s  eta  12.4m
+        04:06:20  Qwen3-30B-A3B lora 16384x2048x8 fp16  mode plain, building the fused kernel
+        04:06:20  Qwen3-30B-A3B lora 16384x2048x8 fp16  searching the pre-sm_103 configuration space
+        04:07:16  Qwen3-30B-A3B lora 16384x2048x8 fp16  fitting the GB300 launch
+        04:07:16  Qwen3-30B-A3B lora 16384x2048x8 fp16  torch.compile max-autotune
+        04:07:20  Qwen3-30B-A3B lora 16384x2048x8 fp16  byte check, 10 draws
+        04:07:21  Qwen3-30B-A3B lora 16384x2048x8 fp16  timing the four arms
+  [ 81/96] Qwen3-30B-A3B      o_proj.lora_B r=8       16384x2048x8       fp16  plain  gb300 0.637x   62.1s  eta  11.7m
+        04:07:22  Qwen3-30B-A3B lora 16384x2048x8 bf16  mode plain, building the fused kernel
+        04:07:22  Qwen3-30B-A3B lora 16384x2048x8 bf16  searching the pre-sm_103 configuration space
+        04:08:08  Qwen3-30B-A3B lora 16384x2048x8 bf16  fitting the GB300 launch
+        04:08:08  Qwen3-30B-A3B lora 16384x2048x8 bf16  torch.compile max-autotune
+        04:08:24  Qwen3-30B-A3B lora 16384x2048x8 bf16  byte check, 10 draws
+        04:08:25  Qwen3-30B-A3B lora 16384x2048x8 bf16  timing the four arms
+  [ 82/96] Qwen3-30B-A3B      o_proj.lora_B r=8       16384x2048x8       bf16  plain  gb300 0.640x   64.3s  eta  11.0m
+        04:08:27  DeepSeek-V4-Fl moe_up 384x2048x4096 fp16  mode plain, building the fused kernel
+        04:08:27  DeepSeek-V4-Fl moe_up 384x2048x4096 fp16  searching the pre-sm_103 configuration space
+        04:09:13  DeepSeek-V4-Fl moe_up 384x2048x4096 fp16  fitting the GB300 launch
+        04:09:16  DeepSeek-V4-Fl moe_up 384x2048x4096 fp16  torch.compile max-autotune
+        04:09:25  DeepSeek-V4-Fl moe_up 384x2048x4096 fp16  byte check, 10 draws
+        04:09:29  DeepSeek-V4-Fl moe_up 384x2048x4096 fp16  timing the four arms
+  [ 83/96] DeepSeek-V4-Flash  expert.up_proj T16k/eve 384x2048x4096    fp16  plain  gb300 0.608x   67.1s  eta  10.2m
+        04:09:34  DeepSeek-V4-Fl moe_up 384x2048x4096 bf16  mode plain, building the fused kernel
+        04:09:34  DeepSeek-V4-Fl moe_up 384x2048x4096 bf16  searching the pre-sm_103 configuration space
+        04:10:20  DeepSeek-V4-Fl moe_up 384x2048x4096 bf16  fitting the GB300 launch
+        04:10:22  DeepSeek-V4-Fl moe_up 384x2048x4096 bf16  torch.compile max-autotune
+        04:10:42  DeepSeek-V4-Fl moe_up 384x2048x4096 bf16  byte check, 10 draws
+        04:10:45  DeepSeek-V4-Fl moe_up 384x2048x4096 bf16  timing the four arms
+  [ 84/96] DeepSeek-V4-Flash  expert.up_proj T16k/eve 384x2048x4096    bf16  plain  gb300 0.619x   75.8s  eta   9.5m
+        04:10:49  DeepSeek-V4-Fl lora 16384x4096x8 fp16  mode plain, building the fused kernel
+        04:10:50  DeepSeek-V4-Fl lora 16384x4096x8 fp16  searching the pre-sm_103 configuration space
+        04:11:35  DeepSeek-V4-Fl lora 16384x4096x8 fp16  fitting the GB300 launch
+        04:11:35  DeepSeek-V4-Fl lora 16384x4096x8 fp16  torch.compile max-autotune
+        04:11:39  DeepSeek-V4-Fl lora 16384x4096x8 fp16  byte check, 10 draws
+        04:11:40  DeepSeek-V4-Fl lora 16384x4096x8 fp16  timing the four arms
+  [ 85/96] DeepSeek-V4-Flash  o_proj.lora_B r=8       16384x4096x8       fp16  plain  gb300 0.680x   50.7s  eta   8.7m
+        04:11:40  DeepSeek-V4-Fl lora 16384x4096x8 bf16  mode plain, building the fused kernel
+        04:11:40  DeepSeek-V4-Fl lora 16384x4096x8 bf16  searching the pre-sm_103 configuration space
+        04:12:26  DeepSeek-V4-Fl lora 16384x4096x8 bf16  fitting the GB300 launch
+        04:12:26  DeepSeek-V4-Fl lora 16384x4096x8 bf16  torch.compile max-autotune
+        04:12:35  DeepSeek-V4-Fl lora 16384x4096x8 bf16  byte check, 10 draws
+        04:12:38  DeepSeek-V4-Fl lora 16384x4096x8 bf16  timing the four arms
+  [ 86/96] DeepSeek-V4-Flash  o_proj.lora_B r=8       16384x4096x8       bf16  plain  gb300 0.674x   58.4s  eta   8.0m
+        04:12:39  GLM-4.7-Flash moe_up 1024x1536x2048 fp16  mode plain, building the fused kernel
+        04:12:39  GLM-4.7-Flash moe_up 1024x1536x2048 fp16  searching the pre-sm_103 configuration space
+        04:13:25  GLM-4.7-Flash moe_up 1024x1536x2048 fp16  fitting the GB300 launch
+        04:13:40  GLM-4.7-Flash moe_up 1024x1536x2048 fp16  torch.compile max-autotune
+        04:13:47  GLM-4.7-Flash moe_up 1024x1536x2048 fp16  byte check, 10 draws
+        04:13:50  GLM-4.7-Flash moe_up 1024x1536x2048 fp16  timing the four arms
+  [ 87/96] GLM-4.7-Flash      expert.up_proj T16k/eve 1024x1536x2048    fp16  plain  gb300 0.545x   75.6s  eta   7.2m
+        04:13:54  GLM-4.7-Flash moe_up 1024x1536x2048 bf16  mode plain, building the fused kernel
+        04:13:55  GLM-4.7-Flash moe_up 1024x1536x2048 bf16  searching the pre-sm_103 configuration space
+        04:14:41  GLM-4.7-Flash moe_up 1024x1536x2048 bf16  fitting the GB300 launch
+        04:14:51  GLM-4.7-Flash moe_up 1024x1536x2048 bf16  torch.compile max-autotune
+        04:15:07  GLM-4.7-Flash moe_up 1024x1536x2048 bf16  byte check, 10 draws
+        04:15:11  GLM-4.7-Flash moe_up 1024x1536x2048 bf16  timing the four arms
+  [ 88/96] GLM-4.7-Flash      expert.up_proj T16k/eve 1024x1536x2048    bf16  plain  gb300 0.522x   83.0s  eta   6.5m
+        04:15:17  GLM-4.7-Flash moe_down 1024x2048x1536 fp16  mode plain, building the fused kernel
+        04:15:17  GLM-4.7-Flash moe_down 1024x2048x1536 fp16  searching the pre-sm_103 configuration space
+        04:16:03  GLM-4.7-Flash moe_down 1024x2048x1536 fp16  fitting the GB300 launch
+        04:16:03  GLM-4.7-Flash moe_down 1024x2048x1536 fp16  torch.compile max-autotune
+        04:16:06  GLM-4.7-Flash moe_down 1024x2048x1536 fp16  byte check, 10 draws
+        04:16:07  GLM-4.7-Flash moe_down 1024x2048x1536 fp16  timing the four arms
+  [ 89/96] GLM-4.7-Flash      expert.down_proj T16k/e 1024x2048x1536    fp16  plain  gb300 0.668x   52.0s  eta   5.7m
+        04:16:09  GLM-4.7-Flash moe_down 1024x2048x1536 bf16  mode plain, building the fused kernel
+        04:16:09  GLM-4.7-Flash moe_down 1024x2048x1536 bf16  searching the pre-sm_103 configuration space
+        04:16:55  GLM-4.7-Flash moe_down 1024x2048x1536 bf16  fitting the GB300 launch
+        04:16:55  GLM-4.7-Flash moe_down 1024x2048x1536 bf16  torch.compile max-autotune
+        04:17:12  GLM-4.7-Flash moe_down 1024x2048x1536 bf16  byte check, 10 draws
+        04:17:14  GLM-4.7-Flash moe_down 1024x2048x1536 bf16  timing the four arms
+  [ 90/96] GLM-4.7-Flash      expert.down_proj T16k/e 1024x2048x1536    bf16  plain  gb300 0.673x   66.9s  eta   4.9m
+        04:17:16  GLM-4.7-Flash mlp_up 16384x10240x2048 fp16  mode plain, building the fused kernel
+        04:17:16  GLM-4.7-Flash mlp_up 16384x10240x2048 fp16  searching the pre-sm_103 configuration space
+        04:18:04  GLM-4.7-Flash mlp_up 16384x10240x2048 fp16  fitting the GB300 launch
+        04:18:04  GLM-4.7-Flash mlp_up 16384x10240x2048 fp16  torch.compile max-autotune
+        04:18:11  GLM-4.7-Flash mlp_up 16384x10240x2048 fp16  byte check, 10 draws
+        04:18:14  GLM-4.7-Flash mlp_up 16384x10240x2048 fp16  timing the four arms
+  [ 91/96] GLM-4.7-Flash      mlp.up_proj 1/47L       16384x10240x2048    fp16  plain  gb300 0.190x   59.0s  eta   4.1m
+        04:18:15  GLM-4.7-Flash mlp_up 16384x10240x2048 bf16  mode plain, building the fused kernel
+        04:18:15  GLM-4.7-Flash mlp_up 16384x10240x2048 bf16  searching the pre-sm_103 configuration space
+        04:19:01  GLM-4.7-Flash mlp_up 16384x10240x2048 bf16  fitting the GB300 launch
+        04:19:01  GLM-4.7-Flash mlp_up 16384x10240x2048 bf16  torch.compile max-autotune
+        04:19:20  GLM-4.7-Flash mlp_up 16384x10240x2048 bf16  byte check, 10 draws
+        04:19:23  GLM-4.7-Flash mlp_up 16384x10240x2048 bf16  timing the four arms
+  [ 92/96] GLM-4.7-Flash      mlp.up_proj 1/47L       16384x10240x2048    bf16  plain  gb300 0.178x   69.1s  eta   3.3m
+        04:19:24  GLM-4.7-Flash mlp_down 16384x2048x10240 fp16  mode plain, building the fused kernel
+        04:19:24  GLM-4.7-Flash mlp_down 16384x2048x10240 fp16  searching the pre-sm_103 configuration space
+        04:19:43  GLM-4.7-Flash mlp_down 16384x2048x10240 fp16  fitting the GB300 launch
+        04:19:43  GLM-4.7-Flash mlp_down 16384x2048x10240 fp16  torch.compile max-autotune
+        04:19:59  GLM-4.7-Flash mlp_down 16384x2048x10240 fp16  byte check, 10 draws
+        04:20:00  GLM-4.7-Flash mlp_down 16384x2048x10240 fp16  timing the four arms
+  [ 93/96] GLM-4.7-Flash      mlp.down_proj 1/47L     16384x2048x10240   fp16  plain  gb300 0.843x   36.4s  eta   2.4m
+        04:20:01  GLM-4.7-Flash mlp_down 16384x2048x10240 bf16  mode plain, building the fused kernel
+        04:20:01  GLM-4.7-Flash mlp_down 16384x2048x10240 bf16  searching the pre-sm_103 configuration space
+        04:20:11  GLM-4.7-Flash mlp_down 16384x2048x10240 bf16  fitting the GB300 launch
+        04:20:11  GLM-4.7-Flash mlp_down 16384x2048x10240 bf16  torch.compile max-autotune
+        04:20:32  GLM-4.7-Flash mlp_down 16384x2048x10240 bf16  byte check, 10 draws
+        04:20:34  GLM-4.7-Flash mlp_down 16384x2048x10240 bf16  timing the four arms
+  [ 94/96] GLM-4.7-Flash      mlp.down_proj 1/47L     16384x2048x10240   bf16  plain  gb300 0.798x   33.8s  eta   1.6m
+        04:20:34  DeepSeek-V4-Pr moe_up 256x3072x7168 fp16  mode plain, building the fused kernel
+        04:20:35  DeepSeek-V4-Pr moe_up 256x3072x7168 fp16  searching the pre-sm_103 configuration space
+        04:21:20  DeepSeek-V4-Pr moe_up 256x3072x7168 fp16  fitting the GB300 launch
+        04:21:20  DeepSeek-V4-Pr moe_up 256x3072x7168 fp16  torch.compile max-autotune
+        04:21:49  DeepSeek-V4-Pr moe_up 256x3072x7168 fp16  byte check, 10 draws
+        04:21:55  DeepSeek-V4-Pr moe_up 256x3072x7168 fp16  timing the four arms
+  [ 95/96] DeepSeek-V4-Pro    expert.up_proj T16k/eve 256x3072x7168    fp16  plain  gb300 0.712x   85.6s  eta   0.8m
+        04:22:00  DeepSeek-V4-Pr moe_up 256x3072x7168 bf16  mode plain, building the fused kernel
+        04:22:01  DeepSeek-V4-Pr moe_up 256x3072x7168 bf16  searching the pre-sm_103 configuration space
+        04:22:46  DeepSeek-V4-Pr moe_up 256x3072x7168 bf16  fitting the GB300 launch
+        04:22:46  DeepSeek-V4-Pr moe_up 256x3072x7168 bf16  torch.compile max-autotune
+        04:23:07  DeepSeek-V4-Pr moe_up 256x3072x7168 bf16  byte check, 10 draws
+        04:23:11  DeepSeek-V4-Pr moe_up 256x3072x7168 bf16  timing the four arms
+  [ 96/96] DeepSeek-V4-Pro    expert.up_proj T16k/eve 256x3072x7168    bf16  plain  gb300 0.718x   74.2s  eta   0.0m
+
+  COVERAGE.  This table is what was measured, not the whole model list. Read the counts
+  before the numbers: a partial sweep and a complete one look the same once averaged.
+    rows attempted           96 of 96 (case, dtype) rows selected
+    rows with all four arms  96
+    rows with a baseline     96   <- a row without one has no ratio at all
+    by cuBLAS plan mode      plain 62/62   split 34/34
+    layer groups reached     attn 12   lora 10   mlp_down 10   mlp_up 6   moe_down 14   moe_up 44
+    epilogues reached        lora 10   relu2 2   resid 22   rweight 14   swiglu 38   swiglu_cw 10
+    rows with a reason recorded against them  0   (listed at the end; a case that failed is a row with a reason, never an absence)
+
+  EVERY NUMBER BELOW IS SPEED RELATIVE TO cublas_unfused -- baseline time over the arm's
+  time, so ABOVE 1 MEANS FASTER THAN THE BASELINE. cublas_unfused is cuBLAS followed by the
+  epilogue as a second kernel: what a determinism user gets today. No ratio between two
+  non-baseline arms is reported.
+
+    cublas_unfused             cuBLAS, then the epilogue as its own kernel. THE BASELINE AND THE BIT REFERENCE
+    torch_fused                torch.compile max-autotune, no numerics requirement; `torch_pick` says what it chose
+    bitequiv_autotuner_fused   bit-exact: the kernel BEFORE the sm_103 rewrites, fused, configuration searched
+    gb300_fused                bit-exact: the GB300 rewrites and the shipped fitted tile rule, fused
+
+  model                layer                                     shape dt   mode      torch  autotnr   gb300  bits    base us
+  --------------------------------------------------------------------------------------------------------------------
+  Qwen3.8-2.4T-A95B    expert.up_proj T16k/even          320x2048x8192 fp16 split     1.000    0.684   0.844  x..       20.6
+  Qwen3.8-2.4T-A95B    expert.up_proj T16k/even          320x2048x8192 bf16 split     1.029    0.653   0.844  x..       20.6
+  Qwen3.8-2.4T-A95B    expert.up_proj T16k/cold.          80x2048x8192 fp16 split     0.617    0.452   0.832  x..       14.6
+  Qwen3.8-2.4T-A95B    expert.up_proj T16k/cold.          80x2048x8192 bf16 split     1.040    0.449   0.828  x..       14.4
+  Qwen3.8-2.4T-A95B    expert.up_proj T4k/even            80x2048x8192 fp16 split     0.608    0.441   0.829  x..       14.5
+  Qwen3.8-2.4T-A95B    expert.up_proj T4k/even            80x2048x8192 bf16 split     1.040    0.443   0.825  x..       14.4
+  Qwen3.8-2.4T-A95B    expert.up_proj T4k/cold.2          20x2048x8192 fp16 split     0.587    0.459   0.810  x..       13.5
+  Qwen3.8-2.4T-A95B    expert.up_proj T4k/cold.2          20x2048x8192 bf16 split     0.569    0.442   0.773  x..       12.8
+  DeepSeek-V4-Pro      expert.up_proj T16k/cold.          64x3072x7168 fp16 split     0.854    0.620   1.141  x..       17.4
+  DeepSeek-V4-Pro      expert.up_proj T16k/cold.          64x3072x7168 bf16 split     0.867    0.751   1.146  x..       17.8
+  DeepSeek-V4-Pro      expert.up_proj T4k/even            64x3072x7168 fp16 split     0.849    0.751   1.126  x..       17.3
+  DeepSeek-V4-Pro      expert.up_proj T4k/even            64x3072x7168 bf16 split     0.861    0.609   1.147  x..       17.4
+  DeepSeek-V4-Pro      expert.up_proj T4k/cold.2          16x3072x7168 fp16 split     0.815    0.640   1.057  x..       15.8
+  DeepSeek-V4-Pro      expert.up_proj T4k/cold.2          16x3072x7168 bf16 split     0.838    0.633   1.090  x..       16.5
+  GLM-5.2              expert.up_proj T4k/cold.2          32x2048x6144 fp16 split     0.782    0.553   0.987  x..       14.0
+  GLM-5.2              expert.up_proj T4k/cold.2          32x2048x6144 bf16 split     0.786    0.555   0.993  x..       14.2
+  Kimi-K2.6            expert.up_proj T16k/cold.          85x2048x7168 fp16 split     0.665    0.460   0.860  x..       13.8
+  Kimi-K2.6            expert.up_proj T16k/cold.          85x2048x7168 bf16 split     0.664    0.456   0.854  x..       13.8
+  Kimi-K2.6            expert.up_proj T4k/even            85x2048x7168 fp16 split     0.659    0.450   0.847  x..       13.5
+  Kimi-K2.6            expert.up_proj T4k/even            85x2048x7168 bf16 split     0.655    0.452   0.851  x..       13.4
+  Kimi-K2.6            expert.up_proj T4k/cold.2          21x2048x7168 fp16 split     0.641    0.457   0.821  x..       13.2
+  Kimi-K2.6            expert.up_proj T4k/cold.2          21x2048x7168 bf16 split     0.631    0.356   0.807  x..       12.9
+  Ling-3.0-flash       expert.up_proj T16k/cold.           64x768x2560 fp16 split     0.925    0.706   0.989  x..        8.6
+  Ling-3.0-flash       expert.up_proj T16k/cold.           64x768x2560 bf16 split     0.817    0.682   0.993  x..        8.9
+  Ling-3.0-flash       expert.up_proj T4k/even             64x768x2560 fp16 split     0.933    0.647   1.000  x..        8.6
+  Ling-3.0-flash       expert.up_proj T4k/even             64x768x2560 bf16 split     0.812    0.644   1.010  x..        8.8
+  Ling-3.0-flash       expert.up_proj T4k/cold.2           16x768x2560 fp16 split     1.062    0.513   1.082  x..        8.3
+  Ling-3.0-flash       expert.up_proj T4k/cold.2           16x768x2560 bf16 split     1.033    0.525   1.081  x..        8.6
+  Qwen3.6-35B-A3B      expert.up_proj T4k/cold.2           32x512x2048 fp16 split     1.084    0.581   1.098  x..        7.7
+  Qwen3.6-35B-A3B      expert.up_proj T4k/cold.2           32x512x2048 bf16 split     0.750    0.484   1.093  x..        7.6
+  GLM-4.7-Flash        mlp.down_proj 1/47L              256x2048x10240 fp16 split     0.986    0.562   0.842  x..       20.3
+  GLM-4.7-Flash        mlp.down_proj 1/47L              256x2048x10240 bf16 split     0.730    0.569   0.844  x..       20.3
+  Kimi-K3              mlp.down_proj 1/93L              256x7168x33792 fp16 split     0.964    0.552   0.793  x..      109.9
+  Kimi-K3              mlp.down_proj 1/93L              256x7168x33792 bf16 split     0.963    0.537   0.775  x..      106.9
+  Qwen3.8-2.4T-A95B    expert.up_proj T16k/hot3x         960x2048x8192 fp16 plain     0.698    0.570   0.536  x..       28.8
+  Qwen3.8-2.4T-A95B    expert.up_proj T16k/hot3x         960x2048x8192 bf16 plain     0.684    0.572   0.524  x..       28.4
+  Qwen3.8-2.4T-A95B    expert.down_proj T16k/eve         320x8192x2048 fp16 plain     0.724    0.721   0.466  x..       15.0
+  Qwen3.8-2.4T-A95B    expert.down_proj T16k/eve         320x8192x2048 bf16 plain     0.710    0.573   0.457  x..       14.8
+  Qwen3.8-2.4T-A95B    o_proj                         16384x8192x16384 fp16 plain     0.947    0.700   0.722  ...     2433.8
+  Qwen3.8-2.4T-A95B    o_proj                         16384x8192x16384 bf16 plain     0.973    0.652   0.715  ...     2317.0
+  Qwen3.8-2.4T-A95B    o_proj.lora_B r=8                  16384x8192x8 fp16 plain     1.268    0.728   0.685  x..      164.6
+  Qwen3.8-2.4T-A95B    o_proj.lora_B r=8                  16384x8192x8 bf16 plain     1.249    0.662   0.685  x..      164.6
+  Nemotron-3.5-L-30B-A expert.up_proj T16k/even          768x1856x2688 fp16 plain     0.752    0.447   0.842  x..       11.7
+  Nemotron-3.5-L-30B-A expert.up_proj T16k/even          768x1856x2688 bf16 plain     0.760    0.677   0.823  x..       11.7
+  Nemotron-3.5-L-30B-A expert.down_proj T16k/eve         768x2688x1856 fp16 plain     0.909    0.768   0.683  x..       11.6
+  Nemotron-3.5-L-30B-A expert.down_proj T16k/eve         768x2688x1856 bf16 plain     0.901    0.803   0.677  x..       11.6
+  Nemotron-3.5-L-30B-A o_proj                          16384x2688x4096 fp16 plain     1.025    0.845   0.863  ...      250.7
+  Nemotron-3.5-L-30B-A o_proj                          16384x2688x4096 bf16 plain     1.012    0.819   0.831  ...      237.1
+  gpt-oss-20b          expert.down_proj T16k/eve        2048x2880x2880 fp16 plain     0.734    0.638   0.498  x..       33.4
+  gpt-oss-20b          expert.down_proj T16k/eve        2048x2880x2880 bf16 plain     1.013    0.621   0.489  ...       32.9
+  gpt-oss-20b          o_proj                          16384x2880x4096 fp16 plain     1.007    0.824   0.885  ...      269.1
+  gpt-oss-20b          o_proj                          16384x2880x4096 bf16 plain     1.016    0.818   0.875  ...      258.8
+  gpt-oss-120b         expert.down_proj T16k/eve         512x2880x2880 fp16 plain     0.766    0.474   0.629  x..       12.9
+  gpt-oss-120b         expert.down_proj T16k/eve         512x2880x2880 bf16 plain     0.772    0.634   0.629  x..       12.8
+  gpt-oss-120b         o_proj                          16384x2880x4096 fp16 plain     1.028    0.835   0.898  ...      271.1
+  gpt-oss-120b         o_proj                          16384x2880x4096 bf16 plain     1.012    0.815   0.878  ...      257.8
+  gpt-oss-120b         o_proj.lora_B r=8                  16384x2880x8 fp16 plain     1.326    1.279   0.667  x..       65.7
+  gpt-oss-120b         o_proj.lora_B r=8                  16384x2880x8 bf16 plain     1.305    1.285   0.664  x..       65.7
+  granite-4.1-8b       mlp.up_proj 40/40L             16384x12800x4096 fp16 plain     0.948    0.357   0.282  x..     1120.0
+  granite-4.1-8b       mlp.up_proj 40/40L             16384x12800x4096 bf16 plain     0.990    0.337   0.265  x..     1056.3
+  granite-4.1-8b       mlp.down_proj 40/40L           16384x4096x12800 fp16 plain     0.964    0.783   0.712  ...      984.5
+  granite-4.1-8b       mlp.down_proj 40/40L           16384x4096x12800 bf16 plain     0.996    0.788   0.698  ...      921.4
+  granite-4.1-8b       o_proj                          16384x4096x4096 fp16 plain     1.013    0.819   0.812  ...      353.0
+  granite-4.1-8b       o_proj                          16384x4096x4096 bf16 plain     1.010    0.819   0.788  ...      333.0
+  GLM-5.2              expert.up_proj T16k/even          512x2048x6144 fp16 plain     0.696    0.717   0.803  x..       18.8
+  GLM-5.2              expert.up_proj T16k/even          512x2048x6144 bf16 plain     0.714    0.673   0.801  x..       18.5
+  GLM-5.2              expert.down_proj T16k/eve         512x6144x2048 fp16 plain     0.762    0.770   0.498  x..       16.0
+  GLM-5.2              expert.down_proj T16k/eve         512x6144x2048 bf16 plain     0.751    0.698   0.491  x..       15.8
+  GLM-5.2              mlp.up_proj 3/78L              16384x12288x6144 fp16 plain     0.971    0.456   0.336  x..     1532.7
+  GLM-5.2              mlp.up_proj 3/78L              16384x12288x6144 bf16 plain     0.946    0.432   0.317  x..     1441.5
+  GLM-5.2              mlp.down_proj 3/78L            16384x6144x12288 fp16 plain     0.986    0.777   0.694  ...     1438.3
+  GLM-5.2              mlp.down_proj 3/78L            16384x6144x12288 bf16 plain     0.988    0.753   0.684  ...     1354.5
+  GLM-5.2              o_proj.lora_B r=8                  16384x6144x8 fp16 plain     1.297    1.297   0.678  x..      126.7
+  GLM-5.2              o_proj.lora_B r=8                  16384x6144x8 bf16 plain     1.284    1.298   0.679  x..      126.7
+  Qwen3-30B-A3B        expert.up_proj T16k/even          1024x768x2048 fp16 plain     0.783    0.654   0.702  x..        9.5
+  Qwen3-30B-A3B        expert.up_proj T16k/even          1024x768x2048 bf16 plain     0.779    0.677   0.701  x..        9.4
+  Qwen3-30B-A3B        expert.down_proj T16k/eve         1024x2048x768 fp16 plain     1.017    0.826   0.651  x..        8.5
+  Qwen3-30B-A3B        expert.down_proj T16k/eve         1024x2048x768 bf16 plain     0.796    0.933   0.646  x..        8.5
+  Qwen3-30B-A3B        o_proj                          16384x2048x4096 fp16 plain     1.020    0.852   0.873  ...      180.1
+  Qwen3-30B-A3B        o_proj                          16384x2048x4096 bf16 plain     1.018    0.830   0.852  ...      170.4
+  Qwen3-30B-A3B        o_proj.lora_B r=8                  16384x2048x8 fp16 plain     1.223    1.234   0.637  x..       42.3
+  Qwen3-30B-A3B        o_proj.lora_B r=8                  16384x2048x8 bf16 plain     1.180    1.169   0.640  x..       42.4
+  DeepSeek-V4-Flash    expert.up_proj T16k/even          384x2048x4096 fp16 plain     0.641    0.602   0.608  x..       13.2
+  DeepSeek-V4-Flash    expert.up_proj T16k/even          384x2048x4096 bf16 plain     0.655    0.624   0.619  x..       13.5
+  DeepSeek-V4-Flash    o_proj.lora_B r=8                  16384x4096x8 fp16 plain     1.321    1.475   0.680  x..       86.9
+  DeepSeek-V4-Flash    o_proj.lora_B r=8                  16384x4096x8 bf16 plain     1.285    1.462   0.674  x..       86.3
+  GLM-4.7-Flash        expert.up_proj T16k/even         1024x1536x2048 fp16 plain     0.748    0.659   0.545  x..       11.9
+  GLM-4.7-Flash        expert.up_proj T16k/even         1024x1536x2048 bf16 plain     0.590    0.656   0.522  x..       12.0
+  GLM-4.7-Flash        expert.down_proj T16k/eve        1024x2048x1536 fp16 plain     0.912    0.681   0.668  x..       10.6
+  GLM-4.7-Flash        expert.down_proj T16k/eve        1024x2048x1536 bf16 plain     0.637    0.790   0.673  ...       10.5
+  GLM-4.7-Flash        mlp.up_proj 1/47L              16384x10240x2048 fp16 plain     1.012    0.541   0.190  x..      519.9
+  GLM-4.7-Flash        mlp.up_proj 1/47L              16384x10240x2048 bf16 plain     1.023    0.525   0.178  x..      499.5
+  GLM-4.7-Flash        mlp.down_proj 1/47L            16384x2048x10240 fp16 plain     0.998    0.866   0.843  ...      422.7
+  GLM-4.7-Flash        mlp.down_proj 1/47L            16384x2048x10240 bf16 plain     1.000    0.837   0.798  ...      394.0
+  DeepSeek-V4-Pro      expert.up_proj T16k/even          256x3072x7168 fp16 plain     1.111    0.607   0.712  x..       20.6
+  DeepSeek-V4-Pro      expert.up_proj T16k/even          256x3072x7168 bf16 plain     0.690    0.624   0.718  x..       20.9
+
+  bits: one character per arm, in the order torch / autotuner / gb300. `.` means every
+        draw was byte-identical to cublas_unfused, `x` at least one was not, `-` the arm
+        did not run. A time from an arm marked `x` in the LAST TWO positions is a bug
+        report, not a speedup. `*` marks a row whose baseline is under three times the
+        replay floor, so every ratio on it is compressed toward 1.
+
+  geometric mean of the speed relative to cublas_unfused, over the rows on disk:
+
+  group                          rows     torch   autotuner     gb300
+  -------------------------------------------------------------------
+  ALL                              96     0.880       0.659     0.715
+  mode=split                       34     0.812       0.543     0.930
+  mode=plain                       62     0.921       0.733     0.619
+  dtype=fp16                       48     0.889       0.662     0.719
+  dtype=bf16                       48     0.872       0.656     0.711
+  above the replay floor           96     0.880       0.659     0.715
+  layer=attn                       12     1.007       0.800     0.830
+  layer=lora                       10     1.273       1.153     0.669
+  layer=mlp_down                   10     0.954       0.691     0.766
+  layer=mlp_up                      6     0.981       0.435     0.254
+  layer=moe_down                   14     0.807       0.700     0.576
+  layer=moe_up                     44     0.777       0.566     0.847
+  epilogue=lora                    10     1.273       1.153     0.669
+  epilogue=relu2                    2     0.756       0.550     0.832
+  epilogue=resid                   22     0.982       0.749     0.800
+  epilogue=rweight                 14     0.807       0.700     0.576
+  epilogue=swiglu                  38     0.798       0.525     0.688
+  epilogue=swiglu_cw               10     0.808       0.644     0.907
+
+  byte check against cublas_unfused, summed over the rows on disk:
+    cublas_unfused                960 of    960 draws
+    torch_fused                   200 of    960 draws
+    bitequiv_autotuner_fused      960 of    960 draws   <- must be all of them
+    gb300_fused                   960 of    960 draws   <- must be all of them
+
+  what torch.compile's autotuner produced:  aten 34   triton_mm 62
+
+streaming records in /home/youngzt/bitwise-equiv/triton/artifact_eval/cache
+  gemm_bitmatch.csv            152477 rows
+  gemm_perf_random.csv         6995 rows
+  gemm_perf_static.csv         4625 rows
+  gemm_fusion.csv              96 rows
+  inner_tree_bitmatch.csv      104 rows
+  inner_tree_layout.csv        1728 rows
+  checker_corpus.csv           103 rows
+  FORMAT.md                    written
+  env.csv                      76 rows
+
+results in /home/youngzt/bitwise-equiv/triton/artifact_eval/data

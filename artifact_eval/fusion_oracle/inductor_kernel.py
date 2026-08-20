@@ -631,16 +631,23 @@ def epi(C, {ptrs}O, M, N, sc, so, {strides}BLK: tl.constexpr):
 '''
 
 
-def standalone(key, operands=None, params=None, cache_dir=".", force_flat=False):
+def standalone(key, operands=None, params=None, cache_dir=".", force_flat=False, body=None):
     """(callable, kind) for the epilogue on its own. `kind` is "flat" or "row".
 
     `force_flat` is for the probes, which feed one long vector of operand values rather than a
     matrix and a column: a broadcast changes which element meets which, never what the
     arithmetic does to a pair.
+
+    `body` overrides `EPI_SRC[key]`. It exists for one reason: every chain in `EPI_SRC` rounds
+    through fp16 by name, and a bf16 case has to round through bf16 in BOTH the fused kernel and
+    this one. If the two round differently this arm stops being a reference -- the fused arm then
+    comes out byte-different on every draw and every configuration, which reads like a broken
+    kernel and is a broken baseline. `bitequiv.cublas_match.fused_plain.round_lines` is the one
+    place that substitution is written; pass its result here.
     """
     if operands is None:
         operands = _operands_of(key)
-    body = EPI_SRC[key]
+    body = EPI_SRC[key] if body is None else body
     if params:
         body = [ln.format(**params) if "{" in ln else ln for ln in body]
     row = "m1" in operands and not force_flat

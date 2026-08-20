@@ -83,18 +83,156 @@ configuration space we happened to type in, and a reviewer has no reason to trus
 `torch.compile` picks with max-autotune is the honest stand-in for what a user gets when they ask
 for speed and nothing else.
 
-### `gemm.fusion` — fusing an epilogue cuBLAS cannot express — *placeholder*
+### `gemm.fusion` — fusing an epilogue cuBLAS cannot express
 
-**Claim.** For an epilogue cuBLASLt cannot express, folding it into a GEMM that is still
-byte-identical to cuBLAS beats the two-kernel path a user gets today — and the bit constraint is
-not what decides whether it wins.
+**Claim.** For an epilogue cuBLASLt has no fused form for, an epilogue can be folded into a GEMM
+that is *still byte-identical to cuBLAS*, on real model layer dimensions, including the shapes
+where cuBLAS splits `K` and Inductor's own template therefore cannot be made to match. Whether
+that fused kernel is also **faster** than the two-kernel path is a separate question and the table
+answers it per shape rather than in one number.
 
-Run the step for the design. Measured data already exists and is not wired into the tables yet:
-`fusion_oracle/three_way.jsonl` holds a three-way oracle run (eager unfused, Inductor, Inductor's
-own Triton template, and ours tuned and untuned, each with its bit check and its device time), and
-`data/summary.csv` carries the `gemm.fusion.oracle` rows summarising it. The older per-model runs
-in `fusion_real/` and `fusion_moe/` filled `gemm_fusion_dense.csv` and `gemm_fusion_moe.csv`. All
-of it is run by hand rather than through this driver, which is the gap.
+Four arms, one baseline, one direction of comparison:
+
+```
+cublas_unfused            cuBLAS through the hot closure, then the epilogue as its own kernel.
+                          THE BASELINE AND THE BIT REFERENCE: what a determinism user gets today.
+torch_fused               torch.compile(mode="max-autotune-no-cudagraphs"), no numerics
+                          requirement at all. `torch_pick` records what its autotuner chose.
+bitequiv_autotuner_fused  bit-exact, fused: the kernel BEFORE the sm_103 rewrites, at a
+                          configuration chosen by a search under the bit constraint.
+gb300_fused               bit-exact, fused: the GB300 rewrites — TMA, a persistent grid, warp
+                          specialization — at the shipped fitted tile rule.
+```
+
+Every reported number is **baseline time over that arm's time, so above 1 means faster than
+`cublas_unfused`**. There is deliberately no column and no line comparing two non-baseline arms:
+a ratio between two of them hides the level both sit at, and the quantity a reader wants is what a
+user gains or loses against what they can reach today.
+
+The last two arms are bit-equivalent to cuBLAS **by construction** — the cuBLAS plan defines the
+addition order and the kernel implements it — which is the reason to build them. `torch_fused`
+cannot be made bit-exact by any mechanism torch offers, and the earlier approach of patching the
+epilogue text of Inductor's generated kernel only worked because Inductor's mm template happens to
+satisfy the same mainloop contract as plan mode `plain`.
+
+```
+export PYTHONPATH=$(git rev-parse --show-toplevel)
+export CUDA_VISIBLE_DEVICES=<an idle gpu>
+python artifact_eval/artifact.py --run gemm.fusion
+```
+
+`--minutes` does not apply: the cost is fixed by the case list. Options are environment variables,
+because `artifact.py`'s CLI is shared: `FUSION_DTYPES` (default `fp16,bf16`), `FUSION_MAX_PLAIN`
+(default 35, the cap on the `plain` half of the selection — it does not bind today),
+`FUSION_DRAWS` (default 10), `FUSION_SEARCH_S` (default 45, seconds of configuration search per
+row), `FUSION_ROUNDS` (default 3), `FUSION_ONLY` (a substring of `"<model> <layer>"`, to run one
+case), `FUSION_SKIP` (arms to leave out), `FUSION_REDO=1` (re-measure rows already in `cache/`).
+
+**Method.** What makes a fused arm equal to the baseline is where it rounds. The unfused path
+writes the GEMM's output to memory in the output dtype and reads it back, so the fused kernel has
+to round the accumulator through that dtype before the epilogue sees it, and then round again
+wherever eager has a kernel boundary:
+
+```python
+c = acc.to(out_dtype)            # the round cuBLAS did when it wrote to memory
+y = epilogue(c.to(tl.float32))   # the epilogue in fp32, as torch eager does it
+store(y.to(out_dtype))
+```
+
+The epilogue spellings are written in neither the step nor the kernels. They are
+`fusion_oracle/inductor_kernel.EPI_SRC`, verified over their *complete* input domain — `swiglu`,
+`rweight` and `resid` over all 4,294,967,296 (accumulator, operand) fp16 pairs, `swiglu_cw` over
+120 billion per direction, `lora` over 2^32 pairs at six scales, zero differences everywhere;
+`fusion_oracle/probe_pairs.txt` is the table. The kernels take that text and splice it in, so
+there is one copy of each spelling and it is the verified one. Two traps are recorded there and
+both bite: `tl.minimum`/`tl.maximum` return the *non-NaN* operand where `torch.clamp` keeps the
+NaN, and a `.to(fp16)` does not survive the compiler unless the launch passes
+`enable_fp_fusion=False` — LLVM contracts the chain into one `fma.rn.f16` and skips the round the
+cast asked for.
+
+The fused kernels are `bitequiv/cublas_match/fused_plain.py` and `fused_split.py`, one file per
+cuBLAS plan mode. Each holds the corresponding mainloop from `bitequiv/cublas_match/kernels.py`
+statement for statement, with only what happens after the loop changed. For `split` even that is
+narrower: pass 1 is imported from `kernels.py` rather than copied, and the epilogue goes at the
+end of pass 2, so what fusing buys there is one round trip of the `[M, N]` output and nothing else
+— the fp32 workspace still has to be written and read, because that is what cuBLAS does.
+
+**The shapes, and the selection rule.** `fusion_moe/models_2026.py` holds 405 reachable
+(model, layer, epilogue) cases, every dimension read from that model's own `config.json` on
+Hugging Face on 2026-08-16. On sm_103 with cuBLASLt 13.2.2 cuBLAS resolves 361 of them to plan
+mode `plain`, 17 to `split`, and declines the other 27 — the `fp8q` cases on `qkv_proj`, whose
+output dtype is fp8, which `cublas_equivalent_gemm` refuses because cuBLAS is not being told about
+it. A 361-row `plain` table would be one answer repeated, so the step measures:
+
+* **all 17 `split` cases.** They are the only cases in the whole model table where cuBLAS does not
+  pick `plain`, and therefore the only ones where the bit constraint reaches past the epilogue and
+  into the mainloop. 15 are an MoE expert `up_proj`, 2 a dense `mlp.down_proj`.
+* **31 `plain` cases**, one per (model, layer group). Models are taken in the order of the ranking
+  fact `models_2026.py` records for each — a trending position first, then a 30-day download count
+  descending; the six models that file gives no number for are not drawn from. Within a model the
+  layer groups are taken in the order they cost: routed expert FFN, dense FFN, attention output
+  projection, LoRA merge. Within a group the representative is the larger token count and, for the
+  MoE layers, the even routing that the hot and cold experts bracket.
+
+Each case runs at fp16 and at bf16, so about 96 rows. `fusion_oracle/fusion_cases.py` is that rule
+written out at length together with what it leaves out on purpose — **read it before pruning**,
+because this list is already a pruning and the axis it pruned hardest, routing balance and token
+count, is the one it says least about. The plan mode is resolved on the machine the run happens
+on, not shipped in a file: which kernel cuBLAS picks depends on the architecture and the library
+version.
+
+**Timing.** As everywhere else in this artifact: device time, CUDA-graph replay, L2 flushed
+between replays, `batch_n` calls per graph each on its own operand copy. Five timings are kept raw
+per arm and `batch_n` and `floor_ms` are on every row. A row with `others_on_gpu` other than 0 was
+taken beside another process and is not a measurement.
+
+**Cost.** Fixed by the case list, about an hour and a half on an idle GB300 at the defaults. Most
+of it is compilation — Inductor's autotune for `torch_fused` and the configuration search for
+`bitequiv_autotuner_fused` — not running kernels, so a second run over the same cases is far
+faster. Records stream to `cache/gemm.fusion.jsonl` and the run resumes from them.
+
+**What you should see.** One row per (case, dtype), each with all four arms in it, then geometric
+means by plan mode, dtype, layer group and epilogue, all computed at print time from the rows on
+disk. `bits` is one character per arm: `.` for byte-identical to the baseline on every draw, `x`
+for at least one draw differing, `-` for an arm that did not run.
+
+The run in `run_fusion.txt` — 96 of 96 selected rows, every one with all four arms, none with a
+failure recorded against it, `others_on_gpu` 0 and `near_floor` 0 throughout — came out like this.
+
+*The bits.* Both bit-exact arms were byte-identical to `cublas_unfused` on **960 of 960** draws,
+on the `split` shapes as much as the `plain` ones, and no configuration the search tried was ever
+byte-different (`search_bit_rejected` is 0 on every row). That is the claim, and it holds.
+
+*What torch did.* `torch_fused` matched on **200 of 960** draws — 20 rows of 96, every one of them
+`plain` mode carrying `resid` or `rweight`, which are exactly the two epilogues whose *approximate*
+spelling was measured byte-exact over all 2^32 operand pairs; and 19 of those 20 are rows where
+its autotuner had chosen the **unfused extern**. So it agreed where it did not fuse, on the two
+epilogues where fusing changes no bit. On the 34 `split` rows it matched on none: it picked its own
+mm template on 26 of them, and that template's mainloop is one fp32 accumulator over the whole `K`
+while cuBLAS's is a split, so no amount of epilogue rewriting could have closed it. That is the
+concrete reason the two bit-exact arms exist.
+
+*The speed.* Geometric mean over all 96 rows against `cublas_unfused`: `torch_fused` 0.880,
+`bitequiv_autotuner_fused` 0.659, `gb300_fused` 0.715. **Fusing a bit-exact epilogue does not, in
+general, beat cuBLAS plus a separate kernel on a GB300** — an arm beat the baseline on 31, 8 and 12
+of the 96 rows respectively. Two places it does pay: the LoRA merge, where `K` is the rank and the
+GEMM is almost nothing (searched arm 1.15x geometric mean over 10 rows, 1.48x at its best), and the
+split MoE `up_proj` shapes (`gb300_fused` beats the baseline on 12 of the 34 split rows, up to
+1.15x). The worst case is the dense `mlp.up_proj` with a SwiGLU gate at 16384 tokens, 0.254 — there
+the epilogue's extra `[M, N]` gate read costs more than skipping one round trip saves. Two caveats
+belong with these numbers: the shipped GB300 tile does not fit a fused kernel on 52 of the 62
+`plain` rows and was stepped down a pipeline stage or more (the row's `gb300_cfg` says so), and the
+search covered a median 42% of its space inside the 45-second budget (`search_space` and
+`search_seen` per row).
+
+**How to judge it.** Read the `bits` column before any time on the row. The last two positions —
+`bitequiv_autotuner_fused` and `gb300_fused` — must be `.`; **a timing from an arm marked `x` is a
+bug report, not a speedup**. The `torch_fused` position is expected to be `x`, and how often it is
+`x` is itself a result: that arm is what a user gets when they ask for speed and nothing else, and
+it is not byte-identical to cuBLAS on essentially any draw. Then read
+`*_over_cublas_unfused`: above 1 is faster than the two-kernel path a determinism user has today.
+A `*` on a row marks a baseline under three times the replay floor, where every ratio is
+compressed toward 1 and small differences mean nothing.
 
 ### `gemm.cublas-bug` — some mismatches are cuBLAS's own
 
