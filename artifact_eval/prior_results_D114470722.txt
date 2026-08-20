@@ -1,0 +1,292 @@
+PRIOR RESULT -- the forward PTX checker over the cached corpus
+==============================================================
+
+Where this comes from
+---------------------
+Every table below is copied verbatim out of the SUMMARY of a Phabricator diff. Nothing has been
+recomputed, rounded, reordered or summarised -- the markdown and the fenced blocks are
+byte-for-byte what each summary says. Every section names the diff it came from, and anything
+this file adds around them is marked as such.
+
+    Tables 1 and 2   D114470722  Forward checker: model the cross-warp shared exchange
+                                 https://www.internalfb.com/D114470722       (PR #2781)
+                                 NVIDIA / PTX, the corpus on this machine. THIS is what the
+                                 artifact's `checker.corpus` step is compared against.
+
+    the blocks in    D114729647  Extract the architecture-neutral checker core
+    the third                    https://www.internalfb.com/D114729647       (PR #2782)
+    section                      A pure refactor over the SAME corpus; it is in this checkout,
+                                 so a reader needs to know Tables 1 and 2 survived it.
+
+    Tables 3 and 4   D114666969  AMDGCN forward equivalence checker
+                                 https://www.internalfb.com/D114666969       (PR #2783)
+                                 The AMD twin, on a DIFFERENT corpus. Read beside Tables 1
+                                 and 2, not merged into them.
+
+Machine and versions
+--------------------
+The diff summary does NOT name a machine. What it does say about how it was measured:
+
+  * "Graded on the full cached corpus, no sampling: 93 (kernel, dtype) groups, 51,152 configs"
+  * test plan: "Corpus grading, CPU only, full config space per group (no cap)"
+  * the "before" column is "reconstructed from the parent commit's checker and confirmed to
+    reproduce the recorded baseline row for row"
+
+The checker reads text, so it needs no GPU; only BUILDING the corpus does. Facts about the
+corpus that grading read, checked on the machine that holds it and not claimed by the diff:
+
+  corpus       /home/youngzt/bitwise-equiv/local_evaluation/corpus
+               93 (kernel, dtype) groups, 62,458 config records, 51,152 of them ok=true
+               -- the same two numbers the summary quotes, so this is that corpus
+  PTX target   .target sm_103a  (NVIDIA GB300, compute capability 10.3)
+  Triton       3.8.0+fb
+  Python       3.12
+
+Reading the columns
+-------------------
+  group        <kernel>/<dtype>
+  configs      configs graded in that group (ok=true; configs that failed to build are excluded)
+  before       checker equivalence classes at the PARENT commit
+  after        checker equivalence classes at D114470722 -- this is the column the artifact's
+               `checker.corpus` step reproduces. `before` needs the parent commit's checker and
+               is NOT reproducible from the artifact; it lives here and only here.
+  empirical    classes the fuzzer measured by running each config. The ground truth, and the
+               ideal `after` would reach.
+  over_merges  pairs the checker calls equal whose real output differs. The soundness gate.
+               MUST be 0.
+
+Fewer classes = more tuning freedom proven equal. `after` above `empirical` is over-splitting:
+sound, but recovery left on the table.
+
+
+TABLE 1 -- support table (the 20 groups that improved, plus the totals)
+=======================================================================
+Preceded in the summary by: "**Support table.** Graded on the full cached corpus, no sampling:
+93 (kernel, dtype) groups, 51,152 configs, checker classes before -> after against the empirical
+(fuzzer) class count, which is the ideal."
+
+| group | configs | before | after | empirical | over_merges |
+|---|--:|--:|--:|--:|--:|
+| softmax/f32 | 144 | 16 | 4 | 3 | 0 |
+| softmax/f16 | 144 | 16 | 8 | 4 | 0 |
+| softmax/bf16 | 144 | 16 | 8 | 4 | 0 |
+| col_max/f16 | 144 | 6 | 3 | 1 | 0 |
+| col_max/bf16 | 144 | 6 | 3 | 1 | 0 |
+| sum/f32 | 144 | 8 | 7 | 7 | 0 |
+| sum_2d_axis0/f32 | 144 | 8 | 7 | 7 | 0 |
+| sum_2d_col/f32 | 144 | 8 | 7 | 7 | 0 |
+| sum_2d_col_big/f32 | 144 | 9 | 8 | 7 | 0 |
+| sum_2d_deep/f32 | 144 | 8 | 7 | 4 | 0 |
+| sum_2d_deep/bf16 | 144 | 9 | 8 | 4 | 0 |
+| sum_3d_mid/f32 | 144 | 8 | 7 | 4 | 0 |
+| col_exp_sum/f32 | 144 | 8 | 7 | 7 | 0 |
+| col_sum_loop/f32 | 144 | 10 | 9 | 7 | 0 |
+| dot/f32 | 144 | 20 | 19 | 14 | 0 |
+| layernorm/f16 | 144 | 20 | 19 | 9 | 0 |
+| layernorm/f32 | 144 | 8 | 7 | 6 | 0 |
+| rmsnorm/f16 | 144 | 18 | 17 | 8 | 0 |
+| rmsnorm/f32 | 144 | 11 | 10 | 7 | 0 |
+| gemm/f32 | 10293 | 1732 | 1729 | 6 | 0 |
+| **reduction total (72 baseline groups)** | **8652** | **855** | **807** | **460** | **0** |
+| **reduction total (all 79 groups)** | **9384** | **1057** | **1009** | **614** | **0** |
+| **MMA total (14 groups)** | **41768** | **11450** | **11447** | **790** | **0** |
+| **everything** | **51152** | **12507** | **12456** | **1404** | **0** |
+
+
+TABLE 2 -- the no-regression rows, MMA side
+===========================================
+Preceded in the summary by: "No-regression rows -- every group not listed above is byte-for-byte
+unchanged, and no group's class count went UP anywhere in the corpus. The MMA side in particular:"
+
+| group | configs | before | after | empirical | over_merges |
+|---|--:|--:|--:|--:|--:|
+| gemm/f16 | 6304 | 1 | 1 | 1 | 0 |
+| gemm/bf16 | 6422 | 1 | 1 | 1 | 0 |
+| gemm/fp8 | 7263 | 2 | 2 | 2 | 0 |
+| gemm_tma_store/f16 | 18 | 1 | 1 | 1 | 0 |
+| gemm_bias_relu_fp_fusion/bf16 | 192 | 1 | 1 | 1 | 0 |
+| gemm_kgroup/bf16 | 1152 | 138 | 138 | 6 | 0 |
+| gemm_reduce_sum/f32 | 270 | 60 | 60 | 9 | 0 |
+| gemm_softmax/f32 | 270 | 60 | 60 | 9 | 0 |
+| flash_attention/f16 | 2720 | 2655 | 2655 | 266 | 0 |
+| flash_attention/bf16 | 2721 | 2656 | 2656 | 260 | 0 |
+| flash_attention/fp8 | 2070 | 2070 | 2070 | 112 | 0 |
+| flash_attention/fp8e5m2 | 2069 | 2069 | 2069 | 112 | 0 |
+| LC_splitk_gemm_f16/f16 | 4 | 4 | 4 | 4 | 0 |
+| welford/f32 | 636 | 106 | 106 | 75 | 0 |
+| LC_cumsum_scan_f32/f32 | 24 | 24 | 24 | 7 | 0 |
+| LC_logsumexp_loop_f32/f32 | 24 | 24 | 24 | 24 | 0 |
+| LC_prod_loop_f32/f32 | 24 | 24 | 24 | 24 | 0 |
+| LC_var_welford_f32/f32 | 24 | 24 | 24 | 24 | 0 |
+
+Followed in the summary by: "Rows whose class count now EQUALS the empirical count (nothing left
+to recover) go from 15 to 19: `sum/f32`, `sum_2d_axis0/f32`, `sum_2d_col/f32` and
+`col_exp_sum/f32` join `col_max/f32` and the loop-carried group."
+
+The two tables name 38 of the 93 groups. The other 55 are covered by the sentence above them:
+every group not listed is byte-for-byte unchanged from the parent commit, and no group's class
+count went up.
+
+
+NUMBERS THE SAME SUMMARY GIVES AS PROSE, NOT AS A TABLE
+=======================================================
+These are quoted because a reviewer will want them next to the tables, but they are sentences
+in the original, not rows.
+
+Address recoverability ("Phase A"), from evaluating every st.shared / ld.shared / ldmatrix
+address in the corpus with the existing AffineEval:
+
+  reductions        70,529 of 72,085 accesses (97.8%) resolve to a provable Affine
+                    24 of 35 groups at 100%; worst reduction group 94%
+  flash attention   st.shared 72.4% provable, ld.shared 73.0% provable,
+                    ldmatrix 3,405 of 354,380 = 0.96% (the matrix loads are xor-swizzled),
+                    which drags the flash-attention total to 17.6%
+
+Residual unprovable-address fraction, from the robustness paragraph: 2.2% of reduction accesses
+and 82.4% of flash-attention accesses, essentially all of the latter being ldmatrix. Every one
+of those keeps the previous address-blind behaviour, so they neither gain nor lose.
+
+Test-plan figures: `pytest bitequiv/tests/` 181 passed / 6 skipped (was 178/6);
+`pytest bitequiv/tests/test_ptx_*.py` 144 passed / 1 skipped (was 137/1). Over_merges 0
+everywhere including GEMM and flash attention, 0 groups with an increased class count, 20
+groups improved. The five kernels the signature-memo fix unblocked (LC_cumsum_scan_f32,
+LC_logsumexp_loop_f32, LC_prod_loop_f32, LC_var_welford_f32, welford) all complete, in 4-58 s
+each under a 60 GB cap.
+
+What the summary says is still NOT modeled, so a reviewer does not read the remaining gap as a
+defect: packed .f16x2 / .bf16x2 arithmetic (which is what leaves the f16 and bf16 rows of sum,
+dot, col_* and sum_* where they were), the control-flow floor (which fingerprints all of
+cond_reduce), and the fma accumulation-chain guard (which refuses A_rms_norm_fwd-style leaves).
+
+
+D114729647 -- the refactor that came after, checked against the SAME corpus
+===========================================================================
+D114729647  [triton][bitequiv] Extract the architecture-neutral checker core
+            https://www.internalfb.com/D114729647  (PR #2782)
+
+This one belongs with the tables above rather than beside them. It is a pure refactor that moved
+the checker's architecture-neutral half to `bitequiv/core/` with zero logic change, and this
+checkout already contains it -- so the reader needs to know the numbers above survived it. Its
+summary has no markdown tables; what it has is fenced blocks of figures, reproduced here as they
+were written.
+
+Descriptor byte-identity over the whole corpus, before and after the refactor:
+
+```
+before entries: 54120
+after  entries: 54120
+same key set  : True
+DESCRIPTORS DIFFERING: 0
+```
+
+Independent re-measurement, compared against figures recorded at the fork commit `72f3453e6e`
+before any edit:
+
+```
+gemm/f16            n=405 ck=1   emp=1   OM=0   (pre-refactor: identical)
+gemm/bf16           n=401 ck=1   emp=1   OM=0   (identical)
+gemm/fp8            n=608 ck=2   emp=2   OM=0   (identical)
+gemm_tma_store/f16  n=18  ck=1   emp=1   OM=0   (identical)
+flash_attention/f16 n=444 ck=441 emp=158 OM=0   (identical)
+flash_attention/fp8 n=351 ck=351 emp=85  OM=0   (identical)
+72 reduction groups, full config space: 807 checker classes, 0 over-merges   (identical)
+```
+
+Full-table eval, the two sweeps graded into one per-group table:
+
+```
+groups=91 configs=54120 checker_cls=13201 empirical_cls=1404   (before)
+groups=91 configs=54120 checker_cls=13201 empirical_cls=1404   (after)
+diff TABLE_BEFORE.md TABLE_AFTER.md -> no output
+```
+
+Do NOT line these up row-for-row against Table 1 and Table 2. The `n=` counts show why: the
+re-measurement used a SAMPLE of each group (n=444 for flash_attention/f16, against 2,720 in
+Table 2), so its class counts are for the sample. The 807 reduction figure and the 0 over-merges
+are the two that do match, and the byte-identity block is the real evidence. That diff's own
+summary also says the over-merge column of its full-table eval is untrustworthy and was being
+followed up separately, which is one more reason not to mix these figures into the tables above.
+
+
+D114666969 -- the AMD mirror of the same checker
+================================================
+D114666969  [triton][bitequiv] AMDGCN forward equivalence checker
+            https://www.internalfb.com/D114666969  (PR #2783)
+
+The AMD twin of D114470722: the same checker, the same interface, the same soundness gate, on
+gfx942 / CDNA3 wave64 instead of PTX. Its tables follow, copied verbatim; they are fenced blocks
+in the original, not markdown tables.
+
+Read them beside Table 1 and Table 2, not merged into them. They were measured over a DIFFERENT
+corpus -- `~/amd_corpus`, 30 groups and 4,500 configs -- which is not on this machine and which
+none of the builders in `corpus_builder/` builds, so no step in this artifact produces a number
+that lines up with an AMD row. What does carry across is the shape of the claim: same gate, same
+0 over-merges, and the last table below states the AMD-versus-NV comparison in the diff's own
+words rather than leaving a reader to compute it.
+
+TABLE 3 -- AMD support table (gfx942, `~/amd_corpus`, 4500 configs)
+
+Preceded in the summary by: "Columns: configs | checker classes | empirical (fuzzer) classes |
+over_merges. 'classes' = distinct bit-equivalence classes; checker/empirical ratio = over-split
+factor (1.00 = perfect recovery). over_merges = configs wrongly merged (MUST be 0)."
+
+```
+matrix-core (GEMM)                configs  checker  empirical  over_merge
+  gemm_f16_free_tiling  f16          12      1        1          0
+  gemm_kloop_block_k    bf16        132      1        1          0
+  gemm_input_precision  f32          24      2        2          0
+  gemm_bias_relu_fp_fusion bf16      24      2        2          0
+  gemm_tma_store        f16          12      1        1          0
+  gemm_fp8_imprecise_acc fp8e4m3fn   36      1        1          0
+  GEMM subtotal                     240      8        8   (1.00x) 0   EXACT
+
+reductions                        configs  checker  empirical  over_merge
+  sum                   f32         120      6        6          0   EXACT
+  sum_dim1_simple       f32         120      6        6          0   EXACT
+  col_max               f32         120      1        1          0   EXACT
+  sum_2d_deep           f32         120      6        3          0
+  sum_2d_keepdim        f32         120      6        2          0
+  sum_3d                f32         120      6        2          0
+  sum_multiaxis         f32         120      6        2          0
+  sum_4d                f32         120      7        2          0
+  sum_2d_axis0          f32         120      9        6          0
+  sum_3d_mid            f32         120      9        3          0
+  col_bf16              bf16        120     10        6          0
+  col_sum_loop          f32         120     10        6          0
+  sum_2d_col            f32         120     10        6          0
+  sum_2d_col_big        f32         120     10        6          0
+  sum_3d_outer          f32         120     10        6          0
+  softmax               f32         120     10        3          0
+  col_dot               f32         120     16       12          0
+  cond_reduce           f32         120     16       12          0
+  dot                   f32         120     16       12          0
+  col_exp_sum           f32         120     15        6          0
+  layernorm             f32         120     20        3          0
+  rmsnorm               f32         120     20        3          0
+  welford               f32         540     76       60          0
+  sum_dim1_persistent   f32        1080     90       43          0
+  reduction subtotal               4260    391      217  (1.80x) 0
+```
+
+Followed in the summary by: "over_merges = 0 across all 30 groups / 4,500 configs (the soundness
+gate holds)."
+
+TABLE 4 -- AMD vs NV (D114470722)
+
+```
+category                                   AMD  (ratio)     NV (ratio)
+  GEMM                                      8/8  = 1.00x     ~14.5x   AMD better
+  reductions (all)                        391/217 = 1.80x   ~1.64x
+  reductions (excl 4 SW-transcendental)   326/202 = 1.61x   ~1.64x   AMD == NV
+  over_merges                              0 / 4500          0
+```
+
+The diff explains the gap as two AMD ISA facts rather than modeling gaps: AMD computes exp / div
+/ rsqrt as a software sequence where NV has a one-op ex2 / rcp, so layernorm, rmsnorm, softmax
+and col_exp_sum over-split more -- excluding those four, AMD equals NV; and AMD lowers a wide
+reduction as a multi-stage pipelined store -> gather -> combine whose partials sit at different
+pipeline stages, an inner_tree order that needs a multi-stage reconstruction it does not have yet.
+
+D114666969 also notes at the top that it now REUSES the shared `bitequiv.core` extracted by
+D114729647 rather than hard-copying it, and that the AMD table above is byte-identical before and
+after that switch, with NV untouched.
