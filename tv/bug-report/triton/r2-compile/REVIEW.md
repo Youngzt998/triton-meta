@@ -166,3 +166,59 @@ one new way.**
   this line so far has turned out to be a `num_ctas > 1` bug, and the check costs
   one re-run: `/tmp/vary.py`-style config override on the report's own draw.
 </content>
+
+---
+
+## Pass 3 (2026-08-19) — HIT-0045 … HIT-0047
+
+| pass | ids | kept | rejected |
+|---|---|---|---|
+| 3 | HIT-0045 … HIT-0047 | 2 | 1 (B4) |
+
+All three reproduced on a quiet box.
+
+**Kept — HIT-0045, a seventh `num_ctas > 1` defect and the third in `PlanCTA`
+that is not a duplicate.** `CTAPlanner::processStoreLikeOps`
+(`PlanCTA.cpp:350-385`) reads the CGA layout of the **first** store-like op into
+a local at line 373 and then reuses it for **every** later store at line 378. A
+`CGAEncodingAttr` has one entry per dimension, so a kernel with two stores of
+different rank rebuilds the second store's `BlockedEncodingAttr` with the first
+store's rank and trips the "same rank" verifier. Checked against the kept
+`r2-corpus/HIT-0037`, which is the other `replaceCGALayout` crash: that one is
+the *recursive* slice path at line 77 passing the slice's shape to the parent,
+dies inside `SmallVector` before any verifier runs, and needs a
+`SliceEncodingAttr`. This one has no slice and no recursion — the stack goes
+`PlanCTA.cpp:379 -> :70` directly. A 13-line hand-written `.ttgir` with two
+stores of rank 1 and rank 2 at `num_ctas = 8` reproduces it and is committed as
+`HIT-0045/planCTA-mixed-rank-min.ttgir`; the same file at `num_ctas = 1` passes.
+
+**Kept — HIT-0047, a new class: ptxas *crashes*, it does not mis-compile.**
+`ptxas` V12.9.86 takes SIGSEGV at `--opt-level 2` and `3` on one 2868-line PTX
+file for `--gpu-name=sm_89`. The same file is fine at `-O0`/`-O1` and fine at
+sm_90 / sm_90a at every level, so the PTX is valid and Triton is not at fault.
+Insensitive to `--regAllocOptLevel` (0-3) and `--maxrregcount` (32-255), so it is
+**not** the register allocator and therefore not a member of the six
+`Insufficient registers` reports pass 2 rejected as resource-limit; and it is not
+the ptxas *wrong-code* class either (`ttgir-broad/HIT-0008`,
+`r2-corpus/HIT-0024`), because nothing is produced at all. The `.ptx` is
+committed, so the repro is one command with no Triton, no Python and no GPU in
+it. Not minimized below 2868 lines.
+
+**Rejected — HIT-0046, B4 of HIT-0002.** `'arith.truncf' op result #0 must be
+floating-point-like, but got 'i8'`, with `'arith.mulf' op operand #0 ... 'i8'` in
+the same stderr — the `fp8e4b15`-is-`i8` family. R4's 17:39 signature fold still
+matches only `operand #N`; the suggestion from pass 2 (match
+`(operand|result) #N`) is now confirmed by a second escapee, after HIT-0043.
+
+**Notes for pass 4.**
+* The two guards held: no reviewed report was clobbered and no rejected id was
+  re-created during this pass.
+* The `num_ctas > 1` theme is now **seven** defects plus `r2-oracle/HIT-0001`.
+  Anyone fixing `PlanCTA` should read HIT-0001, 0003, 0005, 0006, 0019, 0037 and
+  0045 together — they are seven separate mistakes in one 1000-line file with no
+  lit tests.
+* Capturing the PTX that ptxas dies on is easy and worth doing for any
+  `crash-ptxas` / `crash-python@cubin` report: set `TRITON_PTXAS_PATH` to a
+  wrapper script that copies its `.ptx` argument aside and then `exec`s the real
+  ptxas. That turns a Triton-dependent report into a one-command NVIDIA bug
+  report.
