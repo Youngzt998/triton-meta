@@ -1,0 +1,346 @@
+   %7554 = tt.reshape %7553 allow_reorder : tensor<16xf32> -> tensor<16xf32>
+    %7555 = "tt.reduce"(%7554) <{axis = 0 : i32}> ({
+    ^bb0(%arg6: f32, %arg7: f32):
+      %7789 = arith.addf %arg6, %arg7 : f32
+      tt.reduce.return %7789 : f32
+    }) : (tensor<16xf32>) -> f32
+    %7556 = math.sqrt %7555 : f32
+    %7557 = tt.splat %7556 : f32 -> tensor<2xf32>
+    %7558 = arith.select %75, %7557, %7551 : tensor<2xi1>, tensor<2xf32>
+    %7559 = tt.load %84, %3, %cst_20 : tensor<16x!tt.ptr<f32>>
+    %7560 = arith.mulf %7559, %7559 : tensor<16xf32>
+    %7561 = tt.reshape %7560 allow_reorder : tensor<16xf32> -> tensor<16xf32>
+    %7562 = "tt.reduce"(%7561) <{axis = 0 : i32}> ({
+    ^bb0(%arg6: f32, %arg7: f32):
+      %7789 = arith.addf %arg6, %arg7 : f32
+      tt.reduce.return %7789 : f32
+    }) : (tensor<16xf32>) -> f32
+    %7563 = math.sqrt %7562 : f32
+    %7564 = tt.splat %7563 : f32 -> tensor<2xf32>
+    %7565 = arith.select %85, %7564, %7558 : tensor<2xi1>, tensor<2xf32>
+    %7566 = arith.select %16, %7565, %cst_16 : tensor<2xi1>, tensor<2xf32>
+    %7567 = tt.reshape %7566 allow_reorder : tensor<2xf32> -> tensor<2xf32>
+    %7568 = "tt.reduce"(%7567) <{axis = 0 : i32}> ({
+    ^bb0(%arg6: f32, %arg7: f32):
+      %7789 = arith.addf %arg6, %arg7 : f32
+      tt.reduce.return %7789 : f32
+    }) : (tensor<2xf32>) -> f32
+    %7569 = tt.splat %7568 : f32 -> tensor<2xf32>
+    %7570 = arith.cmpf ogt, %7569, %7565 : tensor<2xf32>
+    %7571 = arith.cmpf oeq, %7569, %7565 : tensor<2xf32>
+    %7572 = arith.cmpi sgt, %2, %cst_19 : tensor<2xi32>
+    %7573 = arith.andi %7571, %7572 : tensor<2xi1>
+    %7574 = arith.ori %7570, %7573 : tensor<2xi1>
+    %7575 = arith.andi %7574, %4 : tensor<2xi1>
+    %7576 = arith.extui %7575 : tensor<2xi1> to tensor<2xi32>
+    %7577 = arith.select %25, %7565, %cst_16 : tensor<2xi1>, tensor<2xf32>
+    %7578 = tt.reshape %7577 allow_reorder : tensor<2xf32> -> tensor<2xf32>
+    %7579 = "tt.reduce"(%7578) <{axis = 0 : i32}> ({
+    ^bb0(%arg6: f32, %arg7: f32):
+      %7789 = arith.addf %arg6, %arg7 : f32
+      tt.reduce.return %7789 : f32
+    }) : (tensor<2xf32>) -> f32
+    %7580 = tt.splat %7579 : f32 -> tensor<2xf32>
+    %7581 = arith.cmpf ogt, %7580, %7565 : tensor<2xf32>
+    %7582 = arith.cmpf oeq, %7580, %7565 : tensor<2xf32>
+    %7583 = arith.cmpi sgt, %2, %cst_14 : tensor<2xi32>
+    %7584 = arith.andi %7582, %7583 : tensor<2xi1>
+    %7585 = arith.ori %7581, %7584 : tensor<2xi1>
+    %7586 = arith.andi %7585, %4 : tensor<2xi1>
+    %7587 = arith.extui %7586 : tensor<2xi1> to tensor<2xi32>
+    %7588 = arith.addi %7576, %7587 : tensor<2xi32>
+    %7589 = arith.select %35, %7565, %cst_16 : tensor<2xi1>, tensor<2xf32>
+    %7590 = tt.reshape %7589 allow_reorder : tensor<2xf32> -> tensor<2xf32>
+    %7591 = "tt.reduce"(%7590) <{axis = 0 : i32}> ({
+    ^bb0(%arg6: f32, %arg7: f32):
+      %7789 = arith.addf %arg6, %arg7 : f32
+      tt.reduce.return %7789 : f32
+    }) : (tensor<2xf32>) -> f32
+    %7592 = tt.splat %7591 : f32 -> tensor<2xf32>
+    %7593 = arith.cmpf ogt, %7592, %7565 : tensor<2xf32>
+    %7594 = arith.cmpf oeq, %7592, %7565 : tensor<2xf32>
+    %7595 = arith.cmpi sgt, %2, %cst_12 : tensor<2xi32>
+    %7596 = arith.andi %7594, %7595 : tensor<2xi1>
+    %7597 = arith.ori %7593, %7596 : tensor<2xi1>
+    %7598 = arith.andi %7597, %4 : tensor<2xi1>
+    %7599 = arith.extui %7598 : tensor<2xi1> to tensor<2xi32>
+    %7600 = arith.addi %7588, %7599 : tensor<2xi32>
+    %7601 = arith.select %45, %7565, %cst_16 : tensor<2xi1>, tensor<2xf32>
+    %7602 = tt.reshape %7601 allow_reorder : tensor<2xf32> -> tensor<2xf32>
+    %7603 = "tt.reduce"(%7602) <{axis = 0 : i32}> ({
+    ^bb0(%arg6: f32, %arg7: f32):
+      %7789 = arith.addf %arg6, %arg7 : f32
+      tt.reduce.return %7789 : f32
+    }) : (tensor<2xf32>) -> f32
+    %7604 = tt.splat %7603 : f32 -> tensor<2xf32>
+    %7605 = arith.cmpf ogt, %7604, %7565 : tensor<2xf32>
+    %7606 = arith.cmpf oeq, %7604, %7565 : tensor<2xf32>
+    %7607 = arith.cmpi sgt, %2, %cst_10 : tensor<2xi32>
+    %7608 = arith.andi %7606, %7607 : tensor<2xi1>
+    %7609 = arith.ori %7605, %7608 : tensor<2xi1>
+    %7610 = arith.andi %7609, %4 : tensor<2xi1>
+    %7611 = arith.extui %7610 : tensor<2xi1> to tensor<2xi32>
+    %7612 = arith.addi %7600, %7611 : tensor<2xi32>
+    %7613 = arith.select %55, %7565, %cst_16 : tensor<2xi1>, tensor<2xf32>
+    %7614 = tt.reshape %7613 allow_reorder : tensor<2xf32> -> tensor<2xf32>
+    %7615 = "tt.reduce"(%7614) <{axis = 0 : i32}> ({
+    ^bb0(%arg6: f32, %arg7: f32):
+      %7789 = arith.addf %arg6, %arg7 : f32
+      tt.reduce.return %7789 : f32
+    }) : (tensor<2xf32>) -> f32
+    %7616 = tt.splat %7615 : f32 -> tensor<2xf32>
+    %7617 = arith.cmpf ogt, %7616, %7565 : tensor<2xf32>
+    %7618 = arith.cmpf oeq, %7616, %7565 : tensor<2xf32>
+    %7619 = arith.cmpi sgt, %2, %cst_8 : tensor<2xi32>
+    %7620 = arith.andi %7618, %7619 : tensor<2xi1>
+    %7621 = arith.ori %7617, %7620 : tensor<2xi1>
+    %7622 = arith.andi %7621, %4 : tensor<2xi1>
+    %7623 = arith.extui %7622 : tensor<2xi1> to tensor<2xi32>
+    %7624 = arith.addi %7612, %7623 : tensor<2xi32>
+    %7625 = arith.select %65, %7565, %cst_16 : tensor<2xi1>, tensor<2xf32>
+    %7626 = tt.reshape %7625 allow_reorder : tensor<2xf32> -> tensor<2xf32>
+    %7627 = "tt.reduce"(%7626) <{axis = 0 : i32}> ({
+    ^bb0(%arg6: f32, %arg7: f32):
+      %7789 = arith.addf %arg6, %arg7 : f32
+      tt.reduce.return %7789 : f32
+    }) : (tensor<2xf32>) -> f32
+    %7628 = tt.splat %7627 : f32 -> tensor<2xf32>
+    %7629 = arith.cmpf ogt, %7628, %7565 : tensor<2xf32>
+    %7630 = arith.cmpf oeq, %7628, %7565 : tensor<2xf32>
+    %7631 = arith.cmpi sgt, %2, %cst_6 : tensor<2xi32>
+    %7632 = arith.andi %7630, %7631 : tensor<2xi1>
+    %7633 = arith.ori %7629, %7632 : tensor<2xi1>
+    %7634 = arith.andi %7633, %4 : tensor<2xi1>
+    %7635 = arith.extui %7634 : tensor<2xi1> to tensor<2xi32>
+    %7636 = arith.addi %7624, %7635 : tensor<2xi32>
+    %7637 = arith.select %75, %7565, %cst_16 : tensor<2xi1>, tensor<2xf32>
+    %7638 = tt.reshape %7637 allow_reorder : tensor<2xf32> -> tensor<2xf32>
+    %7639 = "tt.reduce"(%7638) <{axis = 0 : i32}> ({
+    ^bb0(%arg6: f32, %arg7: f32):
+      %7789 = arith.addf %arg6, %arg7 : f32
+      tt.reduce.return %7789 : f32
+    }) : (tensor<2xf32>) -> f32
+    %7640 = tt.splat %7639 : f32 -> tensor<2xf32>
+    %7641 = arith.cmpf ogt, %7640, %7565 : tensor<2xf32>
+    %7642 = arith.cmpf oeq, %7640, %7565 : tensor<2xf32>
+    %7643 = arith.cmpi sgt, %2, %cst_4 : tensor<2xi32>
+    %7644 = arith.andi %7642, %7643 : tensor<2xi1>
+    %7645 = arith.ori %7641, %7644 : tensor<2xi1>
+    %7646 = arith.andi %7645, %4 : tensor<2xi1>
+    %7647 = arith.extui %7646 : tensor<2xi1> to tensor<2xi32>
+    %7648 = arith.addi %7636, %7647 : tensor<2xi32>
+    %7649 = arith.select %85, %7565, %cst_16 : tensor<2xi1>, tensor<2xf32>
+    %7650 = tt.reshape %7649 allow_reorder : tensor<2xf32> -> tensor<2xf32>
+    %7651 = "tt.reduce"(%7650) <{axis = 0 : i32}> ({
+    ^bb0(%arg6: f32, %arg7: f32):
+      %7789 = arith.addf %arg6, %arg7 : f32
+      tt.reduce.return %7789 : f32
+    }) : (tensor<2xf32>) -> f32
+    %7652 = tt.splat %7651 : f32 -> tensor<2xf32>
+    %7653 = arith.cmpf ogt, %7652, %7565 : tensor<2xf32>
+    %7654 = arith.cmpf oeq, %7652, %7565 : tensor<2xf32>
+    %7655 = arith.cmpi sgt, %2, %cst_2 : tensor<2xi32>
+    %7656 = arith.andi %7654, %7655 : tensor<2xi1>
+    %7657 = arith.ori %7653, %7656 : tensor<2xi1>
+    %7658 = arith.andi %7657, %4 : tensor<2xi1>
+    %7659 = arith.extui %7658 : tensor<2xi1> to tensor<2xi32>
+    %7660 = arith.addi %7648, %7659 : tensor<2xi32>
+    %7661 = arith.select %16, %7660, %cst_19 : tensor<2xi1>, tensor<2xi32>
+    %7662 = tt.reshape %7661 allow_reorder : tensor<2xi32> -> tensor<2xi32>
+    %7663 = "tt.reduce"(%7662) <{axis = 0 : i32}> ({
+    ^bb0(%arg6: i32, %arg7: i32):
+      %7789 = arith.addi %arg6, %arg7 : i32
+      tt.reduce.return %7789 : i32
+    }) : (tensor<2xi32>) -> i32
+    %7664 = arith.cmpf ogt, %7568, %cst_23 : f32
+    %7665 = arith.divf %cst_18, %7568 : f32
+    %7666 = arith.select %7664, %7665, %cst_21 : f32
+    %7667 = arith.muli %0, %c8_i32 : i32
+    %7668 = tt.addptr %arg4, %7667 : !tt.ptr<f32>, i32
+    %7669 = tt.addptr %7668, %7663 : !tt.ptr<f32>, i32
+    tt.store %7669, %7568 : !tt.ptr<f32>
+    %7670 = tt.load %19, %4, %cst_16 : tensor<2x!tt.ptr<f32>>
+    %7671 = tt.addptr %arg3, %5 : !tt.ptr<f32>, i32
+    %7672 = tt.splat %7671 : !tt.ptr<f32> -> tensor<16x!tt.ptr<f32>>
+    %7673 = tt.addptr %7672, %10 : tensor<16x!tt.ptr<f32>>, tensor<16xi32>
+    %7674 = tt.splat %7663 : i32 -> tensor<16xi32>
+    %7675 = tt.addptr %7673, %7674 : tensor<16x!tt.ptr<f32>>, tensor<16xi32>
+    %7676 = tt.splat %7666 : f32 -> tensor<16xf32>
+    %7677 = arith.mulf %7510, %7676 : tensor<16xf32>
+    tt.store %7675, %7677, %3 : tensor<16x!tt.ptr<f32>>
+    %7678 = tt.addptr %arg5, %5 : !tt.ptr<f32>, i32
+    %7679 = arith.muli %2, %cst_24 : tensor<2xi32>
+    %7680 = tt.splat %7678 : !tt.ptr<f32> -> tensor<2x!tt.ptr<f32>>
+    %7681 = tt.addptr %7680, %7679 : tensor<2x!tt.ptr<f32>>, tensor<2xi32>
+    %7682 = tt.splat %7663 : i32 -> tensor<2xi32>
+    %7683 = tt.addptr %7681, %7682 : tensor<2x!tt.ptr<f32>>, tensor<2xi32>
+    tt.store %7683, %7670, %4 : tensor<2x!tt.ptr<f32>>
+    %7684 = tt.load %24, %3, %cst_20 : tensor<16x!tt.ptr<f32>>
+    %7685 = arith.select %25, %7660, %cst_19 : tensor<2xi1>, tensor<2xi32>
+    %7686 = tt.reshape %7685 allow_reorder : tensor<2xi32> -> tensor<2xi32>
+    %7687 = "tt.reduce"(%7686) <{axis = 0 : i32}> ({
+    ^bb0(%arg6: i32, %arg7: i32):
+      %7789 = arith.addi %arg6, %arg7 : i32
+      tt.reduce.return %7789 : i32
+    }) : (tensor<2xi32>) -> i32
+    %7688 = arith.cmpf ogt, %7579, %cst_23 : f32
+    %7689 = arith.divf %cst_18, %7579 : f32
+    %7690 = arith.select %7688, %7689, %cst_21 : f32
+    %7691 = tt.addptr %7668, %7687 : !tt.ptr<f32>, i32
+    tt.store %7691, %7579 : !tt.ptr<f32>
+    %7692 = tt.load %29, %4, %cst_16 : tensor<2x!tt.ptr<f32>>
+    %7693 = tt.splat %7687 : i32 -> tensor<16xi32>
+    %7694 = tt.addptr %7673, %7693 : tensor<16x!tt.ptr<f32>>, tensor<16xi32>
+    %7695 = tt.splat %7690 : f32 -> tensor<16xf32>
+    %7696 = arith.mulf %7684, %7695 : tensor<16xf32>
+    tt.store %7694, %7696, %3 : tensor<16x!tt.ptr<f32>>
+    %7697 = tt.splat %7687 : i32 -> tensor<2xi32>
+    %7698 = tt.addptr %7681, %7697 : tensor<2x!tt.ptr<f32>>, tensor<2xi32>
+    tt.store %7698, %7692, %4 : tensor<2x!tt.ptr<f32>>
+    %7699 = tt.load %34, %3, %cst_20 : tensor<16x!tt.ptr<f32>>
+    %7700 = arith.select %35, %7660, %cst_19 : tensor<2xi1>, tensor<2xi32>
+    %7701 = tt.reshape %7700 allow_reorder : tensor<2xi32> -> tensor<2xi32>
+    %7702 = "tt.reduce"(%7701) <{axis = 0 : i32}> ({
+    ^bb0(%arg6: i32, %arg7: i32):
+      %7789 = arith.addi %arg6, %arg7 : i32
+      tt.reduce.return %7789 : i32
+    }) : (tensor<2xi32>) -> i32
+    %7703 = arith.cmpf ogt, %7591, %cst_23 : f32
+    %7704 = arith.divf %cst_18, %7591 : f32
+    %7705 = arith.select %7703, %7704, %cst_21 : f32
+    %7706 = tt.addptr %7668, %7702 : !tt.ptr<f32>, i32
+    tt.store %7706, %7591 : !tt.ptr<f32>
+    %7707 = tt.load %39, %4, %cst_16 : tensor<2x!tt.ptr<f32>>
+    %7708 = tt.splat %7702 : i32 -> tensor<16xi32>
+    %7709 = tt.addptr %7673, %7708 : tensor<16x!tt.ptr<f32>>, tensor<16xi32>
+    %7710 = tt.splat %7705 : f32 -> tensor<16xf32>
+    %7711 = arith.mulf %7699, %7710 : tensor<16xf32>
+    tt.store %7709, %7711, %3 : tensor<16x!tt.ptr<f32>>
+    %7712 = tt.splat %7702 : i32 -> tensor<2xi32>
+    %7713 = tt.addptr %7681, %7712 : tensor<2x!tt.ptr<f32>>, tensor<2xi32>
+    tt.store %7713, %7707, %4 : tensor<2x!tt.ptr<f32>>
+    %7714 = tt.load %44, %3, %cst_20 : tensor<16x!tt.ptr<f32>>
+    %7715 = arith.select %45, %7660, %cst_19 : tensor<2xi1>, tensor<2xi32>
+    %7716 = tt.reshape %7715 allow_reorder : tensor<2xi32> -> tensor<2xi32>
+    %7717 = "tt.reduce"(%7716) <{axis = 0 : i32}> ({
+    ^bb0(%arg6: i32, %arg7: i32):
+      %7789 = arith.addi %arg6, %arg7 : i32
+      tt.reduce.return %7789 : i32
+    }) : (tensor<2xi32>) -> i32
+    %7718 = arith.cmpf ogt, %7603, %cst_23 : f32
+    %7719 = arith.divf %cst_18, %7603 : f32
+    %7720 = arith.select %7718, %7719, %cst_21 : f32
+    %7721 = tt.addptr %7668, %7717 : !tt.ptr<f32>, i32
+    tt.store %7721, %7603 : !tt.ptr<f32>
+    %7722 = tt.load %49, %4, %cst_16 : tensor<2x!tt.ptr<f32>>
+    %7723 = tt.splat %7717 : i32 -> tensor<16xi32>
+    %7724 = tt.addptr %7673, %7723 : tensor<16x!tt.ptr<f32>>, tensor<16xi32>
+    %7725 = tt.splat %7720 : f32 -> tensor<16xf32>
+    %7726 = arith.mulf %7714, %7725 : tensor<16xf32>
+    tt.store %7724, %7726, %3 : tensor<16x!tt.ptr<f32>>
+    %7727 = tt.splat %7717 : i32 -> tensor<2xi32>
+    %7728 = tt.addptr %7681, %7727 : tensor<2x!tt.ptr<f32>>, tensor<2xi32>
+    tt.store %7728, %7722, %4 : tensor<2x!tt.ptr<f32>>
+    %7729 = tt.load %54, %3, %cst_20 : tensor<16x!tt.ptr<f32>>
+    %7730 = arith.select %55, %7660, %cst_19 : tensor<2xi1>, tensor<2xi32>
+    %7731 = tt.reshape %7730 allow_reorder : tensor<2xi32> -> tensor<2xi32>
+    %7732 = "tt.reduce"(%7731) <{axis = 0 : i32}> ({
+    ^bb0(%arg6: i32, %arg7: i32):
+      %7789 = arith.addi %arg6, %arg7 : i32
+      tt.reduce.return %7789 : i32
+    }) : (tensor<2xi32>) -> i32
+    %7733 = arith.cmpf ogt, %7615, %cst_23 : f32
+    %7734 = arith.divf %cst_18, %7615 : f32
+    %7735 = arith.select %7733, %7734, %cst_21 : f32
+    %7736 = tt.addptr %7668, %7732 : !tt.ptr<f32>, i32
+    tt.store %7736, %7615 : !tt.ptr<f32>
+    %7737 = tt.load %59, %4, %cst_16 : tensor<2x!tt.ptr<f32>>
+    %7738 = tt.splat %7732 : i32 -> tensor<16xi32>
+    %7739 = tt.addptr %7673, %7738 : tensor<16x!tt.ptr<f32>>, tensor<16xi32>
+    %7740 = tt.splat %7735 : f32 -> tensor<16xf32>
+    %7741 = arith.mulf %7729, %7740 : tensor<16xf32>
+    tt.store %7739, %7741, %3 : tensor<16x!tt.ptr<f32>>
+    %7742 = tt.splat %7732 : i32 -> tensor<2xi32>
+    %7743 = tt.addptr %7681, %7742 : tensor<2x!tt.ptr<f32>>, tensor<2xi32>
+    tt.store %7743, %7737, %4 : tensor<2x!tt.ptr<f32>>
+    %7744 = tt.load %64, %3, %cst_20 : tensor<16x!tt.ptr<f32>>
+    %7745 = arith.select %65, %7660, %cst_19 : tensor<2xi1>, tensor<2xi32>
+    %7746 = tt.reshape %7745 allow_reorder : tensor<2xi32> -> tensor<2xi32>
+    %7747 = "tt.reduce"(%7746) <{axis = 0 : i32}> ({
+    ^bb0(%arg6: i32, %arg7: i32):
+      %7789 = arith.addi %arg6, %arg7 : i32
+      tt.reduce.return %7789 : i32
+    }) : (tensor<2xi32>) -> i32
+    %7748 = arith.cmpf ogt, %7627, %cst_23 : f32
+    %7749 = arith.divf %cst_18, %7627 : f32
+    %7750 = arith.select %7748, %7749, %cst_21 : f32
+    %7751 = tt.addptr %7668, %7747 : !tt.ptr<f32>, i32
+    tt.store %7751, %7627 : !tt.ptr<f32>
+    %7752 = tt.load %69, %4, %cst_16 : tensor<2x!tt.ptr<f32>>
+    %7753 = tt.splat %7747 : i32 -> tensor<16xi32>
+    %7754 = tt.addptr %7673, %7753 : tensor<16x!tt.ptr<f32>>, tensor<16xi32>
+    %7755 = tt.splat %7750 : f32 -> tensor<16xf32>
+    %7756 = arith.mulf %7744, %7755 : tensor<16xf32>
+    tt.store %7754, %7756, %3 : tensor<16x!tt.ptr<f32>>
+    %7757 = tt.splat %7747 : i32 -> tensor<2xi32>
+    %7758 = tt.addptr %7681, %7757 : tensor<2x!tt.ptr<f32>>, tensor<2xi32>
+    tt.store %7758, %7752, %4 : tensor<2x!tt.ptr<f32>>
+    %7759 = tt.load %74, %3, %cst_20 : tensor<16x!tt.ptr<f32>>
+    %7760 = arith.select %75, %7660, %cst_19 : tensor<2xi1>, tensor<2xi32>
+    %7761 = tt.reshape %7760 allow_reorder : tensor<2xi32> -> tensor<2xi32>
+    %7762 = "tt.reduce"(%7761) <{axis = 0 : i32}> ({
+    ^bb0(%arg6: i32, %arg7: i32):
+      %7789 = arith.addi %arg6, %arg7 : i32
+      tt.reduce.return %7789 : i32
+    }) : (tensor<2xi32>) -> i32
+    %7763 = arith.cmpf ogt, %7639, %cst_23 : f32
+    %7764 = arith.divf %cst_18, %7639 : f32
+    %7765 = arith.select %7763, %7764, %cst_21 : f32
+    %7766 = tt.addptr %7668, %7762 : !tt.ptr<f32>, i32
+    tt.store %7766, %7639 : !tt.ptr<f32>
+    %7767 = tt.load %79, %4, %cst_16 : tensor<2x!tt.ptr<f32>>
+    %7768 = tt.splat %7762 : i32 -> tensor<16xi32>
+    %7769 = tt.addptr %7673, %7768 : tensor<16x!tt.ptr<f32>>, tensor<16xi32>
+    %7770 = tt.splat %7765 : f32 -> tensor<16xf32>
+    %7771 = arith.mulf %7759, %7770 : tensor<16xf32>
+    tt.store %7769, %7771, %3 : tensor<16x!tt.ptr<f32>>
+    %7772 = tt.splat %7762 : i32 -> tensor<2xi32>
+    %7773 = tt.addptr %7681, %7772 : tensor<2x!tt.ptr<f32>>, tensor<2xi32>
+    tt.store %7773, %7767, %4 : tensor<2x!tt.ptr<f32>>
+    %7774 = tt.load %84, %3, %cst_20 : tensor<16x!tt.ptr<f32>>
+    %7775 = arith.select %85, %7660, %cst_19 : tensor<2xi1>, tensor<2xi32>
+    %7776 = tt.reshape %7775 allow_reorder : tensor<2xi32> -> tensor<2xi32>
+    %7777 = "tt.reduce"(%7776) <{axis = 0 : i32}> ({
+    ^bb0(%arg6: i32, %arg7: i32):
+      %7789 = arith.addi %arg6, %arg7 : i32
+      tt.reduce.return %7789 : i32
+    }) : (tensor<2xi32>) -> i32
+    %7778 = arith.cmpf ogt, %7651, %cst_23 : f32
+    %7779 = arith.divf %cst_18, %7651 : f32
+    %7780 = arith.select %7778, %7779, %cst_21 : f32
+    %7781 = tt.addptr %7668, %7777 : !tt.ptr<f32>, i32
+    tt.store %7781, %7651 : !tt.ptr<f32>
+    %7782 = tt.load %89, %4, %cst_16 : tensor<2x!tt.ptr<f32>>
+    %7783 = tt.splat %7777 : i32 -> tensor<16xi32>
+    %7784 = tt.addptr %7673, %7783 : tensor<16x!tt.ptr<f32>>, tensor<16xi32>
+    %7785 = tt.splat %7780 : f32 -> tensor<16xf32>
+    %7786 = arith.mulf %7774, %7785 : tensor<16xf32>
+    tt.store %7784, %7786, %3 : tensor<16x!tt.ptr<f32>>
+    %7787 = tt.splat %7777 : i32 -> tensor<2xi32>
+    %7788 = tt.addptr %7681, %7787 : tensor<2x!tt.ptr<f32>>, tensor<2xi32>
+    tt.store %7788, %7782, %4 : tensor<2x!tt.ptr<f32>>
+    tt.return
+  }
+}
+
+{-#
+  external_resources: {
+    mlir_reproducer: {
+      pipeline: "builtin.module(convert-triton-to-tritongpu{enable-source-remat=false num-ctas=2 num-warps=16 target=cuda:90 threads-per-warp=32}, tritongpu-coalesce, tritongpu-F32DotTC{emu-tf32=true}, triton-nvidia-gpu-plan-cta, tritongpu-remove-layout-conversions{disable-remat-splitting=false}, tritongpu-optimize-thread-locality, tritongpu-accelerate-matmul, triton-nvidia-check-matmul-two-cta, tritongpu-remove-layout-conversions{disable-remat-splitting=false}, tritongpu-optimize-dot-operands{hoist-layout-conversion=true}, triton-nvidia-optimize-descriptor-encoding, triton-loop-aware-cse, tritongpu-fuse-nested-loops, canonicalize{cse-between-iterations=false    max-iterations=10 max-num-rewrites=-1 region-simplify=normal test-convergence=false top-down=true}, triton-licm, canonicalize{cse-between-iterations=false    max-iterations=10 max-num-rewrites=-1 region-simplify=normal test-convergence=false top-down=true}, tritongpu-combine-tensor-select-and-if, nvgpu-warp-specialization{dump-intermediate-steps=false num-stages=3}, tritongpu-assign-latencies{num-stages=3}, tritongpu-schedule-loops, tritongpu-pipeline{dump-intermediate-steps=false num-stages=3}, canonicalize{cse-between-iterations=false    max-iterations=10 max-num-rewrites=-1 region-simplify=normal test-convergence=false top-down=true}, triton-loop-aware-cse, tritongpu-optimize-dot-operands{hoist-layout-conversion=true}, tritongpu-coalesce-async-copy, triton-nvidia-optimize-tmem-layouts, triton-nvidia-tmem-load-reduce, triton-nvidia-tma-lowering, tritongpu-remove-layout-conversions{disable-remat-splitting=false}, triton-nvidia-interleave-tmem, tritongpu-reduce-data-duplication, tritongpu-reorder-instructions, triton-loop-aware-cse, symbol-dce, triton-nvidia-gpu-fence-insertion{compute-capability=90}, triton-nvidia-mma-lowering, triton-nvidia-gpu-hoist-mbarrier-lifecycle{compute-capability=90}, sccp, cse, canonicalize{cse-between-iterations=false    max-iterations=10 max-num-rewrites=-1 region-simplify=normal test-convergence=false top-down=true})",
+      disable_threading: true,
+      verify_each: true
+    }
+  }
+#-}
+<unknown>:0: error: Failures have been detected while processing an MLIR pass pipeline
+<unknown>:0: note: Pipeline failed while executing [`TritonGPUPlanCTAPass` on 'builtin.module' operation]: reproducer generated at `std::errs, please share the reproducer above with Triton project.`
