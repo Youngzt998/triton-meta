@@ -148,6 +148,16 @@ def _plan_cutlass3x(prof, family, M, N, K, kind, config):
     decline, not an unmeasured one.  It is read from the config directly rather than through
     `_nsplit_of`, which normalises anything below 1 up to 1 and so would turn stream-K into a
     silent claim of a single unsplit accumulator.
+
+    The bytes agree with that reading rather than only the source.  A brute-force sweep of every
+    uniform k partition -- each chunk length at the 128-element k-tile grain, plus the unsplit
+    form -- finds nothing on 16 of 18 shapes whose output is long enough for the byte test to
+    resolve a re-associated fp32 chain, while the same sweep reports the unsplit form on 12 of 12
+    `SPLITK_NUM` 1 shapes of the same size.  What a twin would need instead is a per-output-tile
+    chunk LIST, plus six host inputs cuBLAS does not put in the config (`sm_count`,
+    `max_active_clusters`, `splits`, `max_swizzle_size`, `raster_order`, `decomposition_mode`).
+    The combine order is not the obstacle: it is deterministic, ascending k, left-associated and
+    fp32 (`sm90_tile_scheduler_stream_k.hpp:508-551`, `ReductionMode::Deterministic` by default).
     """
     algo, stages = config[_CFG_ID], config[_CFG_STAGES]
     if kind != "fp8":

@@ -101,14 +101,27 @@ Three run on the tensor core and are reconstructed with `tl.dot`:
   8-element aligned. They differ only in the alignment they require (16 / 4 / 2 bytes). The
   accumulator is updated once per MMA rather than once per `block_k` step.
 * **`ALGO_ID` 74** — `cutlass3x_sm100_tensorop_*`, CUTLASS 3.x, and a family of its own rather
-  than a fifth member of the one above: its accumulator is never closed. fp8 only. It is what
-  cuBLAS picks for most fp8 shapes whose N is even but not a multiple of 16 — a slice every
-  earlier fp8 sweep here rounded away, which is why the family went unnoticed rather than being
-  new. Its one subtlety is where the MMA groups start: `align4` is below TMA's 16-byte minimum,
-  so CUTLASS builds this kernel on the cp.async collective, whose mainloop shifts the k axis to
-  put the residue at the origin — groups run `[0, K % 32)` then 32 apart. `SPLITK_NUM` is 1 or
-  -2; -2 is not a split count but cuBLAS's mark for the stream-K tile scheduler, and it declines
-  (see below).
+  than a fifth member of the one above: its accumulator is never closed. fp8 only. Its one
+  subtlety is where the MMA groups start: `align4` is below TMA's 16-byte minimum, so CUTLASS
+  builds this kernel on the cp.async collective, whose mainloop shifts the k axis to put the
+  residue at the origin — groups run `[0, K % 32)` then 32 apart. `SPLITK_NUM` is 1 or -2; -2 is
+  not a split count but cuBLAS's mark for the stream-K tile scheduler, and it declines (see
+  below).
+
+  cuBLAS reaches this family down two routes, and both were a slice earlier fp8 sweeps here
+  rounded away, which is why it went unnoticed rather than being new. Whichever operand ends up
+  4-byte aligned rather than 16-byte aligned is what puts a shape on `align4`:
+
+  | | what cuBLAS returns |
+  |---|---|
+  | N even, not a multiple of 16, M free | ALGO 74 on most of them, nvjet on the rest |
+  | N == 1, M even and not a multiple of 8 | ALGO 74, always |
+  | N == 1, M a multiple of 8 | nvjet |
+  | N == 1, M odd | no algorithm at all |
+
+  The second row is a corner the first sweep could not reach, so it was measured separately and
+  the recipe carried over unchanged. The M rule was read over 1,215 heuristic queries with no
+  exception.
 
 The other four run on the CUDA cores (SIMT), one fp32 accumulator per output element and no
 tensor core at all. `tl.dot` cannot reproduce them — it loses by 1 ulp even at K = 2, and no
@@ -154,7 +167,14 @@ Known unsupported (raise `CublasUnsupportedShape`), all inside `ALGO_ID` 13:
 * `CUSTOM_OPTION` 5 outside `SPLITK_NUM` 1 with M == 1, the only place it was ever seen.
 * `CUSTOM_OPTION` 10 on a gemv longer than `gemv_max_elems` output elements, where cuBLAS keeps
   the config but changes the order — it picks the lane width from occupancy, which the config
-  does not carry, so two shapes with identical nine-field configs run different orders.
+  does not carry, so two shapes with identical nine-field configs run different orders. This one
+  is a decline by choice rather than by ignorance: the population above the cap is one island
+  (130 of 2,464 `(13, 10)` hits in a dense scan, all `M == 1`, output length 10,500..14,550, K in
+  the 150..210 band), and the lane counts there are 26, 24 and 20. None is a power of two, and
+  `_triton_gemv13` shapes its lane axis with `tl.arange(0, W)` and combines with a count-down
+  butterfly, both of which need one. Closing it would take a new lane-tree kernel plus a table
+  for the lane count as a function of output length and K — a launch cost model, not a config
+  field. Two new pieces of machinery for an island this size is the wrong trade.
 * either gemv family with M > 1 **and** N > 1 (never observed; it would not be a gemv).
 
 Inside `ALGO_ID` 74 (sm_103 only, the only profile it is measured on), one more:
@@ -163,8 +183,29 @@ Inside `ALGO_ID` 74 (sm_103 only, the only profile it is measured on), one more:
   Stream-K walks one flat concatenation of every stream-K tile's k range and cuts it into equal
   units, so the cut lands at a different k in each output tile, some tiles are not split at all,
   and per-unit snapping shifts the boundaries again. Every plan mode here applies one chunk to
-  every output element, so this is a structural decline rather than an unmeasured one, and it is
-  measured to be needed: 16 of 1,218 stream-K shapes match the unsplit reconstruction.
+  every output element, so this is a structural decline rather than an unmeasured one.
+
+  It is measured to be needed, not assumed. Against the unsplit reconstruction, 16 of 1,218
+  stream-K shapes match. Against **every** uniform partition — each of the `Kt - 1` chunk lengths
+  at the 128-element k-tile grain, plus the unsplit form — 16 of 18 shapes with a long enough
+  output have no match at all, and the two that do have one and three survivors their own
+  neighbours contradict. The same sweep finds the answer when one exists: on 12 `SPLITK_NUM` 1
+  shapes of the same size it reports the unsplit form every time, so a zero is a result and not a
+  broken search. **The sweep only means anything on a long output.** At `M == 2, N == 1` all 374
+  chunk lengths tried reproduced cuBLAS's two fp16 numbers — re-associating an fp32 chain of
+  similar-sized partials does not move a value that is then rounded to fp16 — so on a short
+  vector this byte test cannot see the partition at all, and a wrong one would look right.
+
+  What it would take, read off `sm90_tile_scheduler_stream_k.hpp` and `tile_scheduler_params.h`
+  (the SM100 scheduler defers all the split and reduction maths to the SM90 one): the combine
+  order is the easy half — deterministic, ascending k, left-associated, fp32, no atomically
+  reordered sums. The partition is the hard half. It is a **per-output-tile list of chunks**,
+  which no plan field can carry, and computing it needs six host inputs cuBLAS chooses and does
+  not expose in the config (`sm_count`, `max_active_clusters`, `splits`, `max_swizzle_size`,
+  `raster_order`, `decomposition_mode`). A twin would also have to reproduce the split between
+  the last peer's chunk, which stays in the MMA accumulator, and the others, which come back
+  through a global fp32 workspace. That is a new plan mode and a new kernel, so it is a task of
+  its own rather than a table row.
 
 fp8 reaches none of the four CUDA-core families and declines there. fp8 also needs `BM >= 64`,
 or Triton stops using the native fp8 tensor-core path and rounds differently from cuBLAS.

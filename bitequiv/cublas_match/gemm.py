@@ -34,9 +34,15 @@ from .plan import static_plan
 # --------------------------------------------------------------------------- #
 # Reconstruction planning (verify-then-use) + per-shape cache
 # --------------------------------------------------------------------------- #
-# (capability,cublaslt,M,N,K,kind,out_dtype) -> (origin, plan). The capability and the cuBLASLt
-# version keep a process that switched either one from reusing the old recipe. origin is
-# "static" or "unsupported".
+# (capability,cublaslt,M,N,K,kind,out_dtype) -> (origin, payload). The capability and the
+# cuBLASLt version keep a process that switched either one from reusing the old recipe. origin is
+# "static" or "unsupported"; the payload is the plan for "static" and the decline reason for
+# "unsupported".
+#
+# A declining shape carries its reason here so that the first time it is seen and every time
+# after read the same. A cache that dropped it answered every repeat with a bare "unsupported",
+# which groups as its own reason in any tally of a sweep: in one 92,699-shape run, 24 rows read
+# that way and were really 14 shapes already counted under the family they belong to.
 _PLAN: dict[tuple, tuple] = {}
 
 # The only operand dtypes this package has been measured on. `ltapi._kind_of` maps everything
@@ -151,15 +157,15 @@ def _resolve(a, b, kind, out_dtype):
     N = b.shape[1]
     key = _plan_key(M, N, K, kind, out_dtype)
     if key in _PLAN:
-        origin, plan = _PLAN[key]
+        origin, payload = _PLAN[key]
         if origin == "unsupported":
-            raise CublasUnsupportedShape(f"{M}x{N}x{K} {kind}: unsupported (cached)")
-        return plan
+            raise CublasUnsupportedShape(f"{M}x{N}x{K} {kind}: {payload}")
+        return payload
 
     config = _cublas_direct(a, b, kind, out_dtype, execute=False)[1]  # heuristic only, no GEMM run
     plan, reason = static_plan(platform(), M, N, K, kind, config)
     if plan is None:
-        _PLAN[key] = ("unsupported", None)
+        _PLAN[key] = ("unsupported", reason)
         raise CublasUnsupportedShape(f"{M}x{N}x{K} {kind}: {reason}")
     _PLAN[key] = ("static", plan)
     return plan

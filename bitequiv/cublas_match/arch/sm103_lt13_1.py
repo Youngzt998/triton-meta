@@ -54,8 +54,35 @@ PROFILE = ArchProfile(
     #
     #      What the bytes do NOT settle: a `K % 128` residue is byte-identical to the `K % 32` one
     #      on all 160 records tried, including the 82 whose grouping really differs, so only the
-    #      source separates them. And the SPLITK_NUM -2 decline is measured to be needed, not
-    #      assumed -- 16 of 1,218 shapes match there.
+    #      source separates them.
+    #
+    #      Read a second time on the OTHER corner this family covers, which is a different corner
+    #      and not more of the same one: N == 1 with M even and not a multiple of 8. The first
+    #      sweep was "N even, M free", so it could not reach this at all. What decides the corner
+    #      is the output alignment -- with N == 1 the output is an M-long column, so M even gives
+    #      4 bytes and lands on `align4`; M a multiple of 8 gets nvjet instead and M odd gets no
+    #      algorithm at all, with no exception over 1,215 heuristic queries. The recipe carries
+    #      over unchanged: 936 shapes and 5,650 byte comparisons, 0 differed, over the 433 shapes
+    #      a 92,699-shape random sweep had declined plus an 816-shape grid crossing M % 8 in
+    #      {2, 4, 6} at seven magnitudes against K % 32 in {0, 16} at fourteen.
+    #
+    #      The byte test does resolve the one free knob here, which is where the groups start:
+    #      the same recipe with the leading group moved by 16 was caught 45 of 45 times, at every
+    #      M from 2 to 49,004, and the flat-from-zero form was caught on all 30 shapes where it is
+    #      wrong while correctly surviving all 15 where it is not. A `k_per_dot` of 64 survives
+    #      45 of 45 and that is not a blind spot -- with the leading group at `K % 64` the MMA
+    #      boundaries fall on the same multiples of 32, so it is the same arithmetic.
+    #
+    #      SPLITK_NUM -2 stays declined; on this corner it is 313 of the 1,215. The decline is
+    #      measured to be needed twice over. Against the unsplit form, 16 of 1,218 shapes matched.
+    #      Against EVERY uniform k partition -- all Kt-1 chunk lengths at the 128-element k-tile
+    #      grain, plus the unsplit form -- 16 of 18 shapes with a long enough output have no
+    #      match at all, and the two that do have one and three survivors that their own
+    #      neighbours contradict. That sweep can find an answer when one exists: on 12 SPLITK_NUM
+    #      1 shapes of the same size it reports the unsplit form every time. It has to be run on a
+    #      long output, because on a short one the byte test is blind to this knob -- at M == 2 all
+    #      374 chunk lengths tried reproduced cuBLAS's two fp16 numbers, since re-associating an
+    #      fp32 chain of similar-sized partials does not move a value that is then rounded to fp16.
     algo_family=((11, "gemmsn"), (12, "cutlass"), (13, "gemv"), (14, "gemv"), (16, "gemmsn"), (21, "cutlass"),
                  (23, "cutlass"), (24, "cutlass"), (66, "nvjet"), (74, "cutlass3x")),
     # The CUTLASS side of this table is now the COMPLETE set of stages ids the sm_100 algos
@@ -229,6 +256,18 @@ PROFILE = ArchProfile(
     # inside it behaves the same. It is written as the real boundary anyway, because that is
     # the fact, and because the formula ports to a GPU with a different SM count while a
     # constant does not.
+    #
+    # What is on the far side of the cap, and why it stays a decline rather than becoming a row
+    # here. The population is small and it is one island: over a dense scan of output length
+    # against K the top heuristic returned (13, 10) above the cap 130 times out of 2,464, every
+    # one of them M == 1 with SPLITK_NUM 1, at an output length of 10,500..14,550 and K in the
+    # 150..210 band. The blockDim captured off those launches is (16, 24) and (24, 20), and 26
+    # just above the cap. None of 26, 24, 20 is a power of two, and `_triton_gemv13` cannot hold
+    # a lane count that is not: it shapes the lane axis with `tl.arange(0, W)` and combines with
+    # a count-down butterfly, and both need W a power of two. So closing this needs a new lane
+    # tree in `kernels.py` AND a table for by(output length, K), which is a launch cost model and
+    # not a config field. Two new pieces of machinery for an island this size is the wrong trade,
+    # so the cap stands and the shapes past it keep declining.
     gemv_max_elems=(((13, 10), "occupancy"), ),
     sm_count=152,
     threads_per_sm=2048,
