@@ -1,182 +1,344 @@
 inner_tree.layout -- reproducing PR #2312 (commit 8176cccdc) on this machine
-============================================================================================================
+======================================================================================================================
 
-  when                  2026-08-19 20:29:28
+  when                  2026-08-19 21:55:11
   device                NVIDIA GB300  (sm_103)
-  triton                3.8.0+fb   torch 2.12.0+cu130   commit b8832d35eab1
+  triton                3.8.0+fb   torch 2.12.0+cu130   commit 48069bd6ffd0
   pass under test       tritongpu-optimize-reduction-layout{ideal,8,256}
   pass_available        1
   mul-fed guard         skips every mul-fed reduce   (guard_fp_fusion_gated=0)
-  dtypes measured       f16, fp8   (col_bf16: bf16, its spec pins in_dtype)
-  TRITON_ALWAYS_COMPILE set
-  gpu                   CUDA_VISIBLE_DEVICES=0  peak util before start 1%  other processes on it: none
+  seeds per row         10   bench reps 3 (min of that many do_bench medians)
+  TRITON_ALWAYS_COMPILE 1
+  gpu                   CUDA_VISIBLE_DEVICES=3  peak util before start 0%  other processes on it: none
+  provenance            assembled over two invocations of the same command. The first, at 21:23,
+                        measured 420 rows and stopped when a third user's profiling job appeared on
+                        the pinned GPU; the second, at 21:55, took the remaining 1308 on a quiet
+                        card. No row below was timed next to another process.
 
   arms   base = inner_tree, standard pipeline
          opt  = base + tritongpu-optimize-reduction-layout{ideal,8,256} appended at end-of-TTGIR
-         ceil = the same kernel under reduction_ordering=unordered, standard pipeline
+         ceil = the SAME configuration with reduction_ordering=unordered, standard pipeline
          speedup = base/opt        gap_closed = (base-opt)/(base-ceil)
 
-  NOTE: this tree's pass skips EVERY mul-fed reduction (`sum(a*b)`), with no
-        enable_fp_fusion condition, and no `ttg.enable_fp_fusion` module attribute exists
-        anywhere in it. The follow-up PR #2312's description mentions is not in this branch,
-        so `col_dot` coming back at ~1.00x here is a difference in the code, not in the
-        hardware. Read that row against the earlier 1.19x with this in mind.
+  The ceiling flips one flag and holds everything else fixed, because the experiment has exactly
+  two variables: is inner_tree on, and is the pass on. A best-over-configurations ceiling would
+  answer a different question -- what an unconstrained autotuner finds -- and that one belongs to
+  the gemm.perf steps.
+
+  sizes  synthetic kernels    64 programs for the bit check, 2048 for the timing (their own sizes)
+         inductor and zoo     the grid the generated shape implies, the same for both arms
+
+  NOTE: this tree's pass skips EVERY mul-fed reduction (`sum(a*b)`), with no enable_fp_fusion
+        condition, and no `ttg.enable_fp_fusion` module attribute exists anywhere in it. The
+        follow-up PR #2312's description mentions is not in this branch, and the prior's col_dot
+        row is labelled `fusion off`, which only means something with that follow-up present. So
+        col_dot coming back at ~1.00x here is a difference in the code, not in the hardware.
 
 SELF-CHECKS
-  pass binding                FOUND  (tritongpu-optimize-reduction-layout{ideal,8,256})
-  injection changes the IR    YES  (sum_2d_col f16 num_warps=4)
-  no-pass control identical   YES
+  pass binding                  FOUND  (tritongpu-optimize-reduction-layout{ideal,8,256})
+  TRITON_ALWAYS_COMPILE         1
+  injection changes the IR      YES   (sum_2d_col f16 num_warps=4)
+  strategy=off equals baseline  YES   (so the check above is the pass, not the extra pass manager)
+  baseline reproduces itself    YES   (sum_2d_col f16 num_warps=4)
+  every kernel reproduces itself  YES   (24/24 (kernel, dtype) pairs)
 
-CONFIGURATION SPACE (inner_tree only)
-  sum_3d_outer           f16     72 configs
-  sum_3d_outer           fp8     72 configs
-  sum_2d_col             f16     72 configs
-  sum_2d_col             fp8     72 configs
-  sum_2d_col_big         f16     72 configs
-  sum_2d_col_big         fp8     72 configs
-  sum_2d_axis0           f16     72 configs
-  sum_2d_axis0           fp8     72 configs
-  col_exp_sum            f16     72 configs
-  col_exp_sum            fp8     72 configs
-  col_bf16               bf16    72 configs
-  col_sum_loop           f16     72 configs
-  col_sum_loop           fp8     72 configs
-  col_dot                f16     72 configs
-  col_dot                fp8     72 configs
-  TOTAL                        1080 configs
+THE KERNELS
+======================================================================================================================
 
+kernel                   suite      dtypes      cfg  what it is
+---------------------------------------------------------------
+sum_3d_outer             synthetic  f16          72  [B=64,M=8,N=16] sum over the OUTER axis: the most strided reduce axis in the table
+sum_3d_outer             synthetic  fp8          72  [B=64,M=8,N=16] sum over the OUTER axis: the most strided reduce axis in the table
+sum_2d_col               synthetic  f16          72  [M=256,C=32] column sum over axis 0: reduce the non-contiguous axis
+sum_2d_col               synthetic  fp8          72  [M=256,C=32] column sum over axis 0: reduce the non-contiguous axis
+sum_2d_col_big           synthetic  f16          72  [M=1024,C=32] the same at four times the reduce extent, a 32K-element tile
+sum_2d_col_big           synthetic  fp8          72  [M=1024,C=32] the same at four times the reduce extent, a 32K-element tile
+sum_2d_axis0             synthetic  f16          72  [M=128,C=32] the same at a quarter of it
+sum_2d_axis0             synthetic  fp8          72  [M=128,C=32] the same at a quarter of it
+col_exp_sum              synthetic  f16          72  [M=256,C=32] sum(exp(x)) over axis 0: exp widens the leaves to f32 whatever the input was
+col_exp_sum              synthetic  fp8          72  [M=256,C=32] sum(exp(x)) over axis 0: exp widens the leaves to f32 whatever the input was
+col_bf16                 synthetic  bf16         72  [M=256,C=32] bf16 input, f32 accumulate: the one kernel whose dtype is pinned in its own body
+col_sum_loop             synthetic  f16          72  [M=512,C=32] column sum as a for-loop over 128-row chunks: loop structure around the reduce
+col_sum_loop             synthetic  fp8          72  [M=512,C=32] column sum as a for-loop over 128-row chunks: loop structure around the reduce
+col_dot                  synthetic  f16          72  [M=256,C=32] sum(a*b) over axis 0: a mul-fed reduce, which the pass declines on purpose
+col_dot                  synthetic  fp8          72  [M=256,C=32] sum(a*b) over axis 0: a mul-fed reduce, which the pass declines on purpose
+A_rms_norm_fwd           inductor   f32          72  RMS-norm forward: one sum of x*x over the contiguous 256-wide feature axis, then rsqrt and affine
+C_rms_norm_bwd_2reduce   inductor   f32          72  RMS-norm backward: two sums where the second one's input depends on the first one's result
+D_masked_global_sum      inductor   f32          72  MSE-loss tail: 608 live elements zero-padded into a 1024 tile, summed down to one scalar
+E_triu_masked_rowsum     inductor   f32          72  masked per-row sum at the odd extent 235, padded into 256
+G_plain_sum_looped       inductor   f32          72  looped sum: a running accumulate across 128-wide chunks, then one tree-reduce at the end
+H_mean_permute           inductor   f32          72  mean over a permuted, contiguous 256-wide axis
+I_bias_grad_dim0         inductor   f32          72  dbias = grad.sum(dim=0), [512,256] -> [256]: the reduce axis is strided by xnumel while the kept axis is contiguous, which is the shape the pass exists for
+J_epilogue_colsum_dim0   inductor   f32          72  matmul-epilogue column sum, [512,64] -> [64]: the same shape with a narrow kept axis, one tile
+layernorm_bwd_dwdb       zoo        f32          72  LayerNorm backward weight gradient: two column sums over the 64 partial rows, [64,2048] -> two [2048] vectors
+
+Kernel bodies are imported, not retyped, so they can be diffed against their source:
+    sum_3d_outer             bitequiv/evaluation/eval_kernels.py :: _k_sum3d_outer
+    sum_2d_col               bitequiv/evaluation/eval_kernels.py :: _k_sum2d_axis0
+    sum_2d_col_big           bitequiv/evaluation/eval_kernels.py :: _k_sum2d_axis0
+    sum_2d_axis0             bitequiv/evaluation/eval_kernels.py :: _k_sum2d_axis0
+    col_exp_sum              bitequiv/evaluation/eval_kernels.py :: _k_col_exp_sum
+    col_bf16                 bitequiv/evaluation/eval_kernels.py :: _k_col_bf16
+    col_sum_loop             bitequiv/evaluation/eval_kernels.py :: _k_col_sum_loop
+    col_dot                  bitequiv/evaluation/eval_kernels.py :: _k_col_dot
+    A_rms_norm_fwd           bitequiv/evaluation/realistic_inductor_kernels.py :: A_rms_norm_fwd
+    C_rms_norm_bwd_2reduce   bitequiv/evaluation/realistic_inductor_kernels.py :: C_rms_norm_bwd_2reduce
+    D_masked_global_sum      bitequiv/evaluation/realistic_inductor_kernels.py :: D_masked_global_sum
+    E_triu_masked_rowsum     bitequiv/evaluation/realistic_inductor_kernels.py :: E_triu_masked_rowsum
+    G_plain_sum_looped       bitequiv/evaluation/realistic_inductor_kernels.py :: G_plain_sum_looped
+    H_mean_permute           bitequiv/evaluation/realistic_inductor_kernels.py :: H_mean_permute
+    I_bias_grad_dim0         bitequiv/evaluation/realistic_inductor_kernels.py :: RED_colsum_dim0
+    J_epilogue_colsum_dim0   bitequiv/evaluation/realistic_inductor_kernels.py :: RED_colsum_dim0
+    layernorm_bwd_dwdb       bitequiv/evaluation/benchmark_kernels.py :: _norm_bwd_dwdb_kernel
+
+NOT MEASURED, and why:
+    B_layernorm_welford_gather realistic_inductor_kernels.py GROUP 1
+        no reduction_ordering parameter: a Welford combine is not an ordered add-reduction, so inner_tree does not apply and the pass has nothing to preserve
+    F_cumsum_scan              realistic_inductor_kernels.py GROUP 1
+        no reduction_ordering parameter: tl.associative_scan is a scan, not a tt.reduce, and the pass walks tt.reduce only
+    GROUP 2 and later          realistic_inductor_kernels.py
+        inspect-only reference corpus -- hard-coded shapes and torch._inductor runtime helpers, not runnable as they stand; that file's own docstring says so
+
+TOTAL 24 (kernel, dtype) pairs x 72 configurations = 1728 rows
 
 SIDE BY SIDE -- this machine against PR #2312 (commit 8176cccdc)
-====================================================================================================================
+======================================================================================================================
 
 Mine is the median over the 12 configurations at that num_warps (6 num_stages x 2 enable_fp_fusion).
 `sens` is how many of those 12 are order-sensitive: where it is 0/12 the reduction does not depend on
 the order here at all, so `bits` = 0 on those rows is vacuous, not a pass. `fired` is how many of the
-12 the pass actually rewrote the IR on; a kernel at 1.00x with fired = 0 was declined by a guard.
+12 the pass actually rewrote the IR on; a kernel at 1.00x with fired = 0 was declined by a guard, and
+that is a result, not a gap. `L` marks a row measured at the same dtype the prior used -- the only
+rows where a difference is hardware and Triton alone.
 
-kernel                 dtype  nw  cfg  bits   sens  fired   nan  speedup     max    gap |   prior    gap  prior arm
--------------------------------------------------------------------------------------------------------------------
-sum_3d_outer           f16     4   12     0  12/12  12/12  0.00    4.33x   4.33x   1.00 |   3.27x   1.01  H100 3.7.0 f32
-sum_3d_outer           f16     8   12     0  12/12  12/12  0.00    4.31x   4.32x   1.17 |   3.32x   1.05  H100 3.7.0 f32
-sum_3d_outer           fp8     4   12     0   0/12  12/12  0.00    2.27x   2.36x   0.94 |   3.27x   1.01  H100 3.7.0 f32
-sum_3d_outer           fp8     8   12     0   0/12  12/12  0.00    2.27x   2.27x   1.50 |   3.32x   1.05  H100 3.7.0 f32
-sum_2d_col             f16     4   12     0  12/12  12/12  0.00    2.17x   2.20x   1.01 |   1.44x   0.94  H100 3.7.0 f32
-sum_2d_col             f16     8   12     0  12/12  12/12  0.00    2.20x   2.22x   1.07 |   1.25x   0.98  H100 3.7.0 f32
-sum_2d_col             fp8     4   12     0   0/12  12/12  0.00    1.54x   1.55x   0.80 |   1.44x   0.94  H100 3.7.0 f32
-sum_2d_col             fp8     8   12     0   0/12  12/12  0.00    1.59x   1.61x   1.29 |   1.25x   0.98  H100 3.7.0 f32
-sum_2d_col_big         f16     4   12     0   0/12   0/12  0.00        -       -      - |   1.46x   0.99  H100 3.7.0 f32  12/12 FAIL TO COMPILE WITH THE PASS (ptxas)
-sum_2d_col_big         f16     8   12     0  12/12  12/12  0.00    2.37x   2.37x   0.91 |   1.32x   0.79  H100 3.7.0 f32
-sum_2d_col_big         fp8     4   12     0   0/12  12/12  0.00    2.29x   2.31x   0.83 |   1.46x   0.99  H100 3.7.0 f32
-sum_2d_col_big         fp8     8   12     0   0/12  12/12  0.00    2.12x   2.13x   0.81 |   1.32x   0.79  H100 3.7.0 f32
-sum_2d_axis0           f16     4   12     0  12/12  12/12  0.00    1.74x   1.74x   0.99 |   1.34x   0.96  H100 3.7.0 f32
-sum_2d_axis0           f16     8   12     0  12/12  12/12  0.00    1.65x   1.65x   1.32 |   1.21x   1.03  H100 3.7.0 f32
-sum_2d_axis0           fp8     4   12     0   0/12  12/12  0.00    1.31x   1.35x   1.14 |   1.34x   0.96  H100 3.7.0 f32
-sum_2d_axis0           fp8     8   12     0   0/12  12/12  0.00    1.17x   1.18x      - |   1.21x   1.03  H100 3.7.0 f32
-col_exp_sum            f16     4   12     0  12/12  12/12  0.00    1.90x   1.92x   1.00 |   1.43x   0.94  H100 3.7.0 f32
-col_exp_sum            f16     8   12     0  12/12  12/12  0.00    1.76x   1.78x   0.88 |   1.27x   0.95  H100 3.7.0 f32
-col_exp_sum            fp8     4   12     0  12/12  12/12  0.00    1.54x   1.55x   0.83 |   1.43x   0.94  H100 3.7.0 f32
-col_exp_sum            fp8     8   12     0  12/12  12/12  0.00    1.54x   1.54x   1.33 |   1.27x   0.95  H100 3.7.0 f32
-col_bf16               bf16    4   12     0  12/12  12/12  0.00    1.93x   1.95x   0.98 |   1.40x   0.96  H100 3.7.0 bf16 (nw not stated)
-col_bf16               bf16    8   12     0  12/12  12/12  0.00    1.75x   1.77x   0.87 |   1.40x   0.96  H100 3.7.0 bf16 (nw not stated)
-col_sum_loop           f16     4   12     0  12/12  12/12  0.00    2.52x   2.52x   0.94 |   1.26x   0.97  H100 3.7.0 f32
-col_sum_loop           f16     8   12     0  12/12  12/12  0.00    1.83x   1.83x   1.20 |   1.25x   1.11  H100 3.7.0 f32
-col_sum_loop           fp8     4   12     0   0/12  12/12  0.00    1.59x   1.59x   1.01 |   1.26x   0.97  H100 3.7.0 f32
-col_sum_loop           fp8     8   12     0   0/12  12/12  0.00    1.51x   1.52x      - |   1.25x   1.11  H100 3.7.0 f32
-col_dot                f16     4   12     0  12/12   0/12  0.20    1.00x   1.00x  -0.00 |   1.19x   0.89  H100 3.7.0 f32
-col_dot                f16     8   12     0  12/12   0/12  0.20    1.00x   1.01x  -0.01 |   1.09x   0.98  H100 3.7.0 f32
-col_dot                fp8     4   12     0  12/12   0/12  0.00    1.00x   1.00x  -0.00 |   1.19x   0.89  H100 3.7.0 f32
-col_dot                fp8     8   12     0  12/12   0/12  0.00    1.00x   1.00x  -0.00 |   1.09x   0.98  H100 3.7.0 f32
-I_bias_grad_dim0       -       4    -     -      -      -     -        -       -      - |   1.29x   1.00  H100 3.7.0 f32  NOT REACHABLE
-I_bias_grad_dim0       -       8    -     -      -      -     -        -       -      - |   1.49x   0.95  H100 3.7.0 f32  NOT REACHABLE
-J_epilogue_colsum_dim0 -       4    -     -      -      -     -        -       -      - |   3.03x   1.26  H100 3.7.0 f32  NOT REACHABLE
-J_epilogue_colsum_dim0 -       8    -     -      -      -     -        -       -      - |   2.58x   1.00  H100 3.7.0 f32  NOT REACHABLE
-layernorm_bwd_dwdb     -       4    -     -      -      -     -        -       -      - |   3.58x   1.07  H100 3.7.0 f32  NOT REACHABLE
-layernorm_bwd_dwdb     -       8    -     -      -      -     -        -       -      - |   3.89x   1.05  H100 3.7.0 f32  NOT REACHABLE
+kernel                   dtype  nw  cfg  bits   sens  fired   nan  speedup     max    gap |   prior    gap L  prior arm
+-----------------------------------------------------------------------------------------------------------------------
+sum_3d_outer             f16     4   12     0  12/12  12/12  0.00    4.36x   4.40x   1.00 |   3.27x   1.01    H100 3.7.0 f32
+sum_3d_outer             f16     8   12     0  12/12  12/12  0.00    4.31x   4.33x   1.18 |   3.32x   1.05    H100 3.7.0 f32
+sum_3d_outer             fp8     4   12     0   0/12  12/12  0.00    2.30x   2.30x   0.97 |   3.27x   1.01    H100 3.7.0 f32
+sum_3d_outer             fp8     8   12     0   0/12  12/12  0.00    2.25x   2.26x   1.48 |   3.32x   1.05    H100 3.7.0 f32
+sum_2d_col               f16     4   12     0  12/12  12/12  0.00    2.16x   2.18x   1.00 |   1.44x   0.94    H100 3.7.0 f32
+sum_2d_col               f16     8   12     0  12/12  12/12  0.00    2.19x   2.20x   1.05 |   1.25x   0.98    H100 3.7.0 f32
+sum_2d_col               fp8     4   12     0   0/12  12/12  0.00    1.55x   1.56x   0.80 |   1.44x   0.94    H100 3.7.0 f32
+sum_2d_col               fp8     8   12     0   0/12  12/12  0.00    1.63x   1.64x   1.25 |   1.25x   0.98    H100 3.7.0 f32
+sum_2d_col_big           f16     4   12     0  12/12   0/12  0.00        -       -      - |   1.46x   0.99    H100 3.7.0 f32  12/12 FAIL TO COMPILE WITH THE PASS
+sum_2d_col_big           f16     8   12     0  12/12  12/12  0.00    2.37x   2.38x   0.91 |   1.32x   0.79    H100 3.7.0 f32
+sum_2d_col_big           fp8     4   12     0   0/12  12/12  0.00    2.32x   2.33x   0.83 |   1.46x   0.99    H100 3.7.0 f32
+sum_2d_col_big           fp8     8   12     0   0/12  12/12  0.00    2.12x   2.14x   0.81 |   1.32x   0.79    H100 3.7.0 f32
+sum_2d_axis0             f16     4   12     0  12/12  12/12  0.00    1.75x   1.76x   1.00 |   1.34x   0.96    H100 3.7.0 f32
+sum_2d_axis0             f16     8   12     0  12/12  12/12  0.00    1.58x   1.62x   1.36 |   1.21x   1.03    H100 3.7.0 f32
+sum_2d_axis0             fp8     4   12     0   0/12  12/12  0.00    1.31x   1.32x   1.09 |   1.34x   0.96    H100 3.7.0 f32
+sum_2d_axis0             fp8     8   12     0   0/12  12/12  0.00    1.22x   1.23x      - |   1.21x   1.03    H100 3.7.0 f32
+col_exp_sum              f16     4   12     0  12/12  12/12  0.00    1.87x   1.88x   1.00 |   1.43x   0.94    H100 3.7.0 f32
+col_exp_sum              f16     8   12     0  12/12  12/12  0.00    1.81x   1.81x   0.89 |   1.27x   0.95    H100 3.7.0 f32
+col_exp_sum              fp8     4   12     0  12/12  12/12  0.00    1.55x   1.56x   0.91 |   1.43x   0.94    H100 3.7.0 f32
+col_exp_sum              fp8     8   12     0  12/12  12/12  0.00    1.56x   1.57x   1.32 |   1.27x   0.95    H100 3.7.0 f32
+col_bf16                 bf16    4   12     0  12/12  12/12  0.00    1.98x   1.98x   0.97 |   1.40x   0.96 L  H100 3.7.0 bf16 (nw not stated)
+col_bf16                 bf16    8   12     0  12/12  12/12  0.00    1.80x   1.81x   0.88 |   1.40x   0.96 L  H100 3.7.0 bf16 (nw not stated)
+col_sum_loop             f16     4   12     0  12/12  12/12  0.00    2.53x   2.54x   0.94 |   1.26x   0.97    H100 3.7.0 f32
+col_sum_loop             f16     8   12     0  12/12  12/12  0.00    1.84x   1.85x   1.19 |   1.25x   1.11    H100 3.7.0 f32
+col_sum_loop             fp8     4   12     0   0/12  12/12  0.00    1.62x   1.63x   1.04 |   1.26x   0.97    H100 3.7.0 f32
+col_sum_loop             fp8     8   12     0   0/12  12/12  0.00    1.52x   1.53x      - |   1.25x   1.11    H100 3.7.0 f32
+col_dot                  f16     4   12     0  12/12   0/12  0.20    1.00x   1.00x  -0.00 |   1.19x   0.89    H100 3.7.0 f32
+col_dot                  f16     8   12     0  12/12   0/12  0.20    1.00x   1.00x   0.00 |   1.09x   0.98    H100 3.7.0 f32
+col_dot                  fp8     4   12     0  12/12   0/12  0.00    1.00x   1.01x  -0.01 |   1.19x   0.89    H100 3.7.0 f32
+col_dot                  fp8     8   12     0  12/12   0/12  0.00    1.00x   1.01x   0.02 |   1.09x   0.98    H100 3.7.0 f32
+A_rms_norm_fwd           f32     4   12     0  12/12   0/12  0.00    1.00x   1.03x      - |       -      -    not in the prior table
+A_rms_norm_fwd           f32     8   12     0  12/12   0/12  0.00    1.00x   1.02x   0.41 |       -      -    not in the prior table
+C_rms_norm_bwd_2reduce   f32     4   12     0  12/12   0/12  0.00    1.01x   1.05x   0.77 |       -      -    not in the prior table
+C_rms_norm_bwd_2reduce   f32     8   12     0  12/12   0/12  0.00    1.01x   1.04x   0.59 |       -      -    not in the prior table
+D_masked_global_sum      f32     4   12     0   0/12   0/12  0.00    1.00x   1.02x   0.79 |       -      -    not in the prior table
+D_masked_global_sum      f32     8   12     0   0/12   0/12  0.00    1.01x   1.02x   0.29 |       -      -    not in the prior table
+E_triu_masked_rowsum     f32     4   12     0  12/12   0/12  0.00    1.00x   1.03x   0.56 |       -      -    not in the prior table
+E_triu_masked_rowsum     f32     8   12     0  12/12   0/12  0.00    1.00x   1.01x   0.16 |       -      -    not in the prior table
+G_plain_sum_looped       f32     4   12     0  12/12  12/12  0.00    1.04x   1.11x   0.98 |       -      -    not in the prior table
+G_plain_sum_looped       f32     8   12     0  12/12  12/12  0.00    1.07x   1.13x      - |       -      -    not in the prior table
+H_mean_permute           f32     4   12     0  12/12   0/12  0.00    1.00x   1.03x   0.80 |       -      -    not in the prior table
+H_mean_permute           f32     8   12     0  12/12   0/12  0.00    1.00x   1.03x   0.64 |       -      -    not in the prior table
+I_bias_grad_dim0         f32     4   12     0  12/12  12/12  0.00    1.21x   1.22x   0.46 |   1.29x   1.00 L  H100 3.7.0 f32
+I_bias_grad_dim0         f32     8   12     0  12/12  12/12  0.00    1.39x   1.39x   0.83 |   1.49x   0.95 L  H100 3.7.0 f32
+J_epilogue_colsum_dim0   f32     4   12     0  12/12  12/12  0.00    2.62x   2.65x   1.65 |   3.03x   1.26 L  H100 3.7.0 f32
+J_epilogue_colsum_dim0   f32     8   12     0  12/12  12/12  0.00    2.32x   2.36x   0.84 |   2.58x   1.00 L  H100 3.7.0 f32
+layernorm_bwd_dwdb       f32     4   12     0  12/12  12/12  0.00    3.36x   3.39x   1.09 |   3.58x   1.07 L  H100 3.7.0 f32
+layernorm_bwd_dwdb       f32     8   12     0  12/12  12/12  0.00    3.57x   3.60x   1.03 |   3.89x   1.05 L  H100 3.7.0 f32
 
-NOT REACHABLE = the kernel is not in the registry `evaluate_opt` resolves against; it lives in a
-  suite with a different spec shape, so measuring it here would mean writing a second harness:
-    I_bias_grad_dim0         bitequiv/evaluation/realistic_inductor_kernels.py (SPECS, not KernelSpec)
-    J_epilogue_colsum_dim0   bitequiv/evaluation/realistic_inductor_kernels.py (SPECS, not KernelSpec)
-    layernorm_bwd_dwdb       bitequiv/evaluation/benchmark_kernels.py (register(), not KernelSpec)
+Every kernel PR #2312 measured is in the table above; there is no `NOT REACHABLE` row any more.
+  No prior number (6 kernels, that table did not carry them): A_rms_norm_fwd, C_rms_norm_bwd_2reduce, D_masked_global_sum, E_triu_masked_rowsum, G_plain_sum_looped, H_mean_permute.
 
-The dtype differs between the two sides on every row except col_bf16. The earlier run measured f32:
-  the dtype axis did not exist in eval_kernels.py at that commit, so every kernel took the f32 default.
-  This run measures f16 and fp8. A difference in these columns is hardware AND Triton AND dtype, not
-  hardware alone. col_bf16 is bf16 on both sides and is the one like-for-like row.
-
-
-ALL num_warps (median speedup per kernel, dtype, num_warps)
-====================================================================================================================
-
-kernel                 dtype      nw=1      nw=2      nw=4      nw=8     nw=16     nw=32
-----------------------------------------------------------------------------------------
-sum_3d_outer           f16       1.00x     2.72x     4.33x     4.31x     4.00x     3.11x
-sum_3d_outer           fp8       1.00x     2.20x     2.27x     2.27x     2.15x     3.25x
-sum_2d_col             f16       1.00x     1.95x     2.17x     2.20x     2.08x     1.69x
-sum_2d_col             fp8       1.00x     1.54x     1.54x     1.59x     1.55x     1.57x
-sum_2d_col_big         f16       1.00x     1.00x         -     2.37x     2.40x     2.72x
-sum_2d_col_big         fp8       1.00x     1.00x     2.29x     2.12x     1.67x     1.66x
-sum_2d_axis0           f16       1.00x     1.70x     1.74x     1.65x     1.47x     1.63x
-sum_2d_axis0           fp8       1.00x     1.22x     1.31x     1.17x     1.47x     1.64x
-col_exp_sum            f16       1.00x     1.71x     1.90x     1.76x     1.83x     1.54x
-col_exp_sum            fp8       1.00x     1.38x     1.54x     1.54x     1.48x     1.57x
-col_bf16               bf16      1.00x     1.71x     1.93x     1.75x     1.83x     1.52x
-col_sum_loop           f16       1.00x     2.53x     2.52x     1.83x     1.72x     2.23x
-col_sum_loop           fp8       1.00x     1.45x     1.59x     1.51x     1.90x     2.36x
-col_dot                f16       1.00x     1.00x     1.00x     1.00x     1.00x     1.00x
-col_dot                fp8       1.00x     1.00x     1.00x     1.00x     1.00x     1.00x
+The dtype differs between the two sides on every row without an `L`. The earlier run measured f32:
+  the dtype axis did not exist in eval_kernels.py at that commit, so every synthetic kernel took the
+  f32 default. This run measures the synthetic kernels at f16 and fp8, which is what this project
+  reports. A difference on an unmarked row is hardware AND Triton AND dtype, not hardware alone.
+  Like-for-like (4 kernels, prior number and same dtype): col_bf16, I_bias_grad_dim0, J_epilogue_colsum_dim0, layernorm_bwd_dwdb.
 
 
-PR #2312'S OWN GB300 / sm_100 TABLE (72 f32 configs per kernel), for reference
-====================================================================================================================
+ALL num_warps -- median speedup
+======================================================================================================================
 
-Same hardware family as this machine but f32 and a different Triton, so it is a second prior, not
-the headline comparison.
+kernel                   dtype      nw=1      nw=2      nw=4      nw=8     nw=16     nw=32
+------------------------------------------------------------------------------------------
+sum_3d_outer             f16       1.00x     2.73x     4.36x     4.31x     4.06x     3.13x
+sum_3d_outer             fp8       1.00x     2.15x     2.30x     2.25x     2.15x     3.21x
+sum_2d_col               f16       1.00x     1.97x     2.16x     2.19x     2.09x     1.73x
+sum_2d_col               fp8       1.00x     1.54x     1.55x     1.63x     1.52x     1.54x
+sum_2d_col_big           f16       1.01x     1.00x         -     2.37x     2.39x     2.74x
+sum_2d_col_big           fp8       1.00x     1.00x     2.32x     2.12x     1.68x     1.65x
+sum_2d_axis0             f16       1.00x     1.64x     1.75x     1.58x     1.46x     1.66x
+sum_2d_axis0             fp8       1.00x     1.20x     1.31x     1.22x     1.47x     1.63x
+col_exp_sum              f16       1.00x     1.73x     1.87x     1.81x     1.82x     1.55x
+col_exp_sum              fp8       1.00x     1.39x     1.55x     1.56x     1.49x     1.56x
+col_bf16                 bf16      1.00x     1.73x     1.98x     1.80x     1.85x     1.56x
+col_sum_loop             f16       1.00x     2.53x     2.53x     1.84x     1.73x     2.23x
+col_sum_loop             fp8       1.00x     1.46x     1.62x     1.52x     1.87x     2.37x
+col_dot                  f16       1.00x     1.00x     1.00x     1.00x     1.00x     1.00x
+col_dot                  fp8       1.00x     1.00x     1.00x     1.00x     1.00x     1.00x
+A_rms_norm_fwd           f32       1.00x     1.00x     1.00x     1.00x     1.00x     1.00x
+C_rms_norm_bwd_2reduce   f32       1.00x     1.00x     1.01x     1.01x     1.00x     1.00x
+D_masked_global_sum      f32       1.00x     0.99x     1.00x     1.01x     1.00x     1.00x
+E_triu_masked_rowsum     f32       1.00x     1.00x     1.00x     1.00x     1.01x     1.00x
+G_plain_sum_looped       f32       1.00x     1.03x     1.04x     1.07x     1.00x     0.98x
+H_mean_permute           f32       1.00x     1.00x     1.00x     1.00x     1.00x     1.00x
+I_bias_grad_dim0         f32       1.00x     1.17x     1.21x     1.39x     1.50x     1.43x
+J_epilogue_colsum_dim0   f32       0.99x     1.02x     2.62x     2.32x     2.65x     2.83x
+layernorm_bwd_dwdb       f32       1.00x     1.00x     3.36x     3.57x     3.80x     3.69x
 
-kernel                  prior median  prior max  prior gap
-----------------------------------------------------------
-sum_3d_outer                   5.15x      5.64x       1.01
-col_sum_loop                   2.12x      2.40x       1.00
-col_exp_sum                    1.93x      2.27x       0.96
-sum_2d_col                     1.92x      2.26x       0.92
-sum_2d_col_big                 1.80x      2.15x       0.71
-col_bf16                       1.74x      1.97x       0.86
-sum_2d_axis0                   1.68x      1.97x       0.86
+
+ALL num_warps -- configurations the pass fired on
+======================================================================================================================
+
+kernel                   dtype      nw=1      nw=2      nw=4      nw=8     nw=16     nw=32
+------------------------------------------------------------------------------------------
+sum_3d_outer             f16        0/12     12/12     12/12     12/12     12/12     12/12
+sum_3d_outer             fp8        0/12     11/12     12/12     12/12     12/12     12/12
+sum_2d_col               f16        0/12     12/12     12/12     12/12     12/12     12/12
+sum_2d_col               fp8        0/12     12/12     12/12     12/12     12/12     12/12
+sum_2d_col_big           f16        0/12      0/12      0/12     12/12     12/12     12/12
+sum_2d_col_big           fp8        0/12      0/12     12/12     12/12     12/12     12/12
+sum_2d_axis0             f16        0/12     12/12     12/12     12/12     12/12     12/12
+sum_2d_axis0             fp8        0/12     12/12     12/12     12/12     12/12     12/12
+col_exp_sum              f16        0/12     12/12     12/12     12/12     12/12     12/12
+col_exp_sum              fp8        0/12     12/12     12/12     12/12     12/12     12/12
+col_bf16                 bf16       0/12     12/12     12/12     12/12     12/12     12/12
+col_sum_loop             f16        0/12     12/12     12/12     12/12     12/12     12/12
+col_sum_loop             fp8        0/12     12/12     12/12     12/12     12/12     12/12
+col_dot                  f16        0/12      0/12      0/12      0/12      0/12      0/12
+col_dot                  fp8        0/12      0/12      0/12      0/12      0/12      0/12
+A_rms_norm_fwd           f32        0/12      0/12      0/12      0/12      0/12      0/12
+C_rms_norm_bwd_2reduce   f32        0/12      0/12      0/12      0/12      0/12      0/12
+D_masked_global_sum      f32        0/12      0/12      0/12      0/12      0/12      0/12
+E_triu_masked_rowsum     f32        0/12      0/12      0/12      0/12      0/12      0/12
+G_plain_sum_looped       f32        0/12     12/12     12/12     12/12     12/12     12/12
+H_mean_permute           f32        0/12      0/12      0/12      0/12      0/12      0/12
+I_bias_grad_dim0         f32        0/12     12/12     12/12     12/12     12/12     12/12
+J_epilogue_colsum_dim0   f32        0/12      0/12     12/12     12/12     12/12     12/12
+layernorm_bwd_dwdb       f32        0/12      0/12     12/12     12/12     12/12     12/12
+
+
+ALL num_warps -- order-sensitive configurations
+======================================================================================================================
+
+kernel                   dtype      nw=1      nw=2      nw=4      nw=8     nw=16     nw=32
+------------------------------------------------------------------------------------------
+sum_3d_outer             f16       12/12     12/12     12/12     12/12     12/12     12/12
+sum_3d_outer             fp8        0/12      0/12      0/12      0/12      0/12      0/12
+sum_2d_col               f16       12/12     12/12     12/12     12/12     12/12     12/12
+sum_2d_col               fp8        0/12      0/12      0/12      0/12      0/12      0/12
+sum_2d_col_big           f16       12/12     12/12     12/12     12/12     12/12     12/12
+sum_2d_col_big           fp8        0/12      0/12      0/12      0/12      0/12      0/12
+sum_2d_axis0             f16       12/12     12/12     12/12     12/12     12/12     12/12
+sum_2d_axis0             fp8        0/12      0/12      0/12      0/12      0/12      0/12
+col_exp_sum              f16       12/12     12/12     12/12     12/12     12/12     12/12
+col_exp_sum              fp8       12/12     12/12     12/12     12/12     12/12     12/12
+col_bf16                 bf16      12/12     12/12     12/12     12/12     12/12     12/12
+col_sum_loop             f16       12/12     12/12     12/12     12/12     12/12     12/12
+col_sum_loop             fp8        0/12      0/12      0/12      0/12      0/12      0/12
+col_dot                  f16       12/12     12/12     12/12     12/12     12/12     12/12
+col_dot                  fp8       12/12     12/12     12/12     12/12     12/12     12/12
+A_rms_norm_fwd           f32       12/12     12/12     12/12     12/12     12/12     12/12
+C_rms_norm_bwd_2reduce   f32       12/12     12/12     12/12     12/12     12/12     12/12
+D_masked_global_sum      f32        0/12      0/12      0/12      0/12      0/12      0/12
+E_triu_masked_rowsum     f32       12/12     12/12     12/12     12/12     12/12     12/12
+G_plain_sum_looped       f32       12/12     12/12     12/12     12/12     12/12     12/12
+H_mean_permute           f32       12/12     12/12     12/12     12/12     12/12     12/12
+I_bias_grad_dim0         f32       12/12     12/12     12/12     12/12     12/12     12/12
+J_epilogue_colsum_dim0   f32       12/12     12/12     12/12     12/12     12/12     12/12
+layernorm_bwd_dwdb       f32       12/12     12/12     12/12     12/12     12/12     12/12
+
+
+PR #2312'S OWN GB300 / sm_100 TABLE (72 f32 configurations per kernel), for reference
+======================================================================================================================
+
+Same hardware family as this machine but f32 and a different Triton, and it covers only seven of
+the kernels, so it is a second prior rather than the headline comparison.
+
+kernel                    prior median  prior max  prior gap
+------------------------------------------------------------
+sum_3d_outer                     5.15x      5.64x       1.01
+col_sum_loop                     2.12x      2.40x       1.00
+col_exp_sum                      1.93x      2.27x       0.96
+sum_2d_col                       1.92x      2.26x       0.92
+sum_2d_col_big                   1.80x      2.15x       0.71
+col_bf16                         1.74x      1.97x       0.86
+sum_2d_axis0                     1.68x      1.97x       0.86
 
 
 GATE
-====================================================================================================================
+======================================================================================================================
 
-  rows measured                 1080
+  rows measured                 1728
   bit-changed configurations    0   (must be 0)
   bit-changed on the perf input 0   (must be 0; an independent second check)
-  compile regressions           12   (must be 0)
-  rows with an error            12
-  order-INSENSITIVE rows        360   (33.3% of rows -- on these the reduction does
+  compile regressions           12   (must be 0: baseline built, optimized did not)
+  baseline did not compile      0   (not the pass's doing; excluded from the gate)
+  rows carrying an error        12   (the compile regressions above carry theirs)
+  order-INSENSITIVE rows        432   (25.0% of rows -- on these the reduction does
                                 not depend on the order, so the bit check is vacuous, not passing)
-      col_sum_loop           fp8   72 rows
-      sum_2d_axis0           fp8   72 rows
-      sum_2d_col             fp8   72 rows
-      sum_2d_col_big         fp8   72 rows
-      sum_3d_outer           fp8   72 rows
+      D_masked_global_sum      f32   72 rows
+      col_sum_loop             fp8   72 rows
+      sum_2d_axis0             fp8   72 rows
+      sum_2d_col               fp8   72 rows
+      sum_2d_col_big           fp8   72 rows
+      sum_3d_outer             fp8   72 rows
 
-  Why those are all fp8 pure sums. An fp8 e4m3 value carries a 4-bit significand, so the exact
-  sum of a few hundred of them still fits inside an f32 mantissa, and then every order gives the
-  same answer -- the reduction is order-invariant by arithmetic, not by luck. Checked off-device
-  on 200 draws of 256 leaves: exactly representable in f32 200/200, and a sequential sum against
-  a pairwise tree differed 0/200. The same check on f16 leaves is 0/200 exact and 85/200 different.
-  On-device the same split appears as 0/108 against 108/108 order-sensitive, over num_warps x
-  num_stages x enable_fp_fusion x seeds. So on these five kernels the fp8 `bit_changed = 0` is not
-  weak evidence, it is no evidence: nothing could have moved. col_exp_sum and col_dot keep their
-  fp8 sensitivity because exp() and a*b widen the leaves to full f32 before the reduce, and those
-  are the fp8 rows worth reading.
+  Why the fp8 pure sums are among those. An fp8 e4m3 value carries a four-bit significand, so
+  the exact sum of a few hundred of them still fits inside an f32 mantissa, and then every order
+  gives the same answer -- the reduction is order-invariant by arithmetic, not by luck. Measured
+  off-device on this run, on the same draw the kernels use:
+      fp8   200/200 draws sum exactly in f32; sequential vs pairwise tree differed on 0/200
+      f16   0/200 draws sum exactly in f32; sequential vs pairwise tree differed on 85/200
+  So on those kernels an fp8 `bit_changed = 0` is not weak evidence, it is no evidence: nothing
+  could have moved. `col_exp_sum` and `col_dot` keep their fp8 sensitivity because exp() and a*b
+  widen the leaves to f32 before the reduce, and those are the fp8 rows worth reading.
+
+  Order-insensitive and NOT fp8, so the argument above does not cover them:
+      D_masked_global_sum      f32   a 1x1024 tile folded to one scalar. A single kept element leaves the compiler almost no layout to choose, so both orderings lower to the same tree here
+  What is measured on these is only that the two orderings produced the same bytes on every
+  configuration; the reason offered is an explanation, not a second measurement. Either way the
+  bit check has nothing to catch there and the gate does not count them as a pass.
+
+  Partly saturated outputs. A NaN or an Inf compares equal to itself, so on the saturated
+  part of these outputs the bit check cannot see a difference. The rest of the output still
+  can, and these rows are order-sensitive, so the check is weakened rather than vacuous:
+      col_dot                  f16   up to 19.9% of the output is NaN or Inf
 
   The compile regressions, in full. The baseline builds and the optimized one does not, so
   these are the pass's doing, not the kernel's:
-      sum_2d_col_big         f16   num_warps=4   12 configs   ptxas C7907 internal compiler error
-  All of them sit at the register-pressure guard's boundary: the reduce-friendly layout carries
-  tile_elements / (warp_size * num_warps) values per thread, and the guard only declines above
+      sum_2d_col_big           f16   num_warps=4   12 configurations
+          optimized compile: PTXASError: PTXAS error: Internal Triton PTX codegen error `ptxas` stderr: ptxas-blac
+  These sit on the register-pressure guard's boundary: the reduce-friendly layout carries
+  tileElems / (warpSize * num_warps) values per thread, and the guard declines only ABOVE
   `max-elems-per-thread`, so a configuration landing exactly on the limit is still rewritten.
+
+  Kernels the pass declined on every configuration. This is the pass working, not failing:
+  it is only allowed to touch an inner_tree reduce whose axis is under-parallelized across the
+  warp, and it must leave a mul-fed reduce alone whatever the shape.
+      A_rms_norm_fwd           f32   reduces the CONTIGUOUS innermost axis of its tile, which the compiler already spreads across the warp, so `isWarpSynchronous` declines it -- there is no cross-warp stage left to delete
+      C_rms_norm_bwd_2reduce   f32   reduces the CONTIGUOUS innermost axis of its tile, which the compiler already spreads across the warp, so `isWarpSynchronous` declines it -- there is no cross-warp stage left to delete
+      D_masked_global_sum      f32   reduces the CONTIGUOUS innermost axis of its tile, which the compiler already spreads across the warp, so `isWarpSynchronous` declines it -- there is no cross-warp stage left to delete
+      E_triu_masked_rowsum     f32   reduces the CONTIGUOUS innermost axis of its tile, which the compiler already spreads across the warp, so `isWarpSynchronous` declines it -- there is no cross-warp stage left to delete
+      H_mean_permute           f32   reduces the CONTIGUOUS innermost axis of its tile, which the compiler already spreads across the warp, so `isWarpSynchronous` declines it -- there is no cross-warp stage left to delete
+      col_dot                  f16   mul-fed reduce: the pass skips every `arith.mulf`-fed reduce so an FMA contraction cannot move the bits
+      col_dot                  fp8   mul-fed reduce: the pass skips every `arith.mulf`-fed reduce so an FMA contraction cannot move the bits
 
   RESULT: FAIL -- see the counts above.
 

@@ -126,33 +126,286 @@ is the measurement: asking whether the guarantee holds bit for bit across the co
 autotuner would actually try, and what the layout pass built on top of it,
 `tritongpu-optimize-reduction-layout` (PR #2312), costs and buys.
 
-Both steps are placeholders. Neither needs a new harness: `bitequiv/evaluation/` already contains
-the rulers they call.
+Both steps are implemented. `inner_tree.bitmatch` asks whether the guarantee holds;
+`inner_tree.layout` asks what an optimization built on top of it costs and buys, and is the
+longest single step in the artifact.
 
-### `inner_tree.bitmatch` — does the enforced order actually hold? — *placeholder*
+### `inner_tree.bitmatch` — does the enforced order actually hold?
 
 **Claim.** With `reduction_ordering=inner_tree` the reduction order is fixed by the request, not
 by the layout, so configurations that change the layout — `num_warps` above all — return
-byte-identical output. With `unordered` they do not.
+byte-identical output. With `unordered`, on the same kernels and the same inputs, they do not.
+**Both halves are needed.** An `inner_tree` cell that never moves proves nothing on its own: if the
+matching `unordered` cell does not move either, the sweep never touched the bits on that kernel and
+the row is no evidence in either direction.
 
-Sweep the layout-changing axes twice, once per ordering, and count the distinct byte outputs. The
-`unordered` run is the control and matters as much as the `inner_tree` run: a kernel whose bits
-never depended on the layout proves nothing either way. `TRITON_STRICT_REDUCTION_ORDERING` is read
-when triton is imported, so setting it from Python after `import triton` silently does nothing and
-the run looks like a clean pass — every row records whether it was actually set.
+The mechanism under test is the one added in commit `053b50f75` (PR #1100), whose own
+documentation states the guarantee this step checks: given the same input data and reduction
+ordering, the result is bitwise identical regardless of `num_warps`, memory layout, or other
+compilation parameters.
 
-### `inner_tree.layout` — is the layout pass bit-safe, and what does it buy? — *placeholder*
+**Method.** A **cell** is a fixed `(kernel, dtype, enable_fp_fusion, ordering)`. Inside a cell the
+layout axes are swept, every point is compiled and launched on the same five input draws, and the
+outputs are grouped by their exact bytes. `n_bit_classes` is the number of groups, and 1 means the
+cell is invariant.
 
-**Claim.** `tritongpu-optimize-reduction-layout` never changes the output bits, and on the
-reductions it targets it makes them faster. Both halves are needed: a pass that is fast but moves
-the bits is useless here, because the whole point of the ordering switch is that the bits stop
-moving.
+| role | axis |
+|---|---|
+| **swept** — the mode must make these irrelevant | `num_warps` 1, 2, 4, 8, 16, 32 × `num_stages` 1…6 |
+| **cell axes** — genuinely bit-relevant, held fixed | `reduction_ordering`, `enable_fp_fusion`, `dtype` |
 
-`bitequiv/evaluation/evaluate_opt.py` is exactly this ruler and is deliberately pass-agnostic —
-you name the pass on the command line and it compiles every in-scope configuration without and
-with it, answering three independent questions: does it still compile, do the bits change, is it
-faster. Read `bit_changed` before the speedup; a speedup on a row whose bits changed is not a
-result.
+The two swept axes move **jointly**, all 36 combinations, not one at a time: a mode that survives
+each axis alone and breaks on the pair is exactly what a one-axis sweep cannot see.
+`enable_fp_fusion` is a cell axis rather than a swept one because it decides FMA contraction below
+TTGIR — `inner_tree` fixes the shape of the add tree and says nothing about whether a multiply
+folds into an add — so on a mul-fed kernel such as `col_dot` the two settings genuinely differ, and
+sweeping it would manufacture a failure that is not the ordering's. **`block_n` is deliberately not
+swept, and should not be added:** on a chunked reduction `inner_tree` fixes the order inside one
+`tl.sum`, not the accumulation across loop iterations, so the chunk width stays bit-relevant by
+design.
+
+The kernels are the 24 (kernel, dtype) pairs `inner_tree.layout` measures — eight synthetic
+micro-kernels at f16 and fp8, eight verbatim TorchInductor kernels and one zoo reduction at f32 —
+plus two pairs this step adds for itself: `col_max` at f16 and f32, its **control**. That
+catalogue of 24 is imported unchanged and does not contain the control; this step appends it in
+`control_kernels()`, so 24 plus 2 is the 26 pairs it runs. Max is order-invariant as an operation,
+so that cell must come back invariant in *both* arms for reasons that have nothing to do with the
+ordering switch. It carries `control = 1`, it is never counted toward the claim, and it is there so
+that a harness which cannot report an unmovable kernel as unmovable is caught rather than
+believed.
+
+Every byte comparison runs on the wide draw — exponents spread across the dtype's usable range,
+alternating signs so the sum cancels. On tame unit-scale data almost any regrouping rounds to the
+same bits and the check passes things it should not.
+
+```
+export PYTHONPATH=$(git rev-parse --show-toplevel)
+export CUDA_VISIBLE_DEVICES=<a gpu>
+python artifact_eval/artifact.py --run inner_tree.bitmatch --minutes 600
+```
+
+Nothing else has to be set, and the GPU does **not** have to be idle: nothing in this step is
+timed, so a neighbour on the same device changes no number. Options are environment variables,
+because `artifact.py`'s CLI is shared by every step: `INNER_TREE_BITMATCH_PREFLIGHT=1`
+(self-checks, the cell table and the counts, one cell pair, writes nothing),
+`INNER_TREE_BITMATCH_KERNELS`, `INNER_TREE_BITMATCH_DTYPES`, `INNER_TREE_BITMATCH_SEEDS`
+(default 5), `INNER_TREE_BITMATCH_WARPS`, `INNER_TREE_BITMATCH_STAGES`.
+
+**Cost.** 104 cells × 36 configurations = 3,744 compiles and 18,720 launches; about forty minutes
+on a GB300, nearly all of it compiling, because `TRITON_ALWAYS_COMPILE=1` means no build is served
+from the disk cache. `--minutes` is a resumable budget, not a sample size: cells stream to
+`cache/inner_tree.bitmatch.jsonl` one at a time and a second invocation continues where the first
+stopped, so a short run repeated gives the same table as one long run. A cell recorded with a
+different seed count or a different swept space is redone rather than reused.
+
+**What you should see.** Three self-checks, all `YES`; a determinism sweep over all 26 of this
+step's (kernel, dtype) pairs; the cell table; then one line per (kernel, dtype, `enable_fp_fusion`)
+with both arms side by side, a table of which axis moved the bits where they moved, a gate, and a
+headline. On an order-sensitive kernel the two arms read `inner_tree` **1** class against
+`unordered` **6** classes — six because each `num_warps` value gives its own answer — with
+`split_axes = num_warps`. On the fp8 pure sums both arms read 1 class, and those cells are reported
+as *no evidence* rather than as a pass.
+
+**How to judge it.** In this order.
+
+1. **`cache_defeat_verified` must be 1.** Triton's in-memory kernel cache is keyed on the
+   specialization and the launch options only. Every axis swept here is inside that key, so in
+   principle a stale hit cannot happen — but "in principle" is how a table comes back a perfect,
+   meaningless *invariant everywhere*. The step clears that cache before every build, sets
+   `TRITON_ALWAYS_COMPILE=1` for the on-disk one, and then refuses to measure until it has watched
+   two builds that must differ actually produce different TTGIR: once for a layout knob
+   (`num_warps` 4 against 8) and once for the ordering itself (`inner_tree` against `unordered` at
+   one configuration). The second is the important one — if the ordering argument were being
+   dropped, both arms would be the same build and *both* would read invariant.
+2. **`sensitive` before `n_bit_classes`.** Where `sensitive` is 0 the matching `unordered` cell
+   returned one byte pattern too, so the layout never moved the bits on that kernel and an
+   invariant `inner_tree` cell says nothing about the ordering. The gate counts those separately
+   and never lets them read as a pass.
+3. **`n_bit_classes` = 1 on every `inner_tree` cell whose `sensitive` is 1.** That is the claim.
+   **A failing row looks like** `ordering = inner_tree`, `sensitive = 1`, `n_bit_classes` above 1
+   and `verdict = NOT INVARIANT`. It also appears in the *which axis moves the bits* table with an
+   `inner_tree` ordering, where `split_axes` names the axis responsible and `split_example` gives
+   two configurations that disagreed; and the gate line `of those, NOT invariant` is non-zero,
+   which makes the run a `FAIL`. The axis is the finding; the class count on its own is not.
+4. **`n_ran` against `n_configs`.** A cell where most configurations failed to build is not clean,
+   it is empty: with one surviving configuration there is nothing left to disagree. The step
+   refuses to call a cell invariant on fewer than two, and the gate counts those as well.
+5. **The control.** `col_max` must be invariant in both arms. A control that moves means the
+   harness is broken — a partly written output buffer, say — not that the mode failed, and it fails
+   the run on its own.
+
+**The headline, and what it does not say.** The last lines read *N cells, of which M were
+`inner_tree` cells whose matching `unordered` cell actually differed; K of those M were not
+invariant*, followed by the space in full: the axis values, the draws per point, and how many
+configurations compiled, failed and were attempted. The phrasing is deliberate. This is a universal
+claim, and a pass over these kernels and these axes says only that nothing moved *here*. Read the
+space before generalising, and read the *no evidence* cells as untested rather than as passing.
+
+### `inner_tree.layout` — is the layout pass bit-safe, and what does it buy?
+
+**Claim.** `tritongpu-optimize-reduction-layout` — the pass added in commit `8176cccdc`, PR
+#2312 — never changes the output bits, and on the reductions it targets it takes back most of
+what the ordering constraint costs. Both halves are needed and the first gates the second: a
+pass that is fast but moves the bits is useless here, because the whole point of the ordering
+switch is that the bits stop moving. **Read `bit_changed` before any speedup. A speedup on a row
+whose bytes moved is not a result.**
+
+This step is a re-run of the measurement reported with the pass itself. What differs from that
+run is the machine (GB300 / sm_103 instead of H100), the Triton (3.8.0 instead of 3.7.0), the
+input dtype on most rows, and one detail of the pass's own source. Each is printed next to the
+earlier number, and each row carries a `like_for_like` flag saying whether its dtype matched the
+earlier one, so you can see which axis moved.
+
+```
+export PYTHONPATH=$(git rev-parse --show-toplevel)
+export CUDA_VISIBLE_DEVICES=<an idle gpu>
+python artifact_eval/artifact.py --run inner_tree.layout --minutes 600
+```
+
+Nothing else has to be set. Options are environment variables, because `artifact.py`'s CLI is
+shared by every step: `INNER_TREE_LAYOUT_PREFLIGHT=1` (self-checks, the kernel table, a timing
+projection; minutes, writes nothing), `INNER_TREE_LAYOUT_KERNELS`, `INNER_TREE_LAYOUT_DTYPES`,
+`INNER_TREE_LAYOUT_SEEDS` (default 10), `INNER_TREE_LAYOUT_BENCH_REPS` (default 3),
+`INNER_TREE_LAYOUT_PATIENCE_MIN` (default 45, see below), `INNER_TREE_LAYOUT_REPORT_ONLY=1`
+(rebuild the table from the records already in `cache/`; launches no kernel and changes no
+number), `INNER_TREE_LAYOUT_FORCE_TIMING=1` (time even on a busy card — for debugging the code
+path only, the numbers are not measurements).
+
+**Method.** Three arms per kernel, per dtype, per configuration:
+
+```
+base = reduction_ordering=inner_tree, standard pipeline
+opt  = the same, plus tritongpu-optimize-reduction-layout{ideal,8,256} appended at end-of-TTGIR
+ceil = the same kernel, the SAME configuration, reduction_ordering=unordered, standard pipeline
+
+speedup    = base_ms / opt_ms
+gap_closed = (base_ms - opt_ms) / (base_ms - ceil_ms)      1.0 = opt reached ceil
+```
+
+The ceiling flips one flag and holds everything else fixed. The experiment has exactly two
+variables — is `inner_tree` on, is the pass on — and a ceiling taken as the best unordered time
+over the swept configurations would fold an autotuner's freedom into the denominator and make
+`gap_closed` mean two things at once. That question is real and it belongs to `gemm.perf.random`
+and `gemm.perf.static`, which have an arm for it.
+
+The configuration space is 72 per (kernel, dtype): `num_warps` in 1, 2, 4, 8, 16, 32 ×
+`num_stages` 1…6 × `enable_fp_fusion` on/off. Seventeen kernels from three sources, listed in
+full by the step before it measures anything:
+
+* eight synthetic reduction micro-kernels from `bitequiv/evaluation/eval_kernels.py`, measured at
+  f16 and fp8 (`col_bf16` pins bf16 in its own body);
+* eight **verbatim TorchInductor output** kernels from
+  `bitequiv/evaluation/realistic_inductor_kernels.py` — every body in that file is a kernel
+  `torch.compile` actually emitted, at the shape the model ran at — measured at f32;
+* one weight-gradient reduction from the benchmark zoo, `layernorm_bwd_dwdb`, at f32.
+
+The TorchInductor and zoo kernels stay at f32 on purpose. Their bodies are generated code that
+computes in f32; narrowing them would mean editing the body, which would cost exactly the
+property that makes them worth having. It also gives the comparison four **like-for-like**
+kernels — `col_bf16`, `I_bias_grad_dim0`, `J_epilogue_colsum_dim0` and `layernorm_bwd_dwdb` —
+where the prior has a number *and* used the same dtype, so a difference there is hardware and
+Triton version alone. Every other row differs in dtype too, and the table marks which is which.
+
+Kernel *definitions* are imported from where they live rather than copied, so you can diff them
+against their source; every harness detail — input data, launch, timing, byte compare — is
+written once in `steps/_inner_tree_kernels.py` and applies to all seventeen the same way.
+
+Two reductions in that Inductor file are **not** measured and the step says so in its output:
+`B_layernorm_welford_gather` and `F_cumsum_scan` have no `reduction_ordering` parameter at all —
+a Welford combine and a scan are not ordered add-reductions, so `inner_tree` does not apply and
+the pass has nothing to preserve. GROUP 2 and later of that file are an inspect-only reference
+corpus: hard-coded shapes and references to `torch._inductor` runtime helpers, not runnable as
+they stand.
+
+**Cost.** About one hour and forty minutes on an idle GB300 for all 1,728 rows, of which roughly
+a quarter is compiling and the rest is `do_bench`. `--minutes` is a resumable budget, not a
+sample size: rows stream to `cache/inner_tree.layout.jsonl` one at a time and a second
+invocation continues where the first stopped, so a short run repeated gives the same table as
+one long run. `INNER_TREE_LAYOUT_PREFLIGHT=1` does the self-checks and one configuration per
+kernel in about a minute and projects the rest.
+
+**What you should see.** Four self-checks, all `YES`; a determinism sweep over all 24 (kernel,
+dtype) pairs; the kernel table; then a row per (kernel, dtype, `num_warps`) beside the earlier
+H100 number, the same medians broken out over all six `num_warps` values, and a gate. The
+speedups on the strided-axis kernels are large — `sum_3d_outer` above 4x, `J_epilogue_colsum_dim0`
+around 3x on the earlier run — and `gap_closed` sits near 1, meaning the pass reaches roughly
+where dropping the ordering constraint entirely would land.
+
+**How to judge it.** In this order.
+
+1. **`pass_available` must be 1.** A build with no binding for the pass produces a completely
+   clean table — every arm identical, 1.00x everywhere, zero bits changed — that measured
+   nothing, and there is no way to tell it from a real result afterwards. The step aborts on it;
+   the column exists so a CSV read later cannot be misread.
+2. **The self-check `injection changes the IR` must be `YES`.** Triton's in-memory kernel cache
+   is keyed on the specialization and the launch options only, and an injected pass is part of
+   neither, so the pass-on build can silently be served the pass-off one — again a perfect,
+   meaningless `1.00x, 0 bits changed`. The step clears that cache and sets
+   `TRITON_ALWAYS_COMPILE=1` for the on-disk one, then refuses to measure until it has watched
+   two builds of one configuration actually produce different TTGIR. A companion check compiles
+   the pass at its own documented no-op setting (`strategy=off`) and requires the TTGIR back
+   byte-identical to the baseline, so the difference is the transformation and not the extra
+   pass-manager run.
+3. **`bit_changed` = 0 and `bit_identical_perf` = 1, on every row.** These are two independent
+   comparisons: ten order-sensitive draws at the small size, and the large plain-data input the
+   timing arm used. **A failing row looks like** `verdict = BITS CHANGED`, and the gate line
+   `bit-changed configurations` is non-zero. That is the hard failure; nothing else in the table
+   matters if it fires.
+4. **`order_sensitive` before `bit_changed`.** Where it is 0 the reduction is order-invariant on
+   that configuration, so `bit_changed = 0` proves nothing about the pass. The gate counts those
+   rows separately and never lets them read as a pass.
+5. **`fired` before any 1.00x.** A kernel at 1.00x with `fired = 0` was declined by a guard, and
+   that is the pass working, not a gap. The report lists every kernel it declined on with the
+   guard responsible.
+
+**Failures that are expected on this tree, and are not defects.**
+
+*Twelve compile regressions.* `sum_2d_col_big`, f16, `num_warps=4`, all six `num_stages` × both
+`enable_fp_fusion` settings: the baseline builds and the optimized build dies in `ptxas`. They
+sit exactly on the register-pressure guard's boundary — a 1024×32 tile over 4 warps is
+`1024*32/(32*4) = 256` elements per thread, and the guard declines only *above*
+`max-elems-per-thread=256`, so a configuration landing precisely on the limit is still
+rewritten. The gate reports them and the run is a FAIL because of them. That is the correct
+verdict for this tree; it is a real, reproducible boundary case, not a measurement artefact.
+
+*`col_dot` at 1.00x with `fired = 0`.* The prior reported 1.19x for it. This is a difference in
+the code, not in the hardware. The pass in this tree skips **every** `arith.mulf`-fed reduce
+unconditionally, and no `ttg.enable_fp_fusion` module attribute exists anywhere in the tree — the
+follow-up PR #2312's description mentions, which lets the pass optimize a mul-fed reduce when
+fusion is off, is not on this branch. The prior's `col_dot` row is even labelled "fusion off",
+which only means something with that follow-up present. The step reads the pass source, strips
+its comments, and records the answer as the `guard_fp_fusion_gated` column so the table can say
+which of the two states it measured.
+
+*Whole fp8 kernels marked order-insensitive.* An fp8 e4m3 value carries a four-bit significand,
+so the exact sum of a few hundred of them still fits inside an f32 mantissa and every order gives
+the same answer. On those rows `bit_changed = 0` is not weak evidence, it is *no* evidence, and
+the report says so rather than counting them. The step measures this rather than asserting it:
+it runs the same draw the kernels use through a sequential sum and a pairwise tree on the CPU and
+prints the counts — 200 of 200 fp8 draws sum exactly in f32 and 0 of 200 differ, against 0 of 200
+and 85 of 200 for f16. `col_exp_sum` and `col_dot` keep their fp8 sensitivity because `exp()` and
+`a*b` widen the leaves to f32 before the reduce; those are the fp8 rows worth reading.
+
+*`col_dot` at f16 with about 20% of its output NaN.* The wide-range draw squared overflows f16.
+The rows are still order-sensitive, so the check is weakened rather than vacuous, and the gate
+prints the saturated fraction per kernel.
+
+*A busy GPU, and a long gap in the log.* If another process is already on the pinned device when
+the step starts, it runs the compiles and the bit comparisons, skips the timing arm entirely, and
+says so — a device time taken next to somebody else's kernel is not a measurement. Re-running on
+a free device fills in the timings for exactly the rows that are missing them and leaves the
+finished rows alone.
+
+If a neighbour arrives **mid-run**, the step **pauses** rather than stops. It re-checks every 24
+rows; on finding company it prints `PAUSED`, measures and writes nothing until the device is
+quiet again, then prints `RESUMED` and continues where it left off. It gives up only if the
+neighbour outlasts `INNER_TREE_LAYOUT_PATIENCE_MIN` (45 by default), and the report says how many
+times it paused and for how long. **So a long gap in the log is the safety mechanism, not a
+hang.** This is why the behaviour exists rather than a simple stop: the machine these numbers
+came from has several people on it, the committed run met a third user's profiling job partway
+through, and a ninety-minute sweep that dies on a five-minute neighbour needs a person to notice
+and restart it. Neither option — recording contaminated times, or losing the run — is acceptable,
+so it waits.
 
 ## Section 3 — the equivalence checker (`checker.corpus`)
 
@@ -256,6 +509,9 @@ comparable and is not.
 artifact.py        the entry point: shared machinery, step discovery, CLI
 steps/             one file per evaluation step; the file name is the step name with . and - as _
   _common.py       the helper library a step reads and never edits; its docstring is the contract
+  _inner_tree_kernels.py
+                   the seventeen kernels inner_tree.layout measures and the code that compiles,
+                   runs and times them; a step-private helper, not shared machinery
   gemm_bitmatch.py ... one module per step, each declaring its own table columns
 corpus_builder/    the scripts that build `checker.corpus`'s input; the corpus itself never ships
 prior_results.txt
