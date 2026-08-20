@@ -1,0 +1,248 @@
+17:48:26 waiting for GPU 0, 1 process(es) still on it
+17:58:26 waiting for GPU 0, 2 process(es) still on it
+18:08:27 waiting for GPU 0, 2 process(es) still on it
+18:18:28 waiting for GPU 0, 2 process(es) still on it
+18:28:30 waiting for GPU 0, 2 process(es) still on it
+18:38:30 waiting for GPU 0, 1 process(es) still on it
+2026-08-19 18:39:31 GPU 0 free, starting gemm.perf.static
+/home/youngzt/bitwise-equiv/triton/artifact_eval/artifact.py:226: RuntimeWarning: cuBLASLt 13.2.2 on sm_103 (NVIDIA GB300) was not measured: the rules come from 13.1.x (exactly 13.1.1). Results should still be bit-identical to cuBLAS, but a version bump can change which kernel a shape lands on. Re-measure and add a ((10, 3), (13, 2)) entry to `arch._REGISTRY` to silence this.
+  "arch": platform().name.split()[0],
+artifact evaluation
+  device      NVIDIA GB300  (sm_103)
+  cuBLASLt    13.2.2
+  triton      3.8.0+fb   torch 2.12.0+cu130   commit 11fd90b360db
+  WARNING: the paper's numbers used cuBLASLt 13.1.1; this is 13.2.2. cuBLAS may pick a
+           different algorithm, which changes the bits it returns and what we must reproduce.
+
+[gemm.perf.static] 614 cases over 506 shapes (349 fp16, 157 fp8), matching cuBLASLt 13.1.1, worker devgpu013.lco3.facebook.com:0:1063467
+  shapes from fusion_moe/models_2026.py, deduplicated on (M, N, K, dtype)
+  fp8 on moe_up, moe_down, attn only; 0 fp8 candidates dropped for K % 16
+  records     /home/youngzt/bitwise-equiv/triton/artifact_eval/cache/gemm.perf.static.jsonl
+  pause with  touch /home/youngzt/bitwise-equiv/triton/artifact_eval/cache/gemm.perf.static.PAUSE
+  arm 3: space cap none, 150.0s budget, top 16 re-timed; 3 rounds, 10 byte-check draws
+  506 of 506 shapes still to do
+
+  [1/506] moe_up    fp16 16x768x2560 1 case(s)   13.2s   eta   1.9h   search=3s torch=10s
+  [2/506] moe_down  fp16 16x2560x768 1 case(s)    3.4s   eta   1.2h   search=3s
+  [3/506] lora      fp16 80x2048x8 1 case(s)  150.4s   eta   1.8h   search=150s
+  [4/506] lmhead    fp16 1x100352x4096 1 case(s)    1.6s   eta   1.2h   search=1s
+  [5/506] attn      fp16 256x2048x4096 2 case(s)    3.4s   eta   0.5h   search=3s
+  [6/506] moe_up    fp8  16x768x2560 1 case(s)    1.6s   eta   0.5h   search=1s
+Autotune Choices Stats:
+{"num_choices": 55, "num_triton_choices": 54, "best_kernel": "triton_mm_10", "best_kernel_desc": "ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=128, BLOCK_M=16, BLOCK_N=128, EVEN_K=True, GROUP_M=8, OUT_DTYPE='tl.float16', USE_FAST_ACCUM=False, num_stages=4, num_warps=4", "best_time": 0.00848000030964613, "best_triton_pos": 0}
+  [7/506] moe_down  fp8  16x2560x768 1 case(s)   25.3s   eta   0.5h   search=1s torch=24s
+Autotune Choices Stats:
+{"num_choices": 18, "num_triton_choices": 17, "best_kernel": "triton_mm_113", "best_kernel_desc": "ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=16, BLOCK_M=64, BLOCK_N=64, EVEN_K=True, GROUP_M=8, OUT_DTYPE='tl.float16', USE_FAST_ACCUM=False, num_stages=2, num_warps=4", "best_time": 0.005632000043988228, "best_triton_pos": 0}
+  [8/506] lora      fp16 80x2048x16 1 case(s)    9.6s   eta   0.9h   torch=9s
+  [9/506] lmhead    fp16 1x129280x4096 1 case(s)    6.5s   eta   0.9h   time=1s torch=4s
+Autotune Choices Stats:
+{"num_choices": 106, "num_triton_choices": 105, "best_kernel": "triton_mm_240", "best_kernel_desc": "ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=256, BLOCK_M=64, BLOCK_N=32, EVEN_K=True, GROUP_M=8, OUT_DTYPE='tl.float16', USE_FAST_ACCUM=False, num_stages=5, num_warps=4", "best_time": 0.01744000054895878, "best_triton_pos": 0}
+  [10/506] attn      fp8  256x2048x4096 2 case(s)   55.0s   eta   1.1h   search=3s torch=52s
+  [11/506] moe_up    fp16 16x3072x7168 1 case(s)    0.8s   eta   0.9h   
+Autotune Choices Stats:
+{"num_choices": 19, "num_triton_choices": 18, "best_kernel": "triton_mm_356", "best_kernel_desc": "ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=128, BLOCK_M=32, BLOCK_N=32, EVEN_K=True, GROUP_M=8, OUT_DTYPE='tl.float16', USE_FAST_ACCUM=False, num_stages=5, num_warps=4", "best_time": 0.016383999958634377, "best_triton_pos": 0}
+  [12/506] moe_down  fp16 18x3584x3072 1 case(s)  136.4s   eta   1.1h   search=129s torch=8s
+Autotune Choices Stats:
+{"num_choices": 19, "num_triton_choices": 18, "best_kernel": "triton_mm_400", "best_kernel_desc": "ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=128, BLOCK_N=64, EVEN_K=True, GROUP_M=8, OUT_DTYPE='tl.float16', USE_FAST_ACCUM=False, num_stages=3, num_warps=4", "best_time": 0.00559999980032444, "best_triton_pos": 0}
+  [13/506] lora      fp16 80x2048x32 1 case(s)    8.3s   eta   1.1h   torch=8s
+  [14/506] lmhead    fp16 1x129280x7168 1 case(s)    3.9s   eta   1.0h   torch=3s
+E0819 18:46:41.544000 1063467 .venv/lib/python3.12/site-packages/torch/_inductor/select_algorithm.py:4888] [0/0] Runtime error during autotuning: 
+E0819 18:46:41.544000 1063467 .venv/lib/python3.12/site-packages/torch/_inductor/select_algorithm.py:4888] [0/0] No valid triton configs. OutOfMemoryError: out of resource: triton_mm Required: 262160 Hardware limit:232448 Reducing block sizes or `num_stages` may help.. 
+E0819 18:46:41.544000 1063467 .venv/lib/python3.12/site-packages/torch/_inductor/select_algorithm.py:4888] [0/0] Ignoring this choice.
+Autotune Choices Stats:
+{"num_choices": 21, "num_triton_choices": 20, "best_kernel": "mm", "best_time": 0.013919999822974205, "best_triton_pos": 1, "best_triton_time": 0.020128000527620316, "best_triton_kernel": "triton_mm_436", "best_triton_kernel_desc": "ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=128, BLOCK_M=64, BLOCK_N=128, EVEN_K=True, GROUP_M=8, OUT_DTYPE='tl.float16', USE_FAST_ACCUM=False, num_stages=4, num_warps=4"}
+  [15/506] attn      fp16 256x2560x4096 1 case(s)    9.4s   eta   1.1h   torch=8s
+Autotune Choices Stats:
+{"num_choices": 55, "num_triton_choices": 54, "best_kernel": "triton_mm_513", "best_kernel_desc": "ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=256, BLOCK_M=16, BLOCK_N=32, EVEN_K=True, GROUP_M=8, OUT_DTYPE='tl.float16', USE_FAST_ACCUM=False, num_stages=5, num_warps=2", "best_time": 0.017791999503970146, "best_triton_pos": 0}
+  [16/506] moe_up    fp8  16x3072x7168 1 case(s)   22.9s   eta   1.2h   search=1s torch=21s
+Autotune Choices Stats:
+{"num_choices": 97, "num_triton_choices": 96, "best_kernel": "triton_mm_663", "best_kernel_desc": "ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=256, BLOCK_M=32, BLOCK_N=32, EVEN_K=True, GROUP_M=8, OUT_DTYPE='tl.float16', USE_FAST_ACCUM=False, num_stages=5, num_warps=4", "best_time": 0.011776000261306763, "best_triton_pos": 0}
+  [17/506] moe_down  fp8  18x3584x3072 1 case(s)   43.6s   eta   1.3h   search=2s torch=42s
+Autotune Choices Stats:
+{"num_choices": 21, "num_triton_choices": 20, "best_kernel": "triton_mm_772", "best_kernel_desc": "ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=64, BLOCK_M=64, BLOCK_N=64, EVEN_K=True, GROUP_M=8, OUT_DTYPE='tl.float16', USE_FAST_ACCUM=False, num_stages=5, num_warps=4", "best_time": 0.006399999838322401, "best_triton_pos": 0}
+  [18/506] lora      fp16 80x2048x64 1 case(s)   10.2s   eta   1.3h   torch=10s
+  [19/506] lmhead    fp16 1x131072x2688 1 case(s)   33.1s   eta   1.3h   search=29s torch=4s
+Autotune Choices Stats:
+{"num_choices": 106, "num_triton_choices": 105, "best_kernel": "triton_mm_815", "best_kernel_desc": "ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=128, BLOCK_M=64, BLOCK_N=256, EVEN_K=True, GROUP_M=8, OUT_DTYPE='tl.float16', USE_FAST_ACCUM=False, num_stages=4, num_warps=4", "best_time": 0.018719999119639397, "best_triton_pos": 0}
+  [20/506] attn      fp8  256x2560x4096 1 case(s)   54.3s   eta   1.3h   search=3s torch=52s
+  [21/506] moe_up    fp16 20x2048x8192 1 case(s)  104.4s   eta   1.4h   search=104s
+Autotune Choices Stats:
+{"num_choices": 19, "num_triton_choices": 18, "best_kernel": "mm", "best_time": 0.012640000320971012, "best_triton_pos": 1, "best_triton_time": 0.014688000082969666, "best_triton_kernel": "triton_mm_1018", "best_triton_kernel_desc": "ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=128, BLOCK_M=32, BLOCK_N=32, EVEN_K=True, GROUP_M=8, OUT_DTYPE='tl.float16', USE_FAST_ACCUM=False, num_stages=5, num_warps=4"}
+  [22/506] moe_down  fp16 20x8192x2048 1 case(s)    8.8s   eta   1.3h   torch=8s
+Autotune Choices Stats:
+{"num_choices": 18, "num_triton_choices": 17, "best_kernel": "triton_mm_1052", "best_kernel_desc": "ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=16, BLOCK_M=32, BLOCK_N=64, EVEN_K=False, GROUP_M=8, OUT_DTYPE='tl.float16', USE_FAST_ACCUM=False, num_stages=5, num_warps=8", "best_time": 0.0054720002226531506, "best_triton_pos": 0}
+  [23/506] lora      fp16 85x2048x8 1 case(s)  157.8s   eta   1.4h   search=151s torch=7s
+  [24/506] lmhead    fp16 1x151936x2048 1 case(s)    4.9s   eta   1.3h   torch=4s
+E0819 18:54:16.018000 1063467 .venv/lib/python3.12/site-packages/torch/_inductor/select_algorithm.py:4888] [0/0] Runtime error during autotuning: 
+E0819 18:54:16.018000 1063467 .venv/lib/python3.12/site-packages/torch/_inductor/select_algorithm.py:4888] [0/0] No valid triton configs. OutOfMemoryError: out of resource: triton_mm Required: 262160 Hardware limit:232448 Reducing block sizes or `num_stages` may help.. 
+E0819 18:54:16.018000 1063467 .venv/lib/python3.12/site-packages/torch/_inductor/select_algorithm.py:4888] [0/0] Ignoring this choice.
+Autotune Choices Stats:
+{"num_choices": 21, "num_triton_choices": 20, "best_kernel": "mm", "best_time": 0.015359999611973763, "best_triton_pos": 1, "best_triton_time": 0.0208320003002882, "best_triton_kernel": "triton_mm_1096", "best_triton_kernel_desc": "ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=128, BLOCK_M=64, BLOCK_N=128, EVEN_K=True, GROUP_M=8, OUT_DTYPE='tl.float16', USE_FAST_ACCUM=False, num_stages=4, num_warps=4"}
+  [25/506] attn      fp16 256x2688x4096 1 case(s)   14.7s   eta   1.4h   torch=14s
+Autotune Choices Stats:
+{"num_choices": 97, "num_triton_choices": 96, "best_kernel": "_scaled_mm", "best_time": 0.01587199978530407, "best_triton_pos": 1, "best_triton_time": 0.016736000776290894, "best_triton_kernel": "triton_mm_1215", "best_triton_kernel_desc": "ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=256, BLOCK_M=32, BLOCK_N=32, EVEN_K=True, GROUP_M=8, OUT_DTYPE='tl.float16', USE_FAST_ACCUM=False, num_stages=5, num_warps=4"}
+  [26/506] moe_up    fp8  20x2048x8192 1 case(s)   40.2s   eta   1.6h   search=1s torch=39s
+Autotune Choices Stats:
+{"num_choices": 97, "num_triton_choices": 96, "best_kernel": "triton_mm_1407", "best_kernel_desc": "ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=256, BLOCK_M=32, BLOCK_N=32, EVEN_K=True, GROUP_M=8, OUT_DTYPE='tl.float16', USE_FAST_ACCUM=False, num_stages=5, num_warps=4", "best_time": 0.01158399973064661, "best_triton_pos": 0}
+Autotune Choices Stats:
+{"num_choices": 96, "num_triton_choices": 96, "best_kernel": "triton_mm_1503", "best_kernel_desc": "ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=256, BLOCK_M=32, BLOCK_N=32, EVEN_K=True, GROUP_M=8, OUT_DTYPE='tl.float16', USE_FAST_ACCUM=False, num_stages=5, num_warps=4", "best_time": 0.011615999974310398, "best_triton_pos": 0}
+  [27/506] moe_down  fp8  20x8192x2048 1 case(s)   50.2s   eta   1.8h   search=1s torch=49s
+Autotune Choices Stats:
+{"num_choices": 18, "num_triton_choices": 17, "best_kernel": "triton_mm_1511", "best_kernel_desc": "ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=16, BLOCK_M=64, BLOCK_N=32, EVEN_K=True, GROUP_M=8, OUT_DTYPE='tl.float16', USE_FAST_ACCUM=False, num_stages=5, num_warps=8", "best_time": 0.005791999865323305, "best_triton_pos": 0}
+  [28/506] lora      fp16 85x2048x16 1 case(s)  159.6s   eta   1.9h   search=151s torch=8s
+  [29/506] lmhead    fp16 1x154880x2048 1 case(s)    5.6s   eta   1.8h   torch=5s
+Autotune Choices Stats:
+{"num_choices": 106, "num_triton_choices": 105, "best_kernel": "triton_mm_1554", "best_kernel_desc": "ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=128, BLOCK_M=128, BLOCK_N=128, EVEN_K=True, GROUP_M=8, OUT_DTYPE='tl.float16', USE_FAST_ACCUM=False, num_stages=4, num_warps=4", "best_time": 0.018783999606966972, "best_triton_pos": 0}
+  [30/506] attn      fp8  256x2688x4096 1 case(s)   61.4s   eta   1.8h   search=2s torch=59s
+Autotune Choices Stats:
+{"num_choices": 19, "num_triton_choices": 18, "best_kernel": "mm", "best_time": 0.021695999428629875, "best_triton_pos": 1, "best_triton_time": 0.023520000278949738, "best_triton_kernel": "triton_mm_1756", "best_triton_kernel_desc": "ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=128, BLOCK_M=32, BLOCK_N=32, EVEN_K=True, GROUP_M=8, OUT_DTYPE='tl.float16', USE_FAST_ACCUM=False, num_stages=5, num_warps=4"}
+  [31/506] moe_up    fp16 21x2048x7168 1 case(s)    6.8s   eta   1.7h   torch=6s
+Autotune Choices Stats:
+{"num_choices": 19, "num_triton_choices": 18, "best_kernel": "triton_mm_1792", "best_kernel_desc": "ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=128, BLOCK_M=32, BLOCK_N=32, EVEN_K=True, GROUP_M=8, OUT_DTYPE='tl.float16', USE_FAST_ACCUM=False, num_stages=5, num_warps=4", "best_time": 0.01375999953597784, "best_triton_pos": 0}
+
+=================================================================================
+
+MID-RUN SNAPSHOT taken 2026-08-19 18:59:51 while the measurement was still running.
+
+The run continues after this point and appends to this same file; the table below covers
+
+only the shapes finished so far, and its own header says how many that is.
+
+=================================================================================
+
+gemm.perf.static -- 33 (model, layer, dtype) cases over 31 distinct (M, N, K, dtype) shapes, 165 arm records
+  planned: 614 cases over 506 shapes (349 fp16, 157 fp8); 0 fp8 candidates dropped for K % 16
+  dtype rule: fp16 on every case, fp8 additionally on moe_up, moe_down, attn
+  timing column: device_flush_ms   ratios are den/num, so above 1 means the first arm is faster
+
+  per case
+    model                  layer                          pairing  dt        M       N      K mode          torch pick    1 cuBLAS        2a        2b         3         4   4/2b    4/3    3/1    4/1   bit4   bit3  bit2a flags
+    DeepSeek-V4-Pro        expert.up_proj T4k/cold.25x    moe_up   fp16     16    3072   7168 split         aten            0.0189    0.0251    0.0251    0.0230    0.0210  1.195  1.098  0.822  0.902  10/10  10/10   0/10 F2
+    Kimi-K2.6              expert.up_proj T4k/cold.25x    moe_up   fp16     21    2048   7168 split         aten            0.0169    0.0251    0.0251    0.0218    0.0210  1.197  1.037  0.776  0.805  10/10  10/10   0/10 2
+    Ling-3.0-flash         expert.up_proj T4k/cold.25x    moe_up   fp16     16     768   2560 split         triton_mm       0.0109    0.0128    0.0127    0.0148    0.0128  0.997  1.163  0.737  0.857  10/10  10/10   0/10 F2
+    Qwen3.8-2.4T-A95B      expert.up_proj T4k/cold.25x    moe_up   fp16     20    2048   8192 split         aten            0.0169    0.0271    0.0271    0.0313    0.0213  1.275  1.469  0.540  0.794  10/10  10/10   0/10 F2
+    DeepSeek-V4-Pro        expert.up_proj T4k/cold.25x    moe_up   fp8      16    3072   7168 plain         aten+triton_    0.0128    0.0189    0.0189    0.1090    0.0232  0.817  4.699  0.117  0.550  10/10  10/10   5/10 F2
+    Ling-3.0-flash         expert.up_proj T4k/cold.25x    moe_up   fp8      16     768   2560 plain         aten+triton_    0.0091    0.0108    0.0107    0.0230    0.0148  0.724  1.555  0.393  0.611  10/10  10/10   5/10 F2
+    Qwen3.8-2.4T-A95B      expert.up_proj T4k/cold.25x    moe_up   fp8      20    2048   8192 plain         aten            0.0132    0.0189    0.0189    0.0870    0.0253  0.746  3.432  0.151  0.519  10/10  10/10   5/10 F2
+    Kimi-K3                expert.down_proj T4k/cold.25x  moe_down fp16     18    3584   3072 plain         triton_mm       0.0128    0.0169    0.0162    0.0169    0.0169  0.955  0.998  0.758  0.756  10/10  10/10  10/10 F
+    Ling-3.0-flash         expert.down_proj T4k/cold.25x  moe_down fp16     16    2560    768 plain         aten            0.0087    0.0108    0.0108    0.0108    0.0115  0.936  0.936  0.810  0.758  10/10  10/10  10/10 F
+    Qwen3.8-2.4T-A95B      expert.down_proj T4k/cold.25x  moe_down fp16     20    8192   2048 plain         aten            0.0148    0.0169    0.0169    0.0170    0.0189  0.892  0.897  0.874  0.784  10/10  10/10  10/10 F
+    Kimi-K3                expert.down_proj T4k/cold.25x  moe_down fp8      18    3584   3072 plain         aten+triton_    0.0108    0.0128    0.0128    0.0581    0.0169  0.758  3.437  0.185  0.636  10/10  10/10   5/10 F2
+    Ling-3.0-flash         expert.down_proj T4k/cold.25x  moe_down fp8      16    2560    768 plain         aten+triton_    0.0087    0.0108    0.0108    0.0230    0.0108  0.991  2.124  0.378  0.802  10/10  10/10   5/10 F2
+    Qwen3.8-2.4T-A95B      expert.down_proj T4k/cold.25x  moe_down fp8      20    8192   2048 plain         aten+triton_    0.0111    0.0128    0.0128    0.0763    0.0169  0.761  4.524  0.145  0.657  10/10  10/10   5/10 F2
+    Kimi-K2.6              expert.up_proj.lora_B r=16 T4k lora     fp16     85    2048     16 plain         triton_mm       0.0067    0.0067    0.0067    0.0067    0.0108  0.625  0.619  1.005  0.622  10/10  10/10  10/10 F
+    Kimi-K2.6              expert.up_proj.lora_B r=8 T4k  lora     fp16     85    2048      8 plain         triton_mm       0.0087    0.0067    0.0067    0.0068    0.0108  0.619  0.634  1.272  0.807  10/10  10/10  10/10 F
+    Qwen3.8-2.4T-A95B      expert.up_proj.lora_B r=16 T4k lora     fp16     80    2048     16 plain         triton_mm       0.0087    0.0087    0.0087    0.0069    0.0108  0.804  0.644  1.253  0.807  10/10  10/10  10/10 F
+    Qwen3.8-2.4T-A95B      expert.up_proj.lora_B r=32 T4k lora     fp16     80    2048     32 plain         triton_mm       0.0087    0.0087    0.0087    0.0087    0.0107  0.812  0.812  0.996  0.809  10/10  10/10  10/10 F
+    Qwen3.8-2.4T-A95B      expert.up_proj.lora_B r=64 T4k lora     fp16     80    2048     64 plain         triton_mm       0.0077    0.0087    0.0087    0.0087    0.0108  0.810  0.810  0.882  0.714  10/10  10/10  10/10 F
+    Qwen3.8-2.4T-A95B      expert.up_proj.lora_B r=8 T4k  lora     fp16     80    2048      8 plain         triton_mm       0.0087    0.0067    0.0067    0.0075    0.0108  0.622  0.693  1.167  0.810  10/10  10/10  10/10 F
+    DeepSeek-V4-Flash      lm_head                        lmhead   fp16      1  129280   4096 split         reduction       0.1787    0.1879    0.1889    0.1766    0.1855  1.018  0.952  1.012  0.963  10/10  10/10   0/10 2
+    DeepSeek-V4-Pro        lm_head                        lmhead   fp16      1  129280   7168 split         reduction       0.2893    0.3494    0.3507    0.2852    0.2995  1.171  0.952  1.014  0.966  10/10  10/10   0/10 2
+    GLM-4.7-Flash          lm_head                        lmhead   fp16      1  154880   2048 plain         reduction       0.1111    0.1152    0.1152    0.1116    0.1357  0.849  0.822  0.996  0.819  10/10  10/10   0/10 2
+    Nemotron-3.5-L-30B-A3B lm_head                        lmhead   fp16      1  131072   2688 plain         reduction       0.1203    0.1160    0.1153    0.1193    0.1397  0.825  0.854  1.009  0.861  10/10  10/10   0/10 2
+    Qwen3-30B-A3B          lm_head                        lmhead   fp16      1  151936   2048 plain         reduction       0.1093    0.1132    0.1132    0.1092    0.1336  0.847  0.817  1.001  0.818  10/10  10/10   0/10 2
+    granite-4.1-8b         lm_head                        lmhead   fp16      1  100352   4096 split         reduction       0.1426    0.1505    0.1504    0.1398    0.1521  0.989  0.919  1.020  0.938  10/10  10/10   0/10 2
+    Ling-3.0-flash         o_proj                         attn     fp16    256    2560   4096 plain         aten            0.0148    0.0210    0.0210    0.0251    0.0192  1.095  1.309  0.592  0.775  10/10  10/10  10/10 F
+    Nemotron-3.5-L-30B-A3B o_proj                         attn     fp16    256    2688   4096 plain         aten            0.0149    0.0210    0.0211    0.0230    0.0196  1.072  1.173  0.649  0.761  10/10  10/10  10/10 F
+    Qwen3-30B-A3B          o_proj                         attn     fp16    256    2048   4096 plain         triton_mm       0.0148    0.0189    0.0170    0.0234    0.0189  0.897  1.235  0.633  0.782  10/10  10/10  10/10 F
+    Qwen3.6-35B-A3B        o_proj                         attn     fp16    256    2048   4096 plain         triton_mm       0.0148    0.0189    0.0170    0.0234    0.0189  0.897  1.235  0.633  0.782  10/10  10/10  10/10 F
+    Ling-3.0-flash         o_proj                         attn     fp8     256    2560   4096 plain         aten+triton_    0.0128    0.0210    0.0210    0.0599    0.0189  1.108  3.162  0.213  0.674  10/10  10/10  10/10 F
+    Nemotron-3.5-L-30B-A3B o_proj                         attn     fp8     256    2688   4096 plain         aten+triton_    0.0128    0.0210    0.0210    0.0620    0.0189  1.108  3.270  0.207  0.676  10/10  10/10  10/10 F
+    Qwen3-30B-A3B          o_proj                         attn     fp8     256    2048   4096 plain         aten+triton_    0.0108    0.0189    0.0189    0.0517    0.0189  1.000  2.730  0.208  0.568  10/10  10/10  10/10 F
+    Qwen3.6-35B-A3B        o_proj                         attn     fp8     256    2048   4096 plain         aten+triton_    0.0108    0.0189    0.0189    0.0517    0.0189  1.000  2.730  0.208  0.568  10/10  10/10  10/10 F
+
+  per pairing
+    group            cases shapes  4/2b geo   [p25    med   p75]  4/3 geo   [p25    med   p75]    3/1    4/1   2a/1     bit 4     bit 3    bit 2a  flr  unc
+    moe_up               7      7     0.969  0.817  0.997  1.195    1.742  1.163  1.469  1.555  0.404  0.705  0.726     70/70     70/70     15/70    6    0
+                     4/2b  worst  0.724  Ling-3.0-flash expert.up_proj T4k/cold.25x fp8  16x768x2560
+                           best   1.275  Qwen3.8-2.4T-A95B expert.up_proj T4k/cold.25x fp16  20x2048x8192
+                     4/3  worst  1.037  Kimi-K2.6 expert.up_proj T4k/cold.25x fp16  21x2048x7168
+                           best   4.699  DeepSeek-V4-Pro expert.up_proj T4k/cold.25x fp8  16x3072x7168
+                     plan modes split:4 plain:3 | torch picks aten:4 aten+triton_mm:2 triton_mm:1
+    moe_down             6      6     0.877  0.761  0.892  0.955    1.739  0.936  0.998  3.437  0.419  0.729  0.826     60/60     60/60     45/60    6    0
+                     4/2b  worst  0.758  Kimi-K3 expert.down_proj T4k/cold.25x fp8  18x3584x3072
+                           best   0.991  Ling-3.0-flash expert.down_proj T4k/cold.25x fp8  16x2560x768
+                     4/3  worst  0.897  Qwen3.8-2.4T-A95B expert.down_proj T4k/cold.25x fp16  20x8192x2048
+                           best   4.524  Qwen3.8-2.4T-A95B expert.down_proj T4k/cold.25x fp8  20x8192x2048
+                     plan modes plain:6 | torch picks aten+triton_mm:3 aten:2 triton_mm:1
+    lora                 6      6     0.709  0.622  0.625  0.810    0.698  0.634  0.644  0.810  1.086  0.758  1.070     60/60     60/60     60/60    6    0
+                     4/2b  worst  0.619  Kimi-K2.6 expert.up_proj.lora_B r=8 T4k fp16  85x2048x8
+                           best   0.812  Qwen3.8-2.4T-A95B expert.up_proj.lora_B r=32 T4k fp16  80x2048x32
+                     4/3  worst  0.619  Kimi-K2.6 expert.up_proj.lora_B r=16 T4k fp16  85x2048x16
+                           best   0.812  Qwen3.8-2.4T-A95B expert.up_proj.lora_B r=32 T4k fp16  80x2048x32
+                     plan modes plain:6 | torch picks triton_mm:6
+    lmhead               6      6     0.942  0.847  0.849  1.018    0.884  0.822  0.854  0.952  1.009  0.892  0.947     60/60     60/60      0/60    0    0
+                     4/2b  worst  0.825  Nemotron-3.5-L-30B-A3B lm_head fp16  1x131072x2688
+                           best   1.171  DeepSeek-V4-Pro lm_head fp16  1x129280x7168
+                     4/3  worst  0.817  Qwen3-30B-A3B lm_head fp16  1x151936x2048
+                           best   0.952  DeepSeek-V4-Pro lm_head fp16  1x129280x7168
+                     plan modes split:3 plain:3 | torch picks reduction:6
+    attn                 8      6     1.019  1.000  1.072  1.095    1.914  1.235  2.730  2.730  0.362  0.692  0.662     80/80     80/80     80/80    8    0
+                     4/2b  worst  0.897  Qwen3-30B-A3B o_proj fp16  256x2048x4096
+                           best   1.108  Nemotron-3.5-L-30B-A3B o_proj fp8  256x2688x4096
+                     4/3  worst  1.173  Nemotron-3.5-L-30B-A3B o_proj fp16  256x2688x4096
+                           best   3.270  Nemotron-3.5-L-30B-A3B o_proj fp8  256x2688x4096
+                     plan modes plain:8 | torch picks aten+triton_mm:4 triton_mm:2 aten:2
+
+  per pairing and dtype
+    group            cases shapes  4/2b geo   [p25    med   p75]  4/3 geo   [p25    med   p75]    3/1    4/1   2a/1     bit 4     bit 3    bit 2a  flr  unc
+    moe_up/fp16          4      4     1.161  1.195  1.197  1.197    1.181  1.098  1.163  1.163  0.710  0.839  0.721     40/40     40/40      0/40    3    0
+                     4/2b  worst  0.997  Ling-3.0-flash expert.up_proj T4k/cold.25x fp16  16x768x2560
+                           best   1.275  Qwen3.8-2.4T-A95B expert.up_proj T4k/cold.25x fp16  20x2048x8192
+                     4/3  worst  1.037  Kimi-K2.6 expert.up_proj T4k/cold.25x fp16  21x2048x7168
+                           best   1.469  Qwen3.8-2.4T-A95B expert.up_proj T4k/cold.25x fp16  20x2048x8192
+                     plan modes split:4 | torch picks aten:3 triton_mm:1
+    moe_up/fp8           3      3     0.761  0.724  0.746  0.817    2.927  1.555  3.432  4.699  0.191  0.559  0.733     30/30     30/30     15/30    3    0
+                     4/2b  worst  0.724  Ling-3.0-flash expert.up_proj T4k/cold.25x fp8  16x768x2560
+                           best   0.817  DeepSeek-V4-Pro expert.up_proj T4k/cold.25x fp8  16x3072x7168
+                     4/3  worst  1.555  Ling-3.0-flash expert.up_proj T4k/cold.25x fp8  16x768x2560
+                           best   4.699  DeepSeek-V4-Pro expert.up_proj T4k/cold.25x fp8  16x3072x7168
+                     plan modes plain:3 | torch picks aten+triton_mm:2 aten:1
+    moe_down/fp16        3      3     0.927  0.892  0.936  0.955    0.943  0.897  0.936  0.998  0.812  0.766  0.814     30/30     30/30     30/30    3    0
+                     4/2b  worst  0.892  Qwen3.8-2.4T-A95B expert.down_proj T4k/cold.25x fp16  20x8192x2048
+                           best   0.955  Kimi-K3 expert.down_proj T4k/cold.25x fp16  18x3584x3072
+                     4/3  worst  0.897  Qwen3.8-2.4T-A95B expert.down_proj T4k/cold.25x fp16  20x8192x2048
+                           best   0.998  Kimi-K3 expert.down_proj T4k/cold.25x fp16  18x3584x3072
+                     plan modes plain:3 | torch picks aten:2 triton_mm:1
+    moe_down/fp8         3      3     0.830  0.758  0.761  0.991    3.208  2.124  3.437  4.524  0.217  0.695  0.838     30/30     30/30     15/30    3    0
+                     4/2b  worst  0.758  Kimi-K3 expert.down_proj T4k/cold.25x fp8  18x3584x3072
+                           best   0.991  Ling-3.0-flash expert.down_proj T4k/cold.25x fp8  16x2560x768
+                     4/3  worst  2.124  Ling-3.0-flash expert.down_proj T4k/cold.25x fp8  16x2560x768
+                           best   4.524  Qwen3.8-2.4T-A95B expert.down_proj T4k/cold.25x fp8  20x8192x2048
+                     plan modes plain:3 | torch picks aten+triton_mm:3
+    lora/fp16            6      6     0.709  0.622  0.625  0.810    0.698  0.634  0.644  0.810  1.086  0.758  1.070     60/60     60/60     60/60    6    0
+                     4/2b  worst  0.619  Kimi-K2.6 expert.up_proj.lora_B r=8 T4k fp16  85x2048x8
+                           best   0.812  Qwen3.8-2.4T-A95B expert.up_proj.lora_B r=32 T4k fp16  80x2048x32
+                     4/3  worst  0.619  Kimi-K2.6 expert.up_proj.lora_B r=16 T4k fp16  85x2048x16
+                           best   0.812  Qwen3.8-2.4T-A95B expert.up_proj.lora_B r=32 T4k fp16  80x2048x32
+                     plan modes plain:6 | torch picks triton_mm:6
+    lmhead/fp16          6      6     0.942  0.847  0.849  1.018    0.884  0.822  0.854  0.952  1.009  0.892  0.947     60/60     60/60      0/60    0    0
+                     4/2b  worst  0.825  Nemotron-3.5-L-30B-A3B lm_head fp16  1x131072x2688
+                           best   1.171  DeepSeek-V4-Pro lm_head fp16  1x129280x7168
+                     4/3  worst  0.817  Qwen3-30B-A3B lm_head fp16  1x151936x2048
+                           best   0.952  DeepSeek-V4-Pro lm_head fp16  1x129280x7168
+                     plan modes split:3 plain:3 | torch picks reduction:6
+    attn/fp16            4      3     0.986  0.897  1.072  1.072    1.237  1.235  1.235  1.235  0.626  0.775  0.746     40/40     40/40     40/40    4    0
+                     4/2b  worst  0.897  Qwen3-30B-A3B o_proj fp16  256x2048x4096
+                           best   1.095  Ling-3.0-flash o_proj fp16  256x2560x4096
+                     4/3  worst  1.173  Nemotron-3.5-L-30B-A3B o_proj fp16  256x2688x4096
+                           best   1.309  Ling-3.0-flash o_proj fp16  256x2560x4096
+                     plan modes plain:4 | torch picks triton_mm:2 aten:2
+    attn/fp8             4      3     1.053  1.000  1.108  1.108    2.963  2.730  3.162  3.162  0.209  0.619  0.588     40/40     40/40     40/40    4    0
+                     4/2b  worst  1.000  Qwen3-30B-A3B o_proj fp8  256x2048x4096
+                           best   1.108  Nemotron-3.5-L-30B-A3B o_proj fp8  256x2688x4096
+                     4/3  worst  2.730  Qwen3-30B-A3B o_proj fp8  256x2048x4096
+                           best   3.270  Nemotron-3.5-L-30B-A3B o_proj fp8  256x2688x4096
+                     plan modes plain:4 | torch picks aten+triton_mm:4
+
+  4/2b is what the bit constraint costs against an unconstrained Triton kernel.
+  4/3  is what our hand-written rewrites bought over an honest search of the SAME kernels.
+  Check bit 4 = the total first: where arm 4 was not byte-identical to cuBLAS its time is
+  not a measurement of anything. bit N counts draws, ten per case.
+  flags  F near the launch floor (under 3x floor_ms, every ratio compressed toward 1)
+         ! an arm the CUDA graph would not capture   d declined   e error
+         4/3/2 that arm was not byte-identical to cuBLAS on every draw
+  flr / unc count cases with a near-floor arm and with an uncaptured arm.
+  [32/506] moe_down  fp16 21x7168x2048 1 case(s)   10.5s   eta   1.6h   torch=10s
+Autotune Choices Stats:
+{"num_choices": 19, "num_triton_choices": 18, "best_kernel": "triton_mm_1832", "best_kernel_desc": "ACC_TYPE='tl.float32', ALLOW_TF32=False, BLOCK_K=32, BLOCK_M=64, BLOCK_N=64, EVEN_K=True, GROUP_M=8, OUT_DTYPE='tl.float16', USE_FAST_ACCUM=False, num_stages=5, num_warps=4", "best_time": 0.005791999865323305, "best_triton_pos": 0}
