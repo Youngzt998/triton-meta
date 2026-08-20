@@ -164,7 +164,10 @@ def _signs(cols):
 
 # Reduction INPUT dtype (the reductions cast to tl.float32 internally, so the f32 accumulation order --
 # hence the checker's soundness -- is dtype-invariant; only the loaded-leaf precision changes).
+_FP8_DT = getattr(torch, "float8_e4m3fn", None)
 _TORCH_DT = {"f16": torch.float16, "bf16": torch.bfloat16, "f32": torch.float32}
+if _FP8_DT is not None:
+    _TORCH_DT["fp8"] = _FP8_DT
 
 
 def _dt(config):
@@ -174,8 +177,16 @@ def _dt(config):
 def _clip_logspace(lo, hi, dt):
     """f16 (max ~65504, min-normal ~6e-5) cannot hold the f32/bf16 ~12-decade dynamic range without
     overflowing to inf, so narrow it for f16 -- still wide enough that reduction ORDER changes the bits.
-    bf16 shares f32's exponent range, so it is left at the full range."""
-    return (max(lo, -3), min(hi, 3)) if dt is torch.float16 else (lo, hi)
+    bf16 shares f32's exponent range, so it is left at the full range.
+
+    fp8 e4m3 tops out at 448 and has no inf, so anything above it casts to NaN and the whole
+    reduction comes back NaN -- which reads as "the bits never changed" and would be a false pass.
+    +-2 decades keeps the widest draw (randn x 100) inside 448 with room to spare."""
+    if dt is torch.float16:
+        return (max(lo, -3), min(hi, 3))
+    if _FP8_DT is not None and dt is _FP8_DT:
+        return (max(lo, -2), min(hi, 2))
+    return (lo, hi)
 
 
 def _adv_sum_2d(rows, cols, seed, dt=torch.float32):
@@ -1067,11 +1078,13 @@ def _k_sum2d_keepdim(X, Out, R: tl.constexpr, N: tl.constexpr, ORD: tl.constexpr
 
 
 @triton.jit
-def _k_sum2d_axis0(X, Out, M: tl.constexpr, C: tl.constexpr, ORD: tl.constexpr):
+def _k_sum2d_axis0(X, Out, M: tl.constexpr, C: tl.constexpr, ORD: tl.constexpr, CAST_F32: tl.constexpr = False):
     g = tl.program_id(0)
     m = tl.arange(0, M)[:, None]
     c = tl.arange(0, C)[None, :]
     x = tl.load(X + g * (M * C) + m * C + c)  # [M, C]
+    if CAST_F32:  # see _needs_f32_operand: fp8 has no add in the backend
+        x = x.to(tl.float32)
     s = tl.sum(x, axis=0, reduction_ordering=ORD)  # [C] (reduce non-contiguous axis)
     tl.store(Out + g * C + tl.arange(0, C), s)
 
@@ -1130,12 +1143,15 @@ def _k_sum_multiaxis(X, Out, M: tl.constexpr, N: tl.constexpr, K: tl.constexpr, 
 
 
 @triton.jit
-def _k_sum3d_outer(X, Out, B: tl.constexpr, M: tl.constexpr, N: tl.constexpr, ORD: tl.constexpr):
+def _k_sum3d_outer(X, Out, B: tl.constexpr, M: tl.constexpr, N: tl.constexpr, ORD: tl.constexpr,
+                   CAST_F32: tl.constexpr = False):
     g = tl.program_id(0)
     b = tl.arange(0, B)[:, None, None]
     m = tl.arange(0, M)[None, :, None]
     n = tl.arange(0, N)[None, None, :]
     x = tl.load(X + g * (B * M * N) + b * (M * N) + m * N + n)  # [B, M, N]
+    if CAST_F32:  # see _needs_f32_operand: fp8 has no add in the backend
+        x = x.to(tl.float32)
     s = tl.sum(x, axis=0, reduction_ordering=ORD)  # [M, N] (reduce the OUTER axis)
     mo = tl.arange(0, M)[:, None]
     no = tl.arange(0, N)[None, :]
@@ -1187,35 +1203,43 @@ def _k_rmsnorm(X, Out, R: tl.constexpr, N: tl.constexpr, ORD: tl.constexpr):
 # reduce the non-contiguous axis 0 so they exercise M2 (except max, which is
 # order-invariant -> a control the pass must leave to the existing heuristics).
 @triton.jit
-def _k_col_sum_loop(X, Out, M: tl.constexpr, C: tl.constexpr, CHUNK: tl.constexpr, ORD: tl.constexpr):
+def _k_col_sum_loop(X, Out, M: tl.constexpr, C: tl.constexpr, CHUNK: tl.constexpr, ORD: tl.constexpr,
+                    CAST_F32: tl.constexpr = False):
     g = tl.program_id(0)
     c = tl.arange(0, C)[None, :]
     acc = tl.zeros([C], dtype=tl.float32)
     for r0 in range(0, M, CHUNK):
         r = (r0 + tl.arange(0, CHUNK))[:, None]
         x = tl.load(X + g * (M * C) + r * C + c)  # [CHUNK, C]
+        if CAST_F32:  # see _needs_f32_operand: fp8 has no add in the backend
+            x = x.to(tl.float32)
         acc += tl.sum(x, axis=0, reduction_ordering=ORD)  # per-chunk column sum (inner_tree within chunk)
     tl.store(Out + g * C + tl.arange(0, C), acc)
 
 
 @triton.jit
-def _k_col_dot(A, B, Out, M: tl.constexpr, C: tl.constexpr, ORD: tl.constexpr):
+def _k_col_dot(A, B, Out, M: tl.constexpr, C: tl.constexpr, ORD: tl.constexpr, CAST_F32: tl.constexpr = False):
     g = tl.program_id(0)
     m = tl.arange(0, M)[:, None]
     c = tl.arange(0, C)[None, :]
     off = g * (M * C) + m * C + c
     a = tl.load(A + off)
     b = tl.load(B + off)
+    if CAST_F32:  # see _needs_f32_operand: fp8 has no mul or add in the backend
+        a = a.to(tl.float32)
+        b = b.to(tl.float32)
     s = tl.sum(a * b, axis=0, reduction_ordering=ORD)  # [C] column-wise dot (mul-fed reduce)
     tl.store(Out + g * C + tl.arange(0, C), s)
 
 
 @triton.jit
-def _k_col_exp_sum(X, Out, M: tl.constexpr, C: tl.constexpr, ORD: tl.constexpr):
+def _k_col_exp_sum(X, Out, M: tl.constexpr, C: tl.constexpr, ORD: tl.constexpr, CAST_F32: tl.constexpr = False):
     g = tl.program_id(0)
     m = tl.arange(0, M)[:, None]
     c = tl.arange(0, C)[None, :]
     x = tl.load(X + g * (M * C) + m * C + c)
+    if CAST_F32:  # see _needs_f32_operand: tl.exp only accepts f32/f64
+        x = x.to(tl.float32)
     s = tl.sum(tl.exp(x), axis=0, reduction_ordering=ORD)  # [C] transcendental then reduce
     tl.store(Out + g * C + tl.arange(0, C), s)
 
@@ -1251,6 +1275,7 @@ class _LK:
     n_inputs: int = 1  # number of input tensors the kernel takes (dot = 2)
     in_dtype: object = None  # input tensor dtype (None -> float32; e.g. torch.bfloat16)
     input_numel: int = 0  # override per-program input size (looped kernels: total loaded != prod(consts))
+    f32_math: bool = False  # the kernel's math (e.g. tl.exp) only accepts f32, so any narrower input widens first
 
     @property
     def tile_numel(self):
@@ -1266,6 +1291,23 @@ class _LK:
         return _plain_nd if self.fusion else _adv_nd
 
 
+def _needs_f32_operand(lk, dt):
+    """Does this (kernel, input dtype) pair have to widen the loaded tile to f32 before the math?
+
+    Two reasons, both hard backend limits rather than choices: fp8 e4m3 has no ``llvm.fadd`` /
+    ``llvm.fmul`` lowering at all, and ``tl.exp`` only accepts f32/f64. Every other combination is
+    left exactly as it was, so the f16/bf16/f32 bits this suite has always produced do not move --
+    the flag is passed only when it is True, so an unmodified kernel never even sees the kwarg.
+    """
+    if _FP8_DT is not None and dt is _FP8_DT:
+        return True
+    return lk.f32_math and dt is not torch.float32
+
+
+def _cast_kwarg(lk, dt):
+    return {"CAST_F32": True} if _needs_f32_operand(lk, dt) else {}
+
+
 def _mk_compile(lk):
     def compile_fn(config, size, maxnreg=None):
         grid = size[0]
@@ -1275,7 +1317,8 @@ def _mk_compile(lk):
         out = torch.empty(grid * lk.out_numel, device=DEVICE, dtype=torch.float32)
         return lk.jit.warmup(*ins, out, grid=(grid, ), ORD=_ORDERING[config.reduction_ordering],
                              num_warps=config.num_warps, num_stages=config.num_stages,
-                             enable_fp_fusion=config.enable_fp_fusion, maxnreg=maxnreg, **lk.consts)
+                             enable_fp_fusion=config.enable_fp_fusion, maxnreg=maxnreg, **lk.consts,
+                             **_cast_kwarg(lk, dt))
 
     return compile_fn
 
@@ -1296,7 +1339,11 @@ def _mk_run(lk):
 def _mk_bench(lk):
     def perf_fn(config, size):
         grid = size[0]
-        dt = lk.in_dtype or torch.float32
+        # The operands must carry the dtype the kernel was COMPILED for. Hardcoding f32 here was
+        # invisible while every reduction spec was f32-only, but it hands an f32 buffer to a kernel
+        # compiled for f16/bf16/fp8 pointers, which reads a fraction of the bytes and times a
+        # kernel that is not the one under test.
+        dt = lk.in_dtype or _dt(config)
         ins = [_plain_nd(grid * lk.tile_numel, i).to(dt) for i in range(lk.n_inputs)]
         out = torch.empty(grid * lk.out_numel, device=DEVICE, dtype=torch.float32)
         ck = _mk_compile(lk)(config, size)
@@ -1355,7 +1402,8 @@ REGISTRY.update({
                  _LK(_k_col_dot, {"M": 256, "C": 32}, out_numel=32, reduce_extent=256, n_inputs=2)),
     "col_exp_sum":
     _layout_spec("col_exp_sum", "[M=256,C=32] sum(exp(x)) axis=0 (transcendental compute then reduce)",
-                 _LK(_k_col_exp_sum, {"M": 256, "C": 32}, out_numel=32, reduce_extent=256, fusion=True)),
+                 _LK(_k_col_exp_sum, {"M": 256, "C": 32}, out_numel=32, reduce_extent=256, fusion=True,
+                     f32_math=True)),
     "col_bf16":
     _layout_spec("col_bf16", "[M=256,C=32] bf16-input column sum axis=0, fp32 accumulate (dtype diversity)",
                  _LK(_k_col_bf16, {"M": 256, "C": 32}, out_numel=32, reduce_extent=256, in_dtype=torch.bfloat16)),
@@ -2149,11 +2197,16 @@ _BIT_RELEVANT = {
 # meaningful, distinct config (only the loaded-leaf precision changes; the f32 accumulation order does
 # not) -> give them f16/bf16/f32. Kernels with a pinned in_dtype (col_bf16) stay in _KERNEL_DTYPE.
 _REDUCTION_DTYPES = ("f16", "bf16", "f32")
+# fp8 e4m3 is only reachable for a reduction whose kernel widens the loaded tile to f32 first (see
+# _needs_f32_operand); the rest would fail to lower, so they keep the three dtypes above and fp8 is
+# added one spec at a time as its kernel gains the widening. Everything already here is unchanged.
+_FP8_CAPABLE = ("sum_2d_axis0", "sum_2d_col", "sum_2d_col_big", "sum_3d_outer", "col_sum_loop", "col_dot",
+                "col_exp_sum")
 for _name, _spec in REGISTRY.items():
     if _spec.valid_dtypes:  # base `gemm` already set its own inline -> leave it
         continue
     if _spec.axes is _REDUCTION_AXES and _name not in _KERNEL_DTYPE:
-        _dtypes = _REDUCTION_DTYPES
+        _dtypes = _REDUCTION_DTYPES + (("fp8", ) if _name in _FP8_CAPABLE and _FP8_DT is not None else ())
     else:
         _dtypes = (_KERNEL_DTYPE.get(_name, "f32"), )
     object.__setattr__(_spec, "valid_dtypes", _dtypes)
