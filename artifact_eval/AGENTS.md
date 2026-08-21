@@ -27,13 +27,23 @@ no torch, so a bare `python artifact_eval/artifact.py` fails before it starts.
 Pin one GPU. A shared GPU does not change the bit results, but it makes every timing meaningless,
 and two of the steps refuse to time on a busy card rather than record a bad number.
 
-Python 3.12, PyTorch 2.12.0+cu130, Triton 3.8.0+fb. `bitequiv/ptx_reduction.py` needs
-`pyptx==0.1.1`. Nothing else has to be installed.
-
 Nothing else has to be exported either. Every step option has a default and no step needs a
 variable set in order to run; the tables in `README.md` are for making a step *shorter*.
 `checker.corpus` is the one step with an input that does not ship, and with no corpus it prints how
 to get one and exits 0 rather than failing.
+
+**If the `.venv`, the built tree or the GB300 does not exist on your machine, stop and read
+`README.md`'s *Environment* section** before trying to fix it. It sets out three levels —
+recompute the tables from the shipped records, re-run the experiments, rebuild from nothing — with
+the exact versions, the wheel set in `requirements.txt`, and the LLVM commit. Those versions are
+written down in one place there and are deliberately not repeated here, so the two files cannot
+drift apart.
+
+The one thing worth knowing up front: **level 1 needs almost nothing.** Unpacking `data/records/`
+into `cache/` and running `--export` regenerates every committed table byte-identically, with no
+GPU, no build, and no torch or Triton importable at all. If a reviewer only wants to check the
+paper's numbers against the evidence behind them, that is the whole job and it takes seconds. Do
+that before proposing a build.
 
 One thing is set for you and you cannot avoid it: importing the step modules turns on
 `TRITON_ALWAYS_COMPILE=1` for the whole process, so **every** step runs with Triton's on-disk
@@ -155,16 +165,19 @@ the step grades whatever groups it finds.
 
 ## 7. Building, if you have to
 
-The prebuilt tree should already work. If you rebuild, one setting fails in a way that looks like a
-compiler bug rather than a build mistake:
+The prebuilt tree should already work. If it does not, this is where section 6 sends you.
 
-**Build `libtriton.so` with the same compiler that built LLVM.** Mixing them — clang against a
-gcc-built LLVM — corrupts the MLIR-to-LLVM translation, and then *every* kernel, down to a trivial
-elementwise add, dies with `dyn_cast on a non-existent value` inside `ModuleTranslation`. It is not
-a Triton bug and there is nothing to bisect. `CMAKE_BUILD_TYPE` and `CMAKE_CXX_COMPILER` are
-cached, so `rm -rf build` is required or a change is silently ignored, and `setup.py` checks
-`REL_WITH_DEB_INFO` before `TRITON_REL_BUILD_WITH_ASSERTS`, so leaving the former set overrides the
-latter without saying so. The full recipe is in `README.md`.
+**The recipe, the LLVM commit, the disk cost and the two warnings all live in `README.md`'s
+*Environment* section, under level 3. Follow it there rather than from memory** — it is the one
+copy, so it cannot go stale against this file. Two things in it are worth knowing before you start,
+because both look like something they are not: mixing compilers between LLVM and `libtriton.so`
+kills *every* kernel in a way that reads as a compiler regression in the fork, and the CMake
+settings are cached, so a change you make is silently ignored unless the build directory is removed
+first.
+
+A rebuild is hours of work and 197 GB of disk for the LLVM build tree. Do not start one to answer a
+question the README's level 1 answers in seconds, and do not start one at all if the only thing
+wanted is the tables.
 
 ## 8. Please do not
 

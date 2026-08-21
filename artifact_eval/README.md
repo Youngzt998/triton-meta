@@ -3,6 +3,11 @@
 Everything runs from one script, `artifact.py`. Each claim in the paper is a separate step, so
 you can evaluate one at a time rather than all of them.
 
+**On a machine that is not this one, read [Environment](#environment) first.** It says what you
+need for each of three levels, and how far you can get without them. The short version: the shipped
+records regenerate every table in the paper with no GPU, no build, and not even torch installed.
+The quick start below assumes a built tree and a GB300.
+
 ## Quick start
 
 Three things, and the first one is the one that catches people.
@@ -1103,6 +1108,9 @@ run_*.txt          captured output of one run, so a reviewer can read a result b
                    line first, because a partial run and a complete one look alike once averaged.
                    Regenerate one by re-running its step; do not hand-edit it
 README.md          this file
+requirements.txt   the exact wheel set the numbers were taken with, from `pip freeze`; see
+                   Environment, level 3. Does NOT cover Triton (build it from this checkout),
+                   LLVM (not a Python package) or cuBLASLt (comes from the system CUDA)
 AGENTS.md          operational notes for an AI agent driving the artifact; CLAUDE.md points here
 data/              committed. Results.
   FORMAT.md        every column of every table, plus the rules for recomputing a table from the
@@ -1137,13 +1145,170 @@ measured twice is in there twice, and a step's own report keeps only the last re
 `data/FORMAT.md` states that rule and the others a reader needs to get the same numbers back out;
 read it before recomputing anything.
 
-## Machine and versions
+## Environment
+
+No container ships with this artifact, so this section has to carry it. **Find your own row in the
+three-level table below before you run anything.** What you can do depends on what you already
+have, and the three levels need very different things.
+
+The dependency chain, measured on this machine:
 
 ```
-GPU        NVIDIA GB300, compute capability 10.3 (sm_103)
+the artifact's code
+  needs  Triton 3.8.0+fb, built from THIS checkout, not a released wheel
+  needs  LLVM 23.0.0git at commit 62b7cf962 -- build tree 197 GB -- BUILD TIME ONLY
+  needs  torch 2.12.0+cu130, CUDA 13.0, cuBLASLt 13.2.2
+  on     aarch64, NVIDIA GB300, compute capability 10.3 (sm_103), 152 SMs
+```
+
+**A released Triton will not do.** The artifact uses `reduction_ordering=inner_tree` and the
+`tritongpu-optimize-reduction-layout` pass, which exist only in this fork, and `bitequiv/` lives in
+this repository and nowhere else. Triton has to be built from this checkout.
+
+**LLVM is needed to build `libtriton.so`, and not to run it.** That sentence decides how daunting
+the rest of this section is. LLVM is the largest cost here — hours, and 197 GB of disk for the
+build tree — and it is a one-off: a reviewer who already has a working build never touches LLVM
+again, and a reviewer who only wants the tables never touches it at all.
+
+| level | what you can do | what it needs | cost |
+|---|---|---|---|
+| **1** | recompute every committed table from the shipped records | a Python 3 and this repository | seconds |
+| **2** | re-run the experiments | this checkout **already built**, and a GB300 | minutes to hours per step |
+| **3** | rebuild the environment from nothing | the LLVM build | hours, and 197 GB of disk |
+
+Level 1 is the one most reviewers will want, and it is the level the artifact fully supports today.
+
+### Level 1 — recompute the tables from the shipped records
+
+`data/records/` holds every raw record every step wrote, gzipped, as they stood when the artifact
+was frozen. Unpack them into `cache/`, run `--export`, and every committed CSV regenerates
+byte-identically.
+
+```
+cd <repo root>
+mkdir -p artifact_eval/cache
+for f in artifact_eval/data/records/*.gz; do
+    case "$f" in *.tar.gz) tar xzf "$f" -C artifact_eval/cache ;;
+                 *) gunzip -c "$f" > "artifact_eval/cache/$(basename "${f%.gz}")" ;; esac
+done
+python3 artifact_eval/artifact.py --export
+```
+
+**No GPU, no experiment, no rebuild — and no torch, no Triton and no virtualenv either.** The
+export path is plain Python: it reads the JSON-lines records and writes CSV, and never imports
+torch or Triton. Checked here two ways — with this box's stock `/usr/bin/python3`, which is 3.9.25
+and has no torch installed, and again with `torch` and `triton` deliberately made non-importable.
+Both produced all nine CSVs and `FORMAT.md` byte-identical to the committed ones. `PYTHONPATH` is
+not needed for `--export` either. The `.venv` interpreter also works and is what
+`data/records/README.md` spells out; nothing at this level requires it.
+
+Start here. It regenerates the tables the paper quotes, so every number in the paper can be checked
+against the records behind it before spending a GPU on anything.
+
+### Level 2 — re-run the experiments
+
+Needs the checkout **already built**, and a GB300. Everything else is in the
+[quick start](#quick-start) and in each step's own section above.
+
+**A different GPU gives different bits, by design and not by error.** Which kernel cuBLAS picks is
+a function of the architecture, the SM count and the cuBLASLt version, and the bits it returns
+follow from that choice. That is the subject of this artifact, not a defect in it. Every run prints
+the architecture and the cuBLASLt version it actually ran against, and warns when either differs
+from the fitted pair; see [Machine and versions](#machine-and-versions) below, which also explains
+the cuBLASLt warning you will see on every run of this artifact.
+
+The bit results do not need an idle GPU. The timings do — run `nvidia-smi` first and pin a free
+device.
+
+### Level 3 — rebuild the environment from nothing
+
+Three things, in this order: the virtualenv, LLVM, then Triton.
+
+**The virtualenv.** `requirements.txt`, next to this README, is `.venv/bin/pip freeze` from the
+machine the numbers came from — the exact wheel set, 73 packages. Its header says which lines were
+edited and why.
+
+```
+python3.12 -m venv .venv
+.venv/bin/pip install -r artifact_eval/requirements.txt
+```
+
+Python 3.12 is what was used. (`.venv/bin/python` reports 3.12.14+meta; `pyvenv.cfg` records the
+3.12.13 it was created with, because the base interpreter was updated in place afterwards. The base
+interpreter here lives at a site-specific path that is no use to you; any 3.12 should do.) Two pins
+will not come from pip cleanly, and the header of `requirements.txt` says so: `torch==2.12.0` may
+give you a CUDA build other than the `+cu130` that was used — check that `torch.version.cuda` reads
+13.0 — and `pyptx==0.1.1` was installed from a local aarch64 wheel. If pip cannot find pyptx, only
+`checker.corpus` is affected: it is the only step whose imports reach it, and that step needs an
+11 GB corpus that does not ship anyway.
+
+cuBLASLt is not a wheel and is not in `requirements.txt`. `bitequiv/cublas_match/ltapi.py` globs
+`/usr/local/cuda*/lib64` and `/usr/local/cuda*/targets/*/lib` and takes the newest by file name; on
+this box that is 13.2.2.2, under `/usr/local/cuda-13.1/`. The `nvidia-cublas` wheel in
+`requirements.txt` is 13.1.1.3 and is not what gets loaded.
+
+**LLVM.** Build time only. `llvm-config --version` reads `23.0.0git`, at commit
+`62b7cf9623fc310525f39ed69aaecc318a909731`. The build tree measures 197 GB, so check your disk
+before starting. Build it with gcc, and read the first warning below before choosing otherwise.
+
+**Triton.** Then, from the repository root:
+
+```
+export LLVM_SYSPATH=$HOME/triton-llvm/llvm-project/build   # the real path, not the ~/.triton cache
+export MLIR_DIR=$LLVM_SYSPATH/lib/cmake/mlir               # CMakeLists.txt needs these explicitly
+export LLVM_DIR=$LLVM_SYSPATH/lib/cmake/llvm
+export JSON_SYSPATH=$HOME/.triton/json                     # required with TRITON_OFFLINE_BUILD=1
+export TRITON_OFFLINE_BUILD=1
+export CMAKE_CXX_COMPILER=c++                              # gcc, to match the LLVM build
+export TRITON_REL_BUILD_WITH_ASSERTS=1                     # match an assertions-enabled LLVM
+export MAX_JOBS=100
+rm -rf build && .venv/bin/pip install -e .
+```
+
+`setup.py` and `pyproject.toml` are at the repository root, and the Python package itself is under
+`python/triton/`; the editable install this box was built with records
+`file:///home/youngzt/bitwise-equiv/triton`, the root. So the last line is `-e .` from the root, not
+`-e python`.
+
+Two warnings, each of which cost hours to find.
+
+**Build `libtriton.so` with the same compiler that built LLVM.** Mixing them — clang against a
+gcc-built LLVM — corrupts the MLIR-to-LLVM translation, and then *every* kernel, down to a trivial
+elementwise add, dies inside `ModuleTranslation` with `dyn_cast on a non-existent value`. It looks
+exactly like a compiler regression in the fork, and it is not one; there is nothing to bisect.
+
+**`CMAKE_BUILD_TYPE` and `CMAKE_CXX_COMPILER` are cached**, so changing either is silently ignored
+unless the build directory is removed first — that is what the `rm -rf build` above is for. And
+`setup.py` checks `REL_WITH_DEB_INFO` *before* `TRITON_REL_BUILD_WITH_ASSERTS`, so leaving the
+former set overrides the latter without saying so.
+
+### Two things that are already decided for you
+
+**The interpreter is `.venv/bin/python`.** Torch, this Triton and everything else are installed
+there and nowhere else. There is no `python` on this box's `PATH` at all, and the system `python3`
+is 3.9 with no torch, so a bare `python artifact_eval/artifact.py` fails before it starts. That is
+why every command in this file spells the interpreter out. Level 1 is the one exception: `--export`
+needs none of it.
+
+**`TRITON_ALWAYS_COMPILE=1` is in force for every step**, not only the two that want it. The two
+`inner_tree` step modules set it at import, and `artifact.py` imports every step module to build
+`--list`, so it is on for `gemm.*` as well. Nothing measured moves — the flag decides whether a
+kernel is rebuilt, not what it computes — but sweeps cost more, and a fixed search budget such as
+`PERF_RANDOM_SEARCH_S` buys fewer configurations than it otherwise would. All the shipped data was
+taken under it, which is why it was documented rather than changed. The
+[quick start](#quick-start) explains it at length.
+
+### Machine and versions
+
+```
+GPU        NVIDIA GB300, compute capability 10.3 (sm_103), 152 SMs
+CPU/OS     aarch64, CentOS Stream 9
 cuBLASLt   13.2.2 as loaded at run time, on all 83 invocations recorded in data/env.csv
            13.1.1 is what the arch profile was FITTED against, so every run prints a warning
+           loaded from /usr/local/cuda-13.1, not from a wheel
+CUDA       13.0, as torch reports it
 Triton     3.8.0+fb, this repository, branch artifact-eval-submission
+LLVM       23.0.0git at 62b7cf962 -- build time only, not needed to run
 PyTorch    2.12.0+cu130
 Python     3.12
 ```
@@ -1158,39 +1323,13 @@ carries 13.2.2 and the recipe in `bitequiv/cublas_match/arch.py` was measured on
 warning says the pair was not measured, not that the result is wrong — and in fact the bits still
 came out identical: `gemm.perf.static` was byte-identical on 5,900 of 5,900 draws on each of its
 two bit-exact arms, over 590 distinct shapes, and `gemm.fusion` on 960 of 960. Silencing it would
-mean adding a
-`((10, 3), (13, 2))` entry to that file's registry, which nobody should do on the strength of one
-box. `data/env.csv` records the loaded version for every invocation, so no row is ambiguous.
+mean adding a `((10, 3), (13, 2))` entry to that file's registry, which nobody should do on the
+strength of one box. `data/env.csv` records the loaded version for every invocation, so no row is
+ambiguous.
 
 Each run also records the exact repository commit it ran at; the runs behind this commit span
 several, because steps were being finished while others were measuring. `data/env.csv` has the
 list.
-
-## Building
-
-The prebuilt tree should already work. If you rebuild, one setting fails in a way that looks like a
-compiler bug rather than a build mistake:
-
-**Build `libtriton.so` with the same compiler that built LLVM.** Mixing them — clang against a
-gcc-built LLVM — corrupts the MLIR-to-LLVM translation, and then *every* kernel, down to a trivial
-elementwise add, dies with `dyn_cast on a non-existent value` inside `ModuleTranslation`.
-
-```
-export LLVM_SYSPATH=$HOME/triton-llvm/llvm-project/build   # the real path, not the ~/.triton cache
-export MLIR_DIR=$LLVM_SYSPATH/lib/cmake/mlir               # CMakeLists.txt needs these explicitly
-export LLVM_DIR=$LLVM_SYSPATH/lib/cmake/llvm
-export JSON_SYSPATH=$HOME/.triton/json                     # required with TRITON_OFFLINE_BUILD=1
-export TRITON_OFFLINE_BUILD=1
-export CMAKE_CXX_COMPILER=c++                              # gcc, to match the LLVM build
-export TRITON_REL_BUILD_WITH_ASSERTS=1                     # match an assertions-enabled LLVM
-export MAX_JOBS=100
-rm -rf build && pip install -e python
-```
-
-`CMAKE_BUILD_TYPE` and `CMAKE_CXX_COMPILER` are cached, so `rm -rf build` is required or a change
-is silently ignored. `setup.py` also checks `REL_WITH_DEB_INFO` *before*
-`TRITON_REL_BUILD_WITH_ASSERTS`, so leaving the former set overrides the latter without saying so.
-`bitequiv/ptx_reduction.py` needs `pyptx==0.1.1`.
 
 ## How the timings are taken, and why
 
