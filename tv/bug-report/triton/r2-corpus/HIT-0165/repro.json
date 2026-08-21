@@ -1,0 +1,120 @@
+{
+ "tag": "HIT-0165",
+ "spec": {
+  "name": "ind:triton_red_fused_prepare_softmax_online_0_110dfea7",
+  "corpus": "inductor",
+  "fn_name": "triton_red_fused_prepare_softmax_online_0_110dfea7",
+  "grid": [
+   1,
+   1,
+   1
+  ],
+  "num_warps": 4,
+  "meta": {
+   "entry": 84,
+   "kernel": "triton_red_fused_prepare_softmax_online_0",
+   "sig": "loads=1 stores=1 reduction for-loop",
+   "category": "85. normalization :: norm_softmax_dim0",
+   "size_hints": {
+    "x": 128,
+    "r0_": 128
+   },
+   "max_hint": 128
+  },
+  "args": [
+   {
+    "name": "in_ptr0",
+    "kind": "ptr",
+    "ty": "*fp32",
+    "value": null,
+    "shape": null,
+    "dtype": null
+   },
+   {
+    "name": "out_ptr0",
+    "kind": "ptr",
+    "ty": "*fp32",
+    "value": null,
+    "shape": null,
+    "dtype": null
+   },
+   {
+    "name": "xnumel",
+    "kind": "int",
+    "ty": "i32",
+    "value": 128,
+    "shape": null,
+    "dtype": null
+   },
+   {
+    "name": "r0_numel",
+    "kind": "int",
+    "ty": "i32",
+    "value": 100,
+    "shape": null,
+    "dtype": null
+   },
+   {
+    "name": "XBLOCK",
+    "kind": "constexpr",
+    "ty": "constexpr",
+    "value": 128,
+    "shape": null,
+    "dtype": null
+   },
+   {
+    "name": "R0_BLOCK",
+    "kind": "constexpr",
+    "ty": "constexpr",
+    "value": 64,
+    "shape": null,
+    "dtype": null
+   }
+  ]
+ },
+ "level": "ttgir",
+ "shape": {
+  "align": {
+   "in_ptr0": 2,
+   "out_ptr0": 8
+  },
+  "consts": {
+   "XBLOCK": 256,
+   "R0_BLOCK": 128
+  },
+  "scalars": {
+   "xnumel": 64
+  },
+  "grid": [
+   1,
+   1,
+   1
+  ],
+  "id": "a0d461c6c4"
+ },
+ "cfg": {
+  "num_warps": 4,
+  "num_ctas": 1,
+  "num_stages": 4,
+  "maxnreg": null,
+  "default_dot_input_precision": "bf16x6",
+  "enable_fp_fusion": false,
+  "launch_cooperative_grid": false,
+  "launch_pdl": true,
+  "sanitize_overflow": false,
+  "id": "2ed75c55da"
+ },
+ "base_flags": [],
+ "ref_flags": [],
+ "added": [
+  "--control-flow-sink",
+  "--tritongpu-coalesce",
+  "--tritongpu-remove-layout-conversions"
+ ],
+ "R": 20,
+ "seed": 103602,
+ "draw": 2,
+ "fill_seed": 104534420,
+ "mode": "nanpay",
+ "target": "cuda:90"
+}

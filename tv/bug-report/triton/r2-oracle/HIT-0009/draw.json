@@ -1,0 +1,184 @@
+{
+ "spec": {
+  "name": "bch:rwkv_ka_fusion_kernel_a1a6115c",
+  "corpus": "bench",
+  "fn_name": "rwkv_ka_fusion_kernel_a1a6115c",
+  "grid": [
+   16,
+   1,
+   1
+  ],
+  "num_warps": 4,
+  "meta": {
+   "runner": "run_flaggems_rwkv_ka_fusion_kernel_a1a6115c",
+   "max_hint": 65536
+  },
+  "args": [
+   {
+    "name": "k_ptr",
+    "kind": "ptr",
+    "ty": "*fp16",
+    "value": null,
+    "shape": [
+     16,
+     512
+    ],
+    "dtype": "torch.float16"
+   },
+   {
+    "name": "kk_ptr",
+    "kind": "ptr",
+    "ty": "*fp16",
+    "value": null,
+    "shape": [
+     512
+    ],
+    "dtype": "torch.float16"
+   },
+   {
+    "name": "a_ptr",
+    "kind": "ptr",
+    "ty": "*fp16",
+    "value": null,
+    "shape": [
+     16,
+     512
+    ],
+    "dtype": "torch.float16"
+   },
+   {
+    "name": "ka_ptr",
+    "kind": "ptr",
+    "ty": "*fp16",
+    "value": null,
+    "shape": [
+     512
+    ],
+    "dtype": "torch.float16"
+   },
+   {
+    "name": "o_k_ptr",
+    "kind": "ptr",
+    "ty": "*fp16",
+    "value": null,
+    "shape": [
+     16,
+     512
+    ],
+    "dtype": "torch.float16"
+   },
+   {
+    "name": "o_kk_ptr",
+    "kind": "ptr",
+    "ty": "*fp16",
+    "value": null,
+    "shape": [
+     16,
+     512
+    ],
+    "dtype": "torch.float16"
+   },
+   {
+    "name": "o_kka_ptr",
+    "kind": "ptr",
+    "ty": "*fp16",
+    "value": null,
+    "shape": [
+     16,
+     512
+    ],
+    "dtype": "torch.float16"
+   },
+   {
+    "name": "T",
+    "kind": "int",
+    "ty": "i32",
+    "value": 16,
+    "shape": null,
+    "dtype": null
+   },
+   {
+    "name": "C",
+    "kind": "int",
+    "ty": "i32",
+    "value": 512,
+    "shape": null,
+    "dtype": null
+   },
+   {
+    "name": "H",
+    "kind": "int",
+    "ty": "i32",
+    "value": 8,
+    "shape": null,
+    "dtype": null
+   },
+   {
+    "name": "N",
+    "kind": "int",
+    "ty": "i32",
+    "value": 64,
+    "shape": null,
+    "dtype": null
+   },
+   {
+    "name": "N_size",
+    "kind": "constexpr",
+    "ty": "constexpr",
+    "value": 64,
+    "shape": null,
+    "dtype": null
+   },
+   {
+    "name": "block_size",
+    "kind": "constexpr",
+    "ty": "constexpr",
+    "value": 512,
+    "shape": null,
+    "dtype": null
+   }
+  ]
+ },
+ "shape": {
+  "cx": {
+   "block_size": 1
+  },
+  "ints": {
+   "N": 131072
+  },
+  "grid": [
+   16,
+   1,
+   1
+  ],
+  "align": [
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0
+  ],
+  "dtypes": {},
+  "size_class": "waves",
+  "touched": 131072
+ },
+ "cfg": {
+  "num_warps": 32,
+  "num_stages": 2,
+  "num_ctas": 1,
+  "maxnreg": null,
+  "default_dot_input_precision": "tf32x3",
+  "launch_cooperative_grid": false,
+  "launch_pdl": false,
+  "sanitize_overflow": true,
+  "enable_fp_fusion": false,
+  "debug": false
+ },
+ "ref_flags": [],
+ "pss": [
+  "--tritongpu-coalesce"
+ ],
+ "oracle": "O2"
+}

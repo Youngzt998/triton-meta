@@ -1,0 +1,114 @@
+{
+ "t": "variant",
+ "kid": "gen_fa_ddb0851b5e4014",
+ "v": {
+  "skip": [
+   "AnnotateReadOnlyParams",
+   "Simplify#5"
+  ],
+  "cfg": {
+   "tl.disable_fast_math": true,
+   "tirx.disable_vectorize": true,
+   "tl.enable_fast_math": true
+  }
+ },
+ "status": "diff",
+ "mode": "denormal",
+ "seed": 4023001,
+ "draw": 1,
+ "labels": [
+  "pass-class:numerics-changing",
+  "kernel-has-gemm",
+  "kernel-has-reduce",
+  "input-mode:denormal",
+  "shared-config:ptxas-reg-level=2",
+  "shared-config:index-bits=64",
+  "few-ulp"
+ ],
+ "nums": {
+  "ulp_max": 0,
+  "n_diff": 7488,
+  "n_total": 24576,
+  "max_abs_diff": 0.0
+ },
+ "diffs": [
+  {
+   "arg": 3,
+   "dtype": "bfloat16",
+   "shape": [
+    1,
+    4,
+    192,
+    32
+   ],
+   "kind": "nan_payload_only",
+   "nan_ref": 0,
+   "nan_cand": 0,
+   "nan_mask_differs": false,
+   "n_diff": 7488,
+   "n_total": 24576
+  }
+ ],
+ "confirm": {
+  "draw": 1,
+  "mode": "denormal",
+  "seed": 4023001,
+  "draws_differing": [
+   1,
+   10,
+   19
+  ],
+  "n_draws": 20,
+  "draw_modes": {
+   "1": "denormal",
+   "10": "denormal",
+   "19": "denormal"
+  },
+  "cand_self_consistent": true,
+  "diff_under_heap_shift": true,
+  "ref_self_consistent": true,
+  "shared_fast_math": false,
+  "accum_inexact": "`tirx.exp2` is a transcendental / inexact op: it sits between the inputs and the accumulator, so an fp32 accumulator no longer holds an exact integer and summation order CAN change a bit",
+  "int_control_exact": false,
+  "int_control_differs": false,
+  "ref_nan_frac": 0.0
+ },
+ "minimal": {
+  "skip": [],
+  "cfg": {
+   "tirx.disable_vectorize": true,
+   "tl.enable_fast_math": true
+  },
+  "order": []
+ },
+ "item": {
+  "kind": "gen",
+  "spec": {
+   "fam": "fa",
+   "p": {
+    "B": 1,
+    "H": 4,
+    "SQ": 192,
+    "SKV": 768,
+    "D": 32,
+    "bM": 128,
+    "bN": 128,
+    "th": 128,
+    "st": 0,
+    "causal": false,
+    "dt": "bfloat16",
+    "pol": "FullRow"
+   },
+   "pc": {
+    "tl.ptxas_register_usage_level": 2,
+    "tl.config_index_bitwidth": 64
+   }
+  },
+  "kid": "gen_fa_ddb0851b5e4014"
+ },
+ "modes": [
+  "denormal"
+ ],
+ "ref_chars": 11474,
+ "cand_chars": 11089
+}

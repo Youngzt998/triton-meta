@@ -1,0 +1,21 @@
+{
+ "fam": "fa",
+ "p": {
+  "B": 1,
+  "H": 4,
+  "SQ": 192,
+  "SKV": 768,
+  "D": 32,
+  "bM": 128,
+  "bN": 128,
+  "th": 128,
+  "st": 0,
+  "causal": false,
+  "dt": "bfloat16",
+  "pol": "FullRow"
+ },
+ "pc": {
+  "tl.ptxas_register_usage_level": 2,
+  "tl.config_index_bitwidth": 64
+ }
+}

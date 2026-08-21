@@ -1,0 +1,43 @@
+{
+ "diff_lines_added": 19,
+ "diff_lines_removed": 29,
+ "ops_only_in_output": [],
+ "ops_only_in_input": [
+  "ttg.convert_layout"
+ ],
+ "ops_in_diff": [
+  "arith.cmpf",
+  "arith.cmpi",
+  "arith.ori",
+  "arith.select",
+  "tt.addptr",
+  "tt.broadcast",
+  "tt.expand_dims",
+  "tt.load",
+  "tt.make_range",
+  "tt.ptr",
+  "tt.reduce",
+  "tt.reduce.return",
+  "tt.splat",
+  "tt.store",
+  "ttg.blocked",
+  "ttg.convert_layout",
+  "ttg.slice"
+ ],
+ "layout_attrs_only_in_output": [],
+ "layout_attrs_only_in_input": [
+  "blocked1",
+  "blocked2",
+  "blocked3",
+  "blocked4"
+ ],
+ "hopper_tokens_in_diff": [],
+ "blackwell_tokens_in_diff": [],
+ "concurrency_constructs_in_either_ir": [],
+ "cross_instance_constructs_in_either_ir": [],
+ "has_dot": false,
+ "has_reduce": true,
+ "has_loop": false,
+ "diff_head": "@@ -1,5 +1 @@\n-#blocked = #ttg.blocked<{sizePerThread = [1, 1], threadsPerWarp = [2, 16], warpsPerCTA = [4, 1], order = [1, 0]}>\n-#blocked1 = #ttg.blocked<{sizePerThread = [1], threadsPerWarp = [32], warpsPerCTA = [4], order = [0]}>\n-#blocked2 = #ttg.blocked<{sizePerThread = [1, 1], threadsPerWarp = [1, 32], warpsPerCTA = [1, 4], order = [0, 1]}>\n-#blocked3 = #ttg.blocked<{sizePerThread = [1, 1], threadsPerWarp = [32, 1], warpsPerCTA = [4, 1], order = [0, 1]}>\n-#blocked4 = #ttg.blocked<{sizePerThread = [1, 1], threadsPerWarp = [32, 1], warpsPerCTA = [4, 1], order = [1, 0]}>\n+#blocked = #ttg.blocked<{sizePerThread = [1, 1], threadsPerWarp = [32, 1], warpsPerCTA = [4, 1], order = [1, 0]}>\n@@ -11,13 +7,10 @@\n-    %0 = tt.make_range {end = 16 : i32, start = 0 : i32} : tensor<16xi32, #blocked1>\n-    %1 = ttg.convert_layout %0 : tensor<16xi32, #blocked1> -> tensor<16xi32, #ttg.slice<{dim = 0, parent = #blocked2}>>\n-    %2 = tt.expand_dims %1 {axis = 0 : i32} : tensor<16xi32, #ttg.slice<{dim = 0, parent = #blocked2}>> -> tensor<1x16xi32, #blocked2>\n-    %3 = ttg.convert_layout %2 : tensor<1x16xi32, #blocked2> -> tensor<1x16xi32, #blocked>\n-    %4 = ttg.convert_layout %2 : tensor<1x16xi32, #blocked2> -> tensor<1x16xi32, #blocked>\n-    %5 = arith.cmpi slt, %4, %cst_1 : tensor<1x16xi32, #blocked>\n-    %6 = tt.splat %arg0 : !tt.ptr<f32> -> tensor<1x16x!tt.ptr<f32>, #blocked>\n-    %7 = tt.addptr %6, %3 : tensor<1x16x!tt.ptr<f32>, #blocked>, tensor<1x16xi32, #blocked>\n-    %8 = tt.load %7, %5, %cst_0 evictionPolicy = evict_first : tensor<1x16x!tt.ptr<f32>, #blocked>\n-    %9 = tt.broadcast %8 : tensor<1x16xf32, #blocked> -> tensor<64x16xf32, #blocked>\n-    %10 = tt.broadcast %5 : tensor<1x16xi1, #blocked> -> tensor<64x16xi1, #blocked>\n-    %11 = arith.select %10, %9, %cst : tensor<64x16xi1, #blocked>, tensor<64x16xf32, #blocked>\n-    %12 = \"tt.reduce\"(%11) <{axis = 1 : i32}> ({\n+    %0 = tt.make_range {end = 16 : i32, start = 0 : i32} : tensor<16xi32, #ttg.slice<{dim = 0, parent = #blocked}>>\n+    %1 = tt.expand_dims %0 {axis = 0 : i32} : tensor<16xi32, #ttg.slice<{dim = 0, parent = #blocked}>> -> tensor<1x16xi32, #blocked>\n+    %2 = arith.cmpi slt, %1, %cst_1 : tensor<1x16xi32, #blocked>\n+    %3 = tt.splat %arg0 : !tt.ptr<f32> -> tensor<1x16x!tt.ptr<f32>, #blocked>\n+    %4 = tt.addptr %3, %1 : tensor<1x16x!tt.ptr<f32>, #blocked>, tensor<1x16xi32, #blocked>\n+    %5 = tt.load %4, %2, %cst_0 evictionPolicy = evict_first : tensor<1x16x!tt.ptr<f32>, #blocked>\n+    %6 = tt.broadcast %5 : tensor<1x16xf32, #blocked> -> tensor<64x16xf32, #blocked>\n+    %7 = tt.broadcast %2 : tensor<1x16xi1, #blocked> -> tensor<64x16xi1, #blocked>\n+    %8 = arith.select %7, %6, %cst : tensor<64x16xi1, #blocked>, tensor<64x16xf32, #blocked>\n+    %9 = \"tt.reduce\"(%8) <{axis = 1 : i32}> ({\n@@ -25,5 +18,5 @@\n-      %18 = arith.cmpf ogt, %arg3, %arg4 : f32\n-      %19 = arith.cmpf une, %arg3, %arg3 : f32\n-      %20 = arith.ori %18, %19 : i1\n-      %21 = arith.select %20, %arg3, %arg4 : f32\n-      tt.reduce.return %21 : f32\n+      %12 = arith.cmpf ogt, %arg3, %arg4 : f32\n+      %13 = arith.cmpf une, %arg3, %arg3 : f32\n+      %14 = arith.ori %12, %13 : i1\n+      %15 = arith.select %14, %arg3, %arg4 : f32\n+      tt.reduce.return %15 : f32\n@@ -31,6 +24,3 @@\n-    %13 = ttg.convert_layout %12 : tensor<64xf32, #ttg.slice<{dim = 1, parent = #blocked}>> -> tensor<64xf32, #blocked1>\n-    %14 = ttg.convert_layout %13 : tensor<64xf32, #blocked1> -> tensor<64xf32, #ttg.slice<{dim = 1, parent = #blocked3}>>\n-    %15 = tt.expand_dims %14 {axis = 1 : i32} : tensor<64xf32, #ttg.slice<{dim = 1, parent = #blocked3}>> -> tensor<64x1xf32, #blocked3>\n-    %16 = ttg.convert_layout %15 : tensor<64x1xf32, #blocked3> -> tensor<64x1xf32, #blocked4>\n-    %17 = tt.splat %arg1 : !tt.ptr<f32> -> tensor<64x1x!tt.ptr<f32>, #blocked4>\n-    tt.store %17, %16 : tensor<64x1x!tt.ptr<f32>, #blocked4>\n+    %10 = tt.expand_dims %9 {axis = 1 : i32} : tensor<64xf32, #ttg.slice<{dim = 1, parent = #blocked}>> -> tensor<64x1xf32, #blocked>\n+    %11 = tt.splat %arg1 : !tt.ptr<f32> -> tensor<64x1x!tt.ptr<f32>, #blocked>\n+    tt.store %11, %10 : tensor<64x1x!tt.ptr<f32>, #blocked>",
+ "diff_full_lines": 52
+}

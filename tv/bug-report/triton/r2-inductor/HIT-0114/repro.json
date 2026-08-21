@@ -1,0 +1,98 @@
+{
+ "tag": "HIT-0114",
+ "spec": {
+  "name": "gen:triton_per_fused__to_copy_abs_add_atan2_neg_pow_std_2_4fa5bb1f",
+  "fn_name": "triton_per_fused__to_copy_abs_add_atan2_neg_pow_std_2_4fa5bb1f",
+  "file": "corpus/gen/triton_per_fused__to_copy_abs_add_atan2_neg_pow_std_2_4fa5bb1f.py",
+  "grid": [
+   1,
+   1,
+   1
+  ],
+  "meta": {
+   "struct_sig": "46fdfc794e5fd1b9",
+   "seed": 1580,
+   "program": "corpus/programs/p_1580.py",
+   "heuristic": "persistent_reduction",
+   "inductor_name": "triton_per_fused__to_copy_abs_add_atan2_neg_pow_std_2",
+   "slot_elems": 4135,
+   "align_mode": "aligned",
+   "numels": {
+    "xnumel": 1,
+    "r0_numel": 37
+   },
+   "blocks": {
+    "XBLOCK": 16,
+    "xnumel": 1
+   }
+  },
+  "patch": {
+   "r0_numel": 37
+  },
+  "ptr_off": [
+   0,
+   0,
+   0
+  ],
+  "cfg": {
+   "num_warps": 8,
+   "num_ctas": 2,
+   "num_stages": 7,
+   "maxnreg": 64,
+   "default_dot_input_precision": "bf16x3",
+   "launch_cooperative_grid": false,
+   "launch_pdl": false,
+   "sanitize_overflow": true,
+   "enable_fp_fusion": false
+  },
+  "args": [
+   {
+    "name": "in_out_ptr0",
+    "kind": "ptr",
+    "ty": "*fp32",
+    "value": null
+   },
+   {
+    "name": "in_ptr0",
+    "kind": "ptr",
+    "ty": "*bf16",
+    "value": null
+   },
+   {
+    "name": "out_ptr0",
+    "kind": "ptr",
+    "ty": "*bf16",
+    "value": null
+   },
+   {
+    "name": "xnumel",
+    "kind": "constexpr",
+    "ty": "constexpr",
+    "value": 1
+   },
+   {
+    "name": "r0_numel",
+    "kind": "int",
+    "ty": "i32",
+    "value": 37
+   },
+   {
+    "name": "XBLOCK",
+    "kind": "constexpr",
+    "ty": "constexpr",
+    "value": 16
+   }
+  ]
+ },
+ "ref_flags": [],
+ "added": [
+  "--triton-nvidia-gpu-plan-cta"
+ ],
+ "R": 18,
+ "seed": 23757,
+ "draw": 5,
+ "fill_seed": 23970818,
+ "mode": "extreme",
+ "program_seed": 1580,
+ "target": "cuda:90"
+}

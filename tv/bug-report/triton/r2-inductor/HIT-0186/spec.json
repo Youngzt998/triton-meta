@@ -1,0 +1,105 @@
+{
+ "name": "gen:triton_red_fused_abs_add_all_amax_eq_ge_mean_mul_ne_neg_pow_scalar_tensor_sub_unsqueeze_where_2_3551b7e9",
+ "fn_name": "triton_red_fused_abs_add_all_amax_eq_ge_mean_mul_ne_neg_pow_scalar_tensor_sub_unsqueeze_where_2_3551b7e9",
+ "file": "corpus/gen/triton_red_fused_abs_add_all_amax_eq_ge_mean_mul_ne_neg_pow_scalar_tensor_sub_unsqueeze_where_2_3551b7e9.py",
+ "grid": [
+  1,
+  1,
+  1
+ ],
+ "meta": {
+  "struct_sig": "cc2b8a1e19c362c6",
+  "seed": 59,
+  "program": "corpus/programs/p_59.py",
+  "heuristic": "reduction",
+  "inductor_name": "triton_red_fused_abs_add_all_amax_eq_ge_mean_mul_ne_neg_pow_scalar_tensor_sub_unsqueeze_where_2",
+  "slot_elems": 34816,
+  "align_mode": "elem",
+  "numels": {
+   "xnumel": 1,
+   "r0_numel": 28
+  },
+  "blocks": {
+   "XBLOCK": 8,
+   "R0_BLOCK": 128
+  }
+ },
+ "patch": {
+  "xnumel": 1,
+  "r0_numel": 28
+ },
+ "ptr_off": [
+  0,
+  8,
+  8,
+  1,
+  0
+ ],
+ "cfg": {
+  "num_warps": 4,
+  "num_ctas": 1,
+  "num_stages": 5,
+  "maxnreg": null,
+  "default_dot_input_precision": "tf32",
+  "launch_cooperative_grid": false,
+  "launch_pdl": false,
+  "sanitize_overflow": false,
+  "enable_fp_fusion": false
+ },
+ "args": [
+  {
+   "name": "in_ptr0",
+   "kind": "ptr",
+   "ty": "*fp32",
+   "value": null
+  },
+  {
+   "name": "in_ptr1",
+   "kind": "ptr",
+   "ty": "*fp32",
+   "value": null
+  },
+  {
+   "name": "out_ptr0",
+   "kind": "ptr",
+   "ty": "*i1",
+   "value": null
+  },
+  {
+   "name": "out_ptr1",
+   "kind": "ptr",
+   "ty": "*fp32",
+   "value": null
+  },
+  {
+   "name": "out_ptr2",
+   "kind": "ptr",
+   "ty": "*fp32",
+   "value": null
+  },
+  {
+   "name": "xnumel",
+   "kind": "int",
+   "ty": "i32",
+   "value": 1
+  },
+  {
+   "name": "r0_numel",
+   "kind": "int",
+   "ty": "i32",
+   "value": 28
+  },
+  {
+   "name": "XBLOCK",
+   "kind": "constexpr",
+   "ty": "constexpr",
+   "value": 8
+  },
+  {
+   "name": "R0_BLOCK",
+   "kind": "constexpr",
+   "ty": "constexpr",
+   "value": 128
+  }
+ ]
+}

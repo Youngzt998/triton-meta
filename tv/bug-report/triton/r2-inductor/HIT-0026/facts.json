@@ -1,0 +1,47 @@
+{
+ "diff_lines_added": 83,
+ "diff_lines_removed": 64,
+ "ops_only_in_output": [
+  "ttg.blocked"
+ ],
+ "ops_only_in_input": [],
+ "ops_in_diff": [
+  "arith.addf",
+  "arith.addi",
+  "arith.andi",
+  "arith.cmpf",
+  "arith.muli",
+  "arith.negf",
+  "arith.ori",
+  "arith.select",
+  "math.absf",
+  "tt.addptr",
+  "tt.broadcast",
+  "tt.expand_dims",
+  "tt.extern_elementwise",
+  "tt.load",
+  "tt.ptr",
+  "tt.reduce",
+  "tt.reduce.return",
+  "tt.splat",
+  "tt.store",
+  "ttg.blocked",
+  "ttg.convert_layout",
+  "ttg.slice"
+ ],
+ "layout_attrs_only_in_output": [
+  "blocked5",
+  "blocked6",
+  "ttg.blocked"
+ ],
+ "layout_attrs_only_in_input": [],
+ "hopper_tokens_in_diff": [],
+ "blackwell_tokens_in_diff": [],
+ "concurrency_constructs_in_either_ir": [],
+ "cross_instance_constructs_in_either_ir": [],
+ "has_dot": false,
+ "has_reduce": true,
+ "has_loop": false,
+ "diff_head": "@@ -5,0 +6,2 @@\n+#blocked5 = #ttg.blocked<{sizePerThread = [2, 1], threadsPerWarp = [4, 8], warpsPerCTA = [1, 32], order = [0, 1]}>\n+#blocked6 = #ttg.blocked<{sizePerThread = [1, 1], threadsPerWarp = [8, 4], warpsPerCTA = [1, 32], order = [0, 1]}>\n@@ -44,52 +46,66 @@\n-    %29 = tt.load %24, %28, %cst_0 evictionPolicy = evict_first : tensor<8x256x!tt.ptr<f32>, #blocked>\n-    %30 = arith.muli %14, %cst_1 : tensor<1x256xi32, #blocked>\n-    %31 = tt.broadcast %7 : tensor<8x1xi32, #blocked1> -> tensor<8x256xi32, #blocked1>\n-    %32 = ttg.convert_layout %31 : tensor<8x256xi32, #blocked1> -> tensor<8x256xi32, #blocked>\n-    %33 = tt.broadcast %30 : tensor<1x256xi32, #blocked> -> tensor<8x256xi32, #blocked>\n-    %34 = arith.addi %32, %33 : tensor<8x256xi32, #blocked>\n-    %35 = tt.splat %arg1 : !tt.ptr<f32> -> tensor<8x256x!tt.ptr<f32>, #blocked>\n-    %36 = tt.addptr %35, %34 : tensor<8x256x!tt.ptr<f32>, #blocked>, tensor<8x256xi32, #blocked>\n-    %37 = tt.broadcast %17 : tensor<1x256xi1, #blocked> -> tensor<8x256xi1, #blocked>\n-    %38 = tt.broadcast %8 : tensor<8x1xi1, #blocked1> -> tensor<8x256xi1, #blocked1>\n-    %39 = ttg.convert_layout %38 : tensor<8x256xi1, #blocked1> -> tensor<8x256xi1, #blocked>\n-    %40 = arith.andi %37, %39 : tensor<8x256xi1, #blocked>\n-    %41 = tt.load %36, %40, %cst_0 evictionPolicy = evict_first : tensor<8x256x!tt.ptr<f32>, #blocked>\n-    %42 = arith.negf %29 : tensor<8x256xf32, #blocked>\n-    %43 = tt.extern_elementwise %41 {libname = \"\", libpath = \"\", pure = true, symbol = \"__nv_tanhf\"} : (tensor<8x256xf32, #blocked>) -> tensor<8x256xf32, #blocked>\n-    %44 = math.absf %43 : tensor<8x256xf32, #blocked>\n-    %45 = arith.addf %44, %cst : tensor<8x256xf32, #blocked>\n-    %46 = tt.extern_elementwise %42, %45 {libname = \"\", libpath = \"\", pure = true, symbol = \"__nv_fmodf\"} : (tensor<8x256xf32, #blocked>, tensor<8x256xf32, #blocked>) -> tensor<8x256xf32, #blocked>\n-    %47 = arith.cmpf ogt, %cst_3, %43 : tensor<8x256xf32, #blocked>\n-    %48 = arith.cmpf une, %cst_3, %cst_3 : tensor<8x256xf32, #blocked>\n-    %49 = arith.ori %47, %48 : tensor<8x256xi1, #blocked>\n-    %50 = arith.select %49, %cst_3, %43 : tensor<8x256xi1, #blocked>, tensor<8x256xf32, #blocked>\n-    %51 = tt.broadcast %17 : tensor<1x256xi1, #blocked> -> tensor<8x256xi1, #blocked>\n-    %52 = tt.broadcast %8 : tensor<8x1xi1, #blocked1> -> tensor<8x256xi1, #blocked1>\n-    %53 = ttg.convert_layout %52 : tensor<8x256xi1, #blocked1> -> tensor<8x256xi1, #blocked>\n-    %54 = arith.andi %51, %53 : tensor<8x256xi1, #blocked>\n-    %55 = arith.select %54, %50, %cst_3 : tensor<8x256xi1, #blocked>, tensor<8x256xf32, #blocked>\n-    %56 = arith.muli %13, %cst_1 : tensor<1x256xi32, #blocked>\n-    %57 = tt.broadcast %7 : tensor<8x1xi32, #blocked1> -> tensor<8x256xi32, #blocked1>\n-    %58 = ttg.convert_layout %57 : tensor<8x256xi32, #blocked1> -> tensor<8x256xi32, #blocked>\n-    %59 = tt.broadcast %56 : tensor<1x256xi32, #blocked> -> tensor<8x256xi32, #blocked>\n-    %60 = arith.addi %58, %59 : tensor<8x256xi32, #blocked>\n-    %61 = tt.splat %arg2 : !tt.ptr<f32> -> tensor<8x256x!tt.ptr<f32>, #blocked>\n-    %62 = tt.addptr %61, %60 : tensor<8x256x!tt.ptr<f32>, #blocked>, tensor<8x256xi32, #blocked>\n-    %63 = tt.broadcast %17 : tensor<1x256xi1, #blocked> -> tensor<8x256xi1, #blocked>\n-    %64 = tt.broadcast %8 : tensor<8x1xi1, #blocked1> -> tensor<8x256xi1, #blocked1>\n-    %65 = ttg.convert_layout %64 : tensor<8x256xi1, #blocked1> -> tensor<8x256xi1, #blocked>\n-    %66 = arith.andi %63, %65 : tensor<8x256xi1, #blocked>\n-    tt.store %62, %42, %66 : tensor<8x256x!tt.ptr<f32>, #blocked>\n-    %67 = arith.muli %12, %cst_1 : tensor<1x256xi32, #blocked>\n-    %68 = tt.broadcast %7 : tensor<8x1xi32, #blocked1> -> tensor<8x256xi32, #blocked1>\n-    %69 = ttg.convert_layout %68 : tensor<8x256xi32, #blocked1> -> tensor<8x256xi32, #blocked>\n-    %70 = tt.broadcast %67 : tensor<1x256xi32, #blocked> -> tensor<8x256xi32, #blocked>\n-    %71 = arith.addi %69, %70 : tensor<8x256xi32, #blocked>\n-    %72 = tt.splat %arg3 : !tt.ptr<f32> -> tensor<8x256x!tt.ptr<f32>, #blocked>\n-    %73 = tt.addptr %72, %71 : tensor<8x256x!tt.ptr<f32>, #blocked>, tensor<8x256xi32, #blocked>\n-    %74 = tt.broadcast %17 : tensor<1x256xi1, #blocked> -> tensor<8x256xi1, #blocked>\n-    %75 = tt.broadcast %8 : tensor<8x1xi1, #blocked1> -> tensor<8x256xi1, #blocked1>\n-    %76 = ttg.convert_layout %75 : tensor<8x256xi1, #blocked1> -> tensor<8x256xi1, #blocked>\n-    %77 = arith.andi %74, %76 : tensor<8x256xi1, #blocked>\n-    tt.store %73, %46, %77 : tensor<8x256x!tt.ptr<f32>, #blocked>\n-    %78 = \"tt.reduce\"(%55) <{axis = 1 : i32}> ({\n+    %29 = ttg.convert_layout %24 : tensor<8x256x!tt.ptr<f32>, #blocked> -> tensor<8x256x!tt.ptr<f32>, #blocked5>\n+    %30 = ttg.convert_layout %28 : tensor<8x256xi1, #blocked> -> tensor<8x256xi1, #blocked5>\n+    %31 = ttg.convert_layout %cst_0 : tensor<8x256xf32, #blocked> -> tensor<8x256xf32, #blocked5>\n+    %32 = tt.load %29, %30, %31 evictionPolicy = evict_first : tensor<8x256x!tt.ptr<f32>, #blocked5>",
+ "diff_full_lines": 151
+}

@@ -1,0 +1,41 @@
+{
+ "diff_lines_added": 29,
+ "diff_lines_removed": 30,
+ "ops_only_in_output": [],
+ "ops_only_in_input": [
+  "ttg.convert_layout"
+ ],
+ "ops_in_diff": [
+  "arith.cmpi",
+  "arith.constant",
+  "arith.select",
+  "arith.subi",
+  "tt.addptr",
+  "tt.broadcast",
+  "tt.expand_dims",
+  "tt.load",
+  "tt.make_range",
+  "tt.ptr",
+  "tt.reduce",
+  "tt.splat",
+  "tt.store",
+  "ttg.blocked",
+  "ttg.convert_layout",
+  "ttg.slice"
+ ],
+ "layout_attrs_only_in_output": [],
+ "layout_attrs_only_in_input": [
+  "blocked2",
+  "blocked3",
+  "blocked4"
+ ],
+ "hopper_tokens_in_diff": [],
+ "blackwell_tokens_in_diff": [],
+ "concurrency_constructs_in_either_ir": [],
+ "cross_instance_constructs_in_either_ir": [],
+ "has_dot": false,
+ "has_reduce": true,
+ "has_loop": false,
+ "diff_head": "@@ -2,4 +2 @@\n-#blocked1 = #ttg.blocked<{sizePerThread = [1], threadsPerWarp = [32], warpsPerCTA = [4], order = [0]}>\n-#blocked2 = #ttg.blocked<{sizePerThread = [1, 1], threadsPerWarp = [1, 32], warpsPerCTA = [1, 4], order = [0, 1]}>\n-#blocked3 = #ttg.blocked<{sizePerThread = [1, 1], threadsPerWarp = [32, 1], warpsPerCTA = [4, 1], order = [0, 1]}>\n-#blocked4 = #ttg.blocked<{sizePerThread = [1, 1], threadsPerWarp = [32, 1], warpsPerCTA = [4, 1], order = [1, 0]}>\n+#blocked1 = #ttg.blocked<{sizePerThread = [1, 1], threadsPerWarp = [32, 1], warpsPerCTA = [4, 1], order = [1, 0]}>\n@@ -8 +5 @@\n-    %cst = arith.constant dense<0xFF800000> : tensor<128x16xf32, #blocked>\n+    %cst = arith.constant dense<15> : tensor<1x16xi32, #blocked>\n@@ -10,16 +7,21 @@\n-    %cst_1 = arith.constant dense<15> : tensor<1x16xi32, #blocked>\n-    %0 = tt.make_range {end = 16 : i32, start = 0 : i32} : tensor<16xi32, #blocked1>\n-    %1 = ttg.convert_layout %0 : tensor<16xi32, #blocked1> -> tensor<16xi32, #ttg.slice<{dim = 0, parent = #blocked2}>>\n-    %2 = tt.expand_dims %1 {axis = 0 : i32} : tensor<16xi32, #ttg.slice<{dim = 0, parent = #blocked2}>> -> tensor<1x16xi32, #blocked2>\n-    %3 = ttg.convert_layout %2 : tensor<1x16xi32, #blocked2> -> tensor<1x16xi32, #blocked>\n-    %4 = ttg.convert_layout %2 : tensor<1x16xi32, #blocked2> -> tensor<1x16xi32, #blocked>\n-    %5 = ttg.convert_layout %2 : tensor<1x16xi32, #blocked2> -> tensor<1x16xi32, #blocked>\n-    %6 = arith.cmpi slt, %5, %cst_1 : tensor<1x16xi32, #blocked>\n-    %7 = arith.subi %cst_1, %4 : tensor<1x16xi32, #blocked>\n-    %8 = tt.splat %arg0 : !tt.ptr<f32> -> tensor<1x16x!tt.ptr<f32>, #blocked>\n-    %9 = tt.addptr %8, %7 : tensor<1x16x!tt.ptr<f32>, #blocked>, tensor<1x16xi32, #blocked>\n-    %10 = tt.load %9, %6, %cst_0 evictionPolicy = evict_last : tensor<1x16x!tt.ptr<f32>, #blocked>\n-    %11 = tt.broadcast %10 : tensor<1x16xf32, #blocked> -> tensor<128x16xf32, #blocked>\n-    %12 = tt.broadcast %6 : tensor<1x16xi1, #blocked> -> tensor<128x16xi1, #blocked>\n-    %13 = arith.select %12, %11, %cst : tensor<128x16xi1, #blocked>, tensor<128x16xf32, #blocked>\n-    %14 = \"tt.reduce\"(%13) <{axis = 1 : i32}> ({\n+    %cst_1 = arith.constant dense<0xFF800000> : tensor<128x16xf32, #blocked1>\n+    %cst_2 = arith.constant dense<0.000000e+00> : tensor<1x16xf32, #blocked1>\n+    %cst_3 = arith.constant dense<15> : tensor<1x16xi32, #blocked1>\n+    %0 = tt.make_range {end = 16 : i32, start = 0 : i32} : tensor<16xi32, #ttg.slice<{dim = 0, parent = #blocked1}>>\n+    %1 = tt.make_range {end = 16 : i32, start = 0 : i32} : tensor<16xi32, #ttg.slice<{dim = 0, parent = #blocked}>>\n+    %2 = tt.expand_dims %0 {axis = 0 : i32} : tensor<16xi32, #ttg.slice<{dim = 0, parent = #blocked1}>> -> tensor<1x16xi32, #blocked1>\n+    %3 = tt.expand_dims %1 {axis = 0 : i32} : tensor<16xi32, #ttg.slice<{dim = 0, parent = #blocked}>> -> tensor<1x16xi32, #blocked>\n+    %4 = arith.cmpi slt, %2, %cst_3 : tensor<1x16xi32, #blocked1>\n+    %5 = arith.cmpi slt, %3, %cst : tensor<1x16xi32, #blocked>\n+    %6 = arith.subi %cst_3, %2 : tensor<1x16xi32, #blocked1>\n+    %7 = arith.subi %cst, %3 : tensor<1x16xi32, #blocked>\n+    %8 = tt.splat %arg0 : !tt.ptr<f32> -> tensor<1x16x!tt.ptr<f32>, #blocked1>\n+    %9 = tt.splat %arg0 : !tt.ptr<f32> -> tensor<1x16x!tt.ptr<f32>, #blocked>\n+    %10 = tt.addptr %8, %6 : tensor<1x16x!tt.ptr<f32>, #blocked1>, tensor<1x16xi32, #blocked1>\n+    %11 = tt.addptr %9, %7 : tensor<1x16x!tt.ptr<f32>, #blocked>, tensor<1x16xi32, #blocked>\n+    %12 = tt.load %10, %4, %cst_2 evictionPolicy = evict_last : tensor<1x16x!tt.ptr<f32>, #blocked1>\n+    %13 = tt.load %11, %5, %cst_0 evictionPolicy = evict_last : tensor<1x16x!tt.ptr<f32>, #blocked>\n+    %14 = tt.broadcast %12 : tensor<1x16xf32, #blocked1> -> tensor<128x16xf32, #blocked1>\n+    %15 = tt.broadcast %4 : tensor<1x16xi1, #blocked1> -> tensor<128x16xi1, #blocked1>\n+    %16 = arith.select %15, %14, %cst_1 : tensor<128x16xi1, #blocked1>, tensor<128x16xf32, #blocked1>\n+    %17 = \"tt.reduce\"(%16) <{axis = 1 : i32}> ({\n@@ -32,5 +34,2 @@\n-    }) : (tensor<128x16xf32, #blocked>) -> tensor<128xf32, #ttg.slice<{dim = 1, parent = #blocked}>>\n-    %15 = ttg.convert_layout %14 : tensor<128xf32, #ttg.slice<{dim = 1, parent = #blocked}>> -> tensor<128xf32, #blocked1>\n-    %16 = ttg.convert_layout %15 : tensor<128xf32, #blocked1> -> tensor<128xf32, #ttg.slice<{dim = 1, parent = #blocked3}>>\n-    %17 = tt.expand_dims %16 {axis = 1 : i32} : tensor<128xf32, #ttg.slice<{dim = 1, parent = #blocked3}>> -> tensor<128x1xf32, #blocked3>\n-    %18 = ttg.convert_layout %17 : tensor<128x1xf32, #blocked3> -> tensor<128x1xf32, #blocked4>\n+    }) : (tensor<128x16xf32, #blocked1>) -> tensor<128xf32, #ttg.slice<{dim = 1, parent = #blocked1}>>\n+    %18 = tt.expand_dims %17 {axis = 1 : i32} : tensor<128xf32, #ttg.slice<{dim = 1, parent = #blocked1}>> -> tensor<128x1xf32, #blocked1>\n@@ -40,2 +39,2 @@\n-    %22 = tt.broadcast %10 : tensor<1x16xf32, #blocked> -> tensor<128x16xf32, #blocked>\n-    %23 = tt.broadcast %6 : tensor<1x16xi1, #blocked> -> tensor<128x16xi1, #blocked>\n+    %22 = tt.broadcast %13 : tensor<1x16xf32, #blocked> -> tensor<128x16xf32, #blocked>\n+    %23 = tt.broadcast %5 : tensor<1x16xi1, #blocked> -> tensor<128x16xi1, #blocked>",
+ "diff_full_lines": 65
+}
