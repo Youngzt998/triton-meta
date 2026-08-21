@@ -1078,7 +1078,7 @@ the cached PTX and the cached key, and those two were produced by the same build
 
 **What this step does not do.** The prior table has a `before` column, the class counts at the
 parent commit. Reproducing it needs the parent commit's checker, so it is not something the
-artifact can run; it lives in `prior_results.txt` and only there. The same file's fourth
+artifact can run; it lives in `prior_results.txt` and only there. That file's fourth
 total row, a 72-group subset of the reduction side, is also not reproduced — that subset is a
 frozen list which is not in this branch, and guessing at it would produce a number that looks
 comparable and is not.
