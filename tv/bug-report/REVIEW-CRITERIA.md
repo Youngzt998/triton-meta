@@ -69,6 +69,14 @@ rejections rather than the ones that happen to exist mid-run. Commit with the
 | B3 | Same for FP contraction (`mul+add → fma`): that is a licence held by the whole compiler, not by any one pass, so *any* pass that merely changes IR shape can trigger it. Same integer-input test applies. |
 | B4 | The report has the same root cause (same culprit pass **and** same mechanism) as a report already kept. Keep one, reject the duplicates, and note the occurrence count on the kept one. |
 
+**B4 across rounds.** A round-2 report is often a duplicate of a report kept in
+round 1. Reject it as usual — and **you may append the updated occurrence count
+to the round-1 report**, even though round-1 reports are otherwise finished work
+you must not re-review, renumber or rewrite. An append-only "also seen N times
+in round 2, see `<ids>`" line is not a re-review; it is what B4 asks for, and a
+recurrence count is worth having. Commit that edit on its own. Anything beyond
+appending that line still counts as touching frozen work — do not do it.
+
 ## 2. Keep — never reject these
 
 - The difference **survives** the exact-integer control ⇒ it is not reassociation,
@@ -107,6 +115,27 @@ rejections rather than the ones that happen to exist mid-run. Commit with the
 Magnitude alone is not evidence. A real bug can be small. Reject only when a
 specific criterion above *explains* the difference. If nothing explains it, keep
 it, even if it is one element at one ULP.
+
+**And the mirror: "the difference is huge" is never on its own a reason to
+keep.** `tilelang/dropped/r1-HIT-0003` differs on 1,047,889 of 1,048,576
+elements at up to 3,191,955,456 ULP and is entirely inside the reassociation
+licence — integer inputs make it vanish on 3 seeds out of 3. Size carries no
+information in either direction; only a mechanism does.
+
+### The labels are evidence, not verdicts
+
+A report can light up several *keep* signals at once and still be fake.
+`tilelang/dropped/r1-HIT-0011` survived the heap-shift control **and** the
+exact-integer control, and its sibling `r1-HIT-0077` also had
+`nan_mask_differs: true` — three keep signals under §2 — while the kernel was
+simply reading uninitialised registers and never reading its inputs at all. The
+heap-shift gate perturbs device memory, so it cannot see an uninitialised
+*register*; the exact-integer control says nothing about a value that was never
+computed.
+
+So: when the labels say keep, name the mechanism before you keep. A control
+that fires tells you which explanations are ruled *out*, never which one is
+right.
 
 ---
 
