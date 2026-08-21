@@ -1,0 +1,102 @@
+PRIOR RESULT -- the same forward checker on AMD, NOT reproduced here
+====================================================================
+
+This file is separate from `prior_results.txt` for one reason: **everything in that file has a
+reproduction beside it in this artifact, and nothing in this file does.**
+
+`checker.corpus` re-graded the NVIDIA corpus on this machine and every group row the NVIDIA
+tables name came back exactly. The AMD tables below have no such column, and will not get one.
+The corpus they were taken on -- `~/amd_corpus`, 30 groups and 4,500 configurations on gfx942 --
+is not on this machine, and there is no AMD GPU here. Rebuilding it and re-grading was not
+attempted; there was not time before GPU access ended.
+
+So read the tables below as **a claim made elsewhere, recorded verbatim**, not as a measurement
+this artifact stands behind. What does carry across without a re-run is the shape of the claim:
+the same checker, the same interface, the same soundness gate, 0 over-merges, and a comparison
+against the NVIDIA side stated in the diff's own words in TABLE 4.
+
+Copied verbatim from the pull request's summary. Nothing recomputed, rounded, reordered or
+summarised.
+
+PR #2783 -- the AMD mirror of the same checker
+================================================
+PR #2783  [triton][bitequiv] AMDGCN forward equivalence checker
+            commit 4de54958d
+
+The AMD twin of PR #2781: the same checker, the same interface, the same soundness gate, on
+gfx942 / CDNA3 wave64 instead of PTX. Its tables follow, copied verbatim; they are fenced blocks
+in the original, not markdown tables.
+
+Read them beside Table 1 and Table 2, not merged into them. They were measured over a DIFFERENT
+corpus -- `~/amd_corpus`, 30 groups and 4,500 configs -- which is not on this machine and which
+none of the builders in `corpus_builder/` builds, so no step in this artifact produces a number
+that lines up with an AMD row. What does carry across is the shape of the claim: same gate, same
+0 over-merges, and the last table below states the AMD-versus-NV comparison in the diff's own
+words rather than leaving a reader to compute it.
+
+TABLE 3 -- AMD support table (gfx942, `~/amd_corpus`, 4500 configs)
+
+Preceded in the summary by: "Columns: configs | checker classes | empirical (fuzzer) classes |
+over_merges. 'classes' = distinct bit-equivalence classes; checker/empirical ratio = over-split
+factor (1.00 = perfect recovery). over_merges = configs wrongly merged (MUST be 0)."
+
+```
+matrix-core (GEMM)                configs  checker  empirical  over_merge
+  gemm_f16_free_tiling  f16          12      1        1          0
+  gemm_kloop_block_k    bf16        132      1        1          0
+  gemm_input_precision  f32          24      2        2          0
+  gemm_bias_relu_fp_fusion bf16      24      2        2          0
+  gemm_tma_store        f16          12      1        1          0
+  gemm_fp8_imprecise_acc fp8e4m3fn   36      1        1          0
+  GEMM subtotal                     240      8        8   (1.00x) 0   EXACT
+
+reductions                        configs  checker  empirical  over_merge
+  sum                   f32         120      6        6          0   EXACT
+  sum_dim1_simple       f32         120      6        6          0   EXACT
+  col_max               f32         120      1        1          0   EXACT
+  sum_2d_deep           f32         120      6        3          0
+  sum_2d_keepdim        f32         120      6        2          0
+  sum_3d                f32         120      6        2          0
+  sum_multiaxis         f32         120      6        2          0
+  sum_4d                f32         120      7        2          0
+  sum_2d_axis0          f32         120      9        6          0
+  sum_3d_mid            f32         120      9        3          0
+  col_bf16              bf16        120     10        6          0
+  col_sum_loop          f32         120     10        6          0
+  sum_2d_col            f32         120     10        6          0
+  sum_2d_col_big        f32         120     10        6          0
+  sum_3d_outer          f32         120     10        6          0
+  softmax               f32         120     10        3          0
+  col_dot               f32         120     16       12          0
+  cond_reduce           f32         120     16       12          0
+  dot                   f32         120     16       12          0
+  col_exp_sum           f32         120     15        6          0
+  layernorm             f32         120     20        3          0
+  rmsnorm               f32         120     20        3          0
+  welford               f32         540     76       60          0
+  sum_dim1_persistent   f32        1080     90       43          0
+  reduction subtotal               4260    391      217  (1.80x) 0
+```
+
+Followed in the summary by: "over_merges = 0 across all 30 groups / 4,500 configs (the soundness
+gate holds)."
+
+TABLE 4 -- AMD vs NV (PR #2781)
+
+```
+category                                   AMD  (ratio)     NV (ratio)
+  GEMM                                      8/8  = 1.00x     ~14.5x   AMD better
+  reductions (all)                        391/217 = 1.80x   ~1.64x
+  reductions (excl 4 SW-transcendental)   326/202 = 1.61x   ~1.64x   AMD == NV
+  over_merges                              0 / 4500          0
+```
+
+The diff explains the gap as two AMD ISA facts rather than modeling gaps: AMD computes exp / div
+/ rsqrt as a software sequence where NV has a one-op ex2 / rcp, so layernorm, rmsnorm, softmax
+and col_exp_sum over-split more -- excluding those four, AMD equals NV; and AMD lowers a wide
+reduction as a multi-stage pipelined store -> gather -> combine whose partials sit at different
+pipeline stages, an inner_tree order that needs a multi-stage reconstruction it does not have yet.
+
+PR #2783 also notes at the top that it now REUSES the shared `bitequiv.core` extracted by
+PR #2782 rather than hard-copying it, and that the AMD table above is byte-identical before and
+after that switch, with NV untouched.

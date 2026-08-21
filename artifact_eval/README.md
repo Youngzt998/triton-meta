@@ -1099,6 +1099,8 @@ fusion_oracle/     the epilogue-swap experiment and its verified epilogue spelli
 fusion_moe/        `models_2026.py`, the model layer table `gemm.perf.static` and `gemm.fusion`
                    draw their shapes from
 prior_results.txt
+prior_results_amd.txt   the same checker on AMD. Recorded verbatim and NOT reproduced here --
+                        no AMD corpus and no AMD GPU on this machine.
                    the checker tables from the earlier work, verbatim; what section 3 is
                    compared against
 run_*.txt          captured output of one run, so a reviewer can read a result before spending a
