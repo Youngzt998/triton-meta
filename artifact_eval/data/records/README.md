@@ -34,8 +34,13 @@ for f in artifact_eval/data/records/*.gz; do
     case "$f" in *.tar.gz) tar xzf "$f" -C artifact_eval/cache ;;
                  *) gunzip -c "$f" > "artifact_eval/cache/$(basename "${f%.gz}")" ;; esac
 done
-PYTHONPATH=$(git rev-parse --show-toplevel) .venv/bin/python artifact_eval/artifact.py --export
+python3 artifact_eval/artifact.py --export
 ```
+
+Any Python 3 will do for that last line. `--export` reads the unpacked records and writes the
+CSVs; it imports neither torch nor Triton, needs no GPU and no `PYTHONPATH`. Verified with this
+machine's stock `/usr/bin/python3` (3.9, no torch installed): all nine CSVs and `FORMAT.md` came
+back byte-identical to the committed ones.
 
 A step re-run against an unpacked `cache/` also resumes from it rather than starting over, which
 is the cheap way to add to a partial sweep instead of repeating it.
