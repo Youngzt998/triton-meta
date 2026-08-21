@@ -5,18 +5,28 @@
  "sig": "verify:'tt.store' op failed to verify that value type matches ptr type",
  "culprit": "frontend",
  "detail": "MLIR verifier",
- "count": 6,
+ "count": 544,
  "examples": [
   "bch:reshape_and_cache_flash_kernel_476250f6",
-  "bch:pixel_unshuffle_kernel_4e20b588"
+  "bch:pixel_unshuffle_kernel_4e20b588",
+  "bch:narrow_copy_kernel_325c2faa",
+  "bch:_tile_flaggems_jit_function_0c25f9ed",
+  "bch:_fix_trunc_kernel_8310e418",
+  "bch:_unique_dim_gather_moved_kernel_87221f0d",
+  "bch:_unfold_copy_kernel_3d_dim2_a048b296",
+  "bch:_resize_kernel_2a559c0d",
+  "bch:reshape_and_cache_kernel_f4f489b9",
+  "bch:_repeat_flaggems_jit_function_b8b038b6",
+  "bch:_copy_kernel_121b1b87",
+  "bch:_cp_gather_indexer_quant_cache_kernel_d5cecde2"
  ],
  "archs": {
-  "80": 2,
-  "89": 2,
-  "90": 2
+  "80": 171,
+  "89": 186,
+  "90": 187
  },
  "stages": {
-  "frontend": 6
+  "frontend": 544
  },
  "hit": "HIT-0007",
  "first_seen": 46.3,
@@ -126,5 +136,6 @@
   "spec_id": "bch:reshape_and_cache_flash_kernel_476250f6"
  },
  "shrink_state": "done",
- "reported_count": 3
+ "reported_count": 539,
+ "report_fmt": 2
 }

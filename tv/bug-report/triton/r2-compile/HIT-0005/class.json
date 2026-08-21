@@ -5,17 +5,18 @@
  "sig": "assert@PlanCTA.cpp:359:stores.size() > N && \"Cannot find store-like ops\"",
  "culprit": "ttgir",
  "detail": "assertion",
- "count": 9,
+ "count": 315,
  "examples": [
   "bch:_assert_async_kernel_ffc659d7",
   "ind:triton_per_fused__assert_async_all_ge_lt_0_69d7fda8",
-  "bch:_conv_transpose2d_scatter_no_overlap_kernel_d1a6faca"
+  "bch:_conv_transpose2d_scatter_no_overlap_kernel_d1a6faca",
+  "bch:_mrope_pair_kernel_01bc27e8"
  ],
  "archs": {
-  "90": 9
+  "90": 315
  },
  "stages": {
-  "ttgir": 9
+  "ttgir": 315
  },
  "hit": "HIT-0005",
  "first_seen": 21.3,
@@ -87,6 +88,6 @@
   "spec_id": "bch:_assert_async_kernel_ffc659d7"
  },
  "shrink_state": "done",
- "reported_count": 6,
+ "reported_count": 314,
  "report_fmt": 2
 }

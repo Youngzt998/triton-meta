@@ -5,17 +5,17 @@
  "sig": "verify:'tt.splat' op requires the same element type for all operands and results",
  "culprit": "frontend",
  "detail": "MLIR verifier",
- "count": 3,
+ "count": 6,
  "examples": [
   "ind:triton_mm_4942c5ab"
  ],
  "archs": {
-  "80": 1,
-  "89": 1,
-  "90": 1
+  "80": 2,
+  "89": 2,
+  "90": 2
  },
  "stages": {
-  "frontend": 3
+  "frontend": 6
  },
  "hit": "HIT-0055",
  "first_seen": 29572.4,
@@ -90,5 +90,7 @@
   "arch": 80,
   "spec_id": "ind:triton_mm_4942c5ab"
  },
- "shrink_state": "done"
+ "shrink_state": "done",
+ "reported_count": 3,
+ "report_fmt": 2
 }

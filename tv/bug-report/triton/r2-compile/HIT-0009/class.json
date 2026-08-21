@@ -5,20 +5,27 @@
  "sig": "assert@ElementwiseOpToLLVM.cpp:482:roundingMode.has_value() && \"Rounding mode must be specified for convertsions to fpN\"",
  "culprit": "llir",
  "detail": "assertion",
- "count": 11,
+ "count": 95,
  "examples": [
   "bch:special_i1_kernel_7e502f07",
   "ind:triton_poi_fused__to_copy_clamp_mul_0_3cc69ca3",
   "bch:output_counts_flat_kernel_6fe8ff3b",
   "bch:_unfold_copy_kernel_2d_c4a1d507",
-  "bch:_alias_copy_kernel_04022d3e"
+  "bch:_alias_copy_kernel_04022d3e",
+  "bch:grid_sample_2d_nearest_border_tiled_kernel_f2c064b0",
+  "bch:_index_jit_function_954fa95f",
+  "bch:_as_strided_copy_1d_kernel_d11a073d",
+  "bch:grid_sample_2d_nearest_reflection_tiled_kernel_e242f108",
+  "ind:triton_poi_fused_add_flip_roll_0_24a8e2fb",
+  "ind:triton_poi_fused_gather_remainder_0_d3c301ec",
+  "bch:_tile_flaggems_jit_function_db07abb9"
  ],
  "archs": {
-  "89": 6,
-  "90": 5
+  "89": 48,
+  "90": 47
  },
  "stages": {
-  "llir": 11
+  "llir": 95
  },
  "hit": "HIT-0009",
  "first_seen": 66.8,
@@ -98,6 +105,6 @@
   "spec_id": "bch:special_i1_kernel_7e502f07"
  },
  "shrink_state": "done",
- "reported_count": 3,
+ "reported_count": 91,
  "report_fmt": 2
 }

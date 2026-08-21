@@ -5,7 +5,7 @@
  "sig": "mlirerr:number of input elements N must be a multiple of the op's packed_element attribute, N",
  "culprit": "frontend",
  "detail": "raw MLIR error",
- "count": 22,
+ "count": 1025,
  "examples": [
   "bch:_rank2_svd_kernel_813eb03e",
   "bch:_as_strided_copy_1d_kernel_d11a073d",
@@ -13,15 +13,20 @@
   "ind:triton_poi_fused_add_copy__mul_0_da6fdc50",
   "bch:weight_bias_backward_kernel_214fb307",
   "bch:_complete_zero_projection_kernel_a447bc7f",
-  "bch:upsample_linear1d_kernel_565cf69c"
+  "bch:upsample_linear1d_kernel_565cf69c",
+  "ind:triton_per_fused_prod_0_60e2ed77",
+  "bch:_complex_to_real_embedding_kernel_78396d68",
+  "bch:_complex_svd_pick_s_kernel_296eff85",
+  "bch:_cyclic_jacobi_init_kernel_cb1f2577",
+  "bch:max_norm_kernel_2_aa543920"
  ],
  "archs": {
-  "80": 8,
-  "89": 7,
-  "90": 7
+  "80": 329,
+  "89": 348,
+  "90": 348
  },
  "stages": {
-  "frontend": 22
+  "frontend": 1025
  },
  "hit": "HIT-0008",
  "first_seen": 62.8,
@@ -111,6 +116,6 @@
   "spec_id": "bch:_rank2_svd_kernel_813eb03e"
  },
  "shrink_state": "done",
- "reported_count": 18,
+ "reported_count": 1016,
  "report_fmt": 2
 }

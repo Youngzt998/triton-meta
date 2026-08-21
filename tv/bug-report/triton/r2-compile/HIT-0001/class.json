@@ -5,7 +5,7 @@
  "sig": "mlirerr:Result has an invalid layout: #ttg.slice<{dim = N, parent = #ttg.blocked<>}>.",
  "culprit": "ttgir",
  "detail": "raw MLIR error",
- "count": 15,
+ "count": 1863,
  "examples": [
   "bch:logsumexp_kernel_non_inner_baaf36b4",
   "bch:_complete_svd_factor_kernel_e266834b",
@@ -21,10 +21,10 @@
   "bch:aminmax_kernel_445b8210"
  ],
  "archs": {
-  "90": 15
+  "90": 1863
  },
  "stages": {
-  "ttgir": 15
+  "ttgir": 1863
  },
  "hit": "HIT-0001",
  "first_seen": 2.9,
@@ -112,5 +112,6 @@
   "spec_id": "bch:logsumexp_kernel_non_inner_baaf36b4"
  },
  "shrink_state": "done",
- "reported_count": 11
+ "reported_count": 1845,
+ "report_fmt": 2
 }

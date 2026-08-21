@@ -5,15 +5,15 @@
  "sig": "assert@StorageUniquerSupport.h:180:succeeded( ConcreteT::verifyInvariants(getDefaultDiagnosticEmitFn(ctx), args...))",
  "culprit": "ttgir",
  "detail": "assertion",
- "count": 3,
+ "count": 19,
  "examples": [
   "bch:_cp_gather_indexer_quant_cache_kernel_d5cecde2"
  ],
  "archs": {
-  "90": 3
+  "90": 19
  },
  "stages": {
-  "ttgir": 3
+  "ttgir": 19
  },
  "hit": "HIT-0045",
  "first_seen": 10568.1,
@@ -129,6 +129,6 @@
   "spec_id": "bch:_cp_gather_indexer_quant_cache_kernel_d5cecde2"
  },
  "shrink_state": "done",
- "reported_count": 2,
+ "reported_count": 18,
  "report_fmt": 2
 }

@@ -5,15 +5,15 @@
  "sig": "llvm-error:Layout conflict for block arg",
  "culprit": "ttgir",
  "detail": "LLVM ERROR",
- "count": 2,
+ "count": 4,
  "examples": [
   "bch:bmm_kernel_a62513ac"
  ],
  "archs": {
-  "90": 2
+  "90": 4
  },
  "stages": {
-  "ttgir": 2
+  "ttgir": 4
  },
  "hit": "HIT-0049",
  "first_seen": 16437.1,
@@ -132,5 +132,7 @@
   "arch": 90,
   "spec_id": "bch:bmm_kernel_a62513ac"
  },
- "shrink_state": "done"
+ "shrink_state": "done",
+ "reported_count": 3,
+ "report_fmt": 2
 }

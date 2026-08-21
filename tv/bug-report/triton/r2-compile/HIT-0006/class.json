@@ -5,19 +5,24 @@
  "sig": "assert@PlanCTA.cpp:211:!tiled && \"CTA tiling is already determined\"",
  "culprit": "ttgir",
  "detail": "assertion",
- "count": 19,
+ "count": 827,
  "examples": [
   "ind:triton_flex_attention_backward_2c768ac2",
   "bch:_conv_transpose2d_residue_kernel_bc97b619",
   "ind:triton_flex_attention_65dbdfce",
   "bch:mm_kernel_general_64b5afae",
-  "bch:_conv_transpose2d_stride2_pad1_3x3_kernel_312550c9"
+  "bch:_conv_transpose2d_stride2_pad1_3x3_kernel_312550c9",
+  "bch:matmul_kernel_d953b7cf",
+  "ind:triton_flex_attention_7e001d0b",
+  "bch:sparse_attn_triton_kernel_cc5e6c13",
+  "bch:_conv_transpose2d_1x1_kernel_05600cb0",
+  "bch:flash_mla_attn_kernel_1bee7912"
  ],
  "archs": {
-  "90": 19
+  "90": 827
  },
  "stages": {
-  "ttgir": 19
+  "ttgir": 827
  },
  "hit": "HIT-0006",
  "first_seen": 24.1,
@@ -149,6 +154,6 @@
   "spec_id": "ind:triton_flex_attention_backward_2c768ac2"
  },
  "shrink_state": "done",
- "reported_count": 12,
+ "reported_count": 821,
  "report_fmt": 2
 }

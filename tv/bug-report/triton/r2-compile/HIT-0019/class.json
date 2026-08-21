@@ -5,7 +5,7 @@
  "sig": "assert@PlanCTA.cpp:164:step < maxSteps && \"Maximum number of steps exceeded\"",
  "culprit": "ttgir",
  "detail": "assertion",
- "count": 72,
+ "count": 558,
  "examples": [
   "bch:_small_jacobi_svd_kernel_791182a2",
   "bch:_fused_backward_kernel_dbedd307",
@@ -17,13 +17,14 @@
   "bch:max_pool2d_backward_kernel_e78d96fc",
   "bch:upsample_linear1d_backward_kernel_f5fef751",
   "bch:_small_jacobi_svals_kernel_f9679a95",
-  "bch:_pass1_w_gather_nchw_kernel_27b6e394"
+  "bch:_pass1_w_gather_nchw_kernel_27b6e394",
+  "bch:_complex_svd_project_u_kernel_9bf87cfb"
  ],
  "archs": {
-  "90": 72
+  "90": 558
  },
  "stages": {
-  "ttgir": 72
+  "ttgir": 558
  },
  "hit": "HIT-0019",
  "first_seen": 75.1,
@@ -129,6 +130,6 @@
   "spec_id": "bch:_small_jacobi_svd_kernel_791182a2"
  },
  "shrink_state": "done",
- "reported_count": 69,
+ "reported_count": 553,
  "report_fmt": 2
 }

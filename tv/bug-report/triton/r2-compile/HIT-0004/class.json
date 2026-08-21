@@ -5,19 +5,21 @@
  "sig": "verify:'llvm.fcmp' op operand #N must be floating point LLVM type or LLVM dialect-compatible vector of floating point LLVM type, but got 'iN'",
  "culprit": "llir",
  "detail": "MLIR verifier",
- "count": 8,
+ "count": 13,
  "examples": [
   "bch:argmin_kernel_f8fcbf2b",
   "bch:max_pool2d_forward_kernel_8b2aab1a",
-  "bch:_cyclic_jacobi_finalize_kernel_4665c432"
+  "bch:_cyclic_jacobi_finalize_kernel_4665c432",
+  "ind:triton_red_fused_min_0_9294804a",
+  "bch:argmax_kernel_1_7322e48b"
  ],
  "archs": {
-  "89": 4,
-  "90": 3,
-  "80": 1
+  "89": 6,
+  "90": 5,
+  "80": 2
  },
  "stages": {
-  "llir": 8
+  "llir": 13
  },
  "hit": "HIT-0004",
  "first_seen": 20.7,
@@ -103,6 +105,6 @@
   "spec_id": "bch:argmin_kernel_f8fcbf2b"
  },
  "shrink_state": "done",
- "reported_count": 5,
+ "reported_count": 10,
  "report_fmt": 2
 }

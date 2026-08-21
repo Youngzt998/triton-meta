@@ -5,17 +5,17 @@
  "sig": "verify:'tt.int_to_ptr' op operand #N must be N-bit signless integer or tensor of N-bit signless integer values, but got 'iN'",
  "culprit": "frontend",
  "detail": "MLIR verifier",
- "count": 6,
+ "count": 27,
  "examples": [
   "bch:grouped_matmul_kernel_87cbfee0"
  ],
  "archs": {
-  "80": 2,
-  "89": 2,
-  "90": 2
+  "80": 9,
+  "89": 9,
+  "90": 9
  },
  "stages": {
-  "frontend": 6
+  "frontend": 27
  },
  "hit": "HIT-0048",
  "first_seen": 15768.3,
@@ -119,6 +119,6 @@
   "spec_id": "bch:grouped_matmul_kernel_87cbfee0"
  },
  "shrink_state": "done",
- "reported_count": 3,
+ "reported_count": 24,
  "report_fmt": 2
 }

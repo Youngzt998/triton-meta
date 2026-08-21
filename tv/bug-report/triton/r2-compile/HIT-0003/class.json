@@ -5,7 +5,7 @@
  "sig": "llvm-error:Unexpected parent op of block argument",
  "culprit": "ttgir",
  "detail": "LLVM ERROR",
- "count": 18,
+ "count": 604,
  "examples": [
   "bch:upsample_trilinear3d_kernel_6c02f6c8",
   "bch:upsample_nearest3d_kernel_a4b3312b",
@@ -14,10 +14,10 @@
   "bch:gcd_kernel_i64_8d9d044d"
  ],
  "archs": {
-  "90": 18
+  "90": 604
  },
  "stages": {
-  "ttgir": 18
+  "ttgir": 604
  },
  "hit": "HIT-0003",
  "first_seen": 10.4,
@@ -119,6 +119,6 @@
   "spec_id": "bch:upsample_trilinear3d_kernel_6c02f6c8"
  },
  "shrink_state": "done",
- "reported_count": 12,
+ "reported_count": 596,
  "report_fmt": 2
 }

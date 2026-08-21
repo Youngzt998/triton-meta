@@ -5,18 +5,19 @@
  "sig": "assert@ScanOpToLLVM.cpp:265:numScanBlocks * numParallelBlocks * parallelElementsPerThread * scanElementsPerThreads == srcValues.size()",
  "culprit": "llir",
  "detail": "assertion",
- "count": 15,
+ "count": 147,
  "examples": [
   "ind:triton_per_fused_logcumsumexp_0_1f363aee",
   "ind:triton_per_fused_cummax_0_6dc3f614",
   "ind:triton_per_fused_cumsum_0_71300b0d",
-  "ind:triton_red_fused_cumprod_0_9c7c3568"
+  "ind:triton_red_fused_cumprod_0_9c7c3568",
+  "ind:triton_spl_fused_cumsum_0_91044dfd"
  ],
  "archs": {
-  "90": 15
+  "90": 147
  },
  "stages": {
-  "llir": 15
+  "llir": 147
  },
  "hit": "HIT-0016",
  "first_seen": 150.7,
@@ -98,6 +99,6 @@
   "spec_id": "ind:triton_per_fused_logcumsumexp_0_1f363aee"
  },
  "shrink_state": "done",
- "reported_count": 14,
+ "reported_count": 146,
  "report_fmt": 2
 }
